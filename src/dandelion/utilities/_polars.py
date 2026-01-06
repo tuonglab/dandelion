@@ -250,6 +250,9 @@ class DandelionPolars:
         """Return a sliced Dandelion object with synchronized data and metadata."""
         # Determine which dataframe to filter and extract cell_ids
         cell_ids = None
+        use_direct_filter = False
+        filter_expr = None
+
         # Convert pandas to polars first
         if self._backend == "pandas":
             self.to_polars()
@@ -271,52 +274,84 @@ class DandelionPolars:
         # Case 2: Polars Series (boolean mask or cell_ids)
         elif isinstance(index, pl.Series):
             if index.dtype == pl.Boolean:
-                # Boolean mask - determine if it's for data or metadata by length
-                if len(index) == _get_length(data):
-                    cell_ids = _filter_and_select(data, index)
-                elif metadata is not None and len(index) == _get_length(
-                    metadata
-                ):
-                    cell_ids = _filter_and_select(metadata, index)
-                else:
-                    raise IndexError(
-                        f"Boolean mask length ({len(index)}) doesn't match data or metadata length."
-                    )
+                # Boolean mask - apply filter directly to preserve exact row matching
+                # This is important for filtering by non-cell_id columns
+                use_direct_filter = True
+                filter_expr = index
             else:
                 # Series of cell_ids
                 cell_ids = index.cast(pl.Utf8)
 
         # Case 3: Polars Expression
         elif isinstance(index, pl.Expr):
-            # Try data first, fall back to metadata
-            try:
-                cell_ids = _filter_and_select(data, index)
-            except Exception:
-                try:
-                    cell_ids = _filter_and_select(metadata, index)
-                except Exception as e:
-                    raise ValueError(f"Could not evaluate expression: {e}")
-
+            # Use direct filter for expressions (don't group by cell_id)
+            use_direct_filter = True
+            filter_expr = index
         # Case 4: DataFrame or LazyFrame
         elif isinstance(index, (pl.DataFrame, pl.LazyFrame)):
-            if "cell_id" in index.collect_schema().names():
-                if isinstance(index, pl.LazyFrame):
-                    cell_ids = index.select("cell_id").collect().to_series()
-                else:
-                    cell_ids = index.select("cell_id").to_series()
-            else:
-                raise ValueError("DataFrame must contain 'cell_id' column")
+            # When a DataFrame is passed, use it as direct row filtering
+            # (preserve exact rows, don't expand by cell_id)
+            use_direct_filter = True
+            filter_expr = index
 
         else:
             raise TypeError(f"Unsupported index type: {type(index)}")
 
         # ---- Filter data & metadata, then collect and make lazy again ----
-        _data = data.filter(pl.col("cell_id").is_in(cell_ids))
-        _metadata = (
-            metadata.filter(pl.col("cell_id").is_in(cell_ids))
-            if metadata is not None
-            else None
-        )
+        if use_direct_filter:
+            # Direct filter without grouping by cell_id
+            # This preserves the exact rows that match the filter
+            if isinstance(filter_expr, (pl.DataFrame, pl.LazyFrame)):
+                # When a DataFrame/LazyFrame is passed, use it directly as the filtered data
+                _data = filter_expr
+            elif isinstance(filter_expr, pl.Series):
+                # Convert Series to expression - need to filter by row position
+                # Create a temporary index column and filter by position
+                if isinstance(data, pl.LazyFrame):
+                    # For lazy frames, we need to be more careful
+                    _data = (
+                        data.with_row_index("__row_idx__")
+                        .filter(
+                            pl.col("__row_idx__").is_in(filter_expr.to_list())
+                            if len(filter_expr.to_list()) < _get_length(data)
+                            else filter_expr
+                        )
+                        .drop("__row_idx__")
+                    )
+                else:
+                    # For eager frames, create index and filter
+                    data_with_idx = data.with_row_index("__row_idx__")
+                    matching_indices = [
+                        i for i, v in enumerate(filter_expr) if v
+                    ]
+                    _data = data_with_idx.filter(
+                        pl.col("__row_idx__").is_in(matching_indices)
+                    ).drop("__row_idx__")
+            else:
+                # Assume it's an Expression
+                _data = data.filter(filter_expr)
+
+            # For metadata sync, extract unique cell_ids from filtered data
+            if isinstance(_data, pl.LazyFrame):
+                filtered_cell_ids = (
+                    _data.select("cell_id").collect().to_series().unique()
+                )
+            else:
+                filtered_cell_ids = _data.select("cell_id").to_series().unique()
+            _metadata = (
+                metadata.filter(pl.col("cell_id").is_in(filtered_cell_ids))
+                if metadata is not None
+                else None
+            )
+            cell_ids = filtered_cell_ids
+        else:
+            # Filter by cell_id
+            _data = data.filter(pl.col("cell_id").is_in(cell_ids))
+            _metadata = (
+                metadata.filter(pl.col("cell_id").is_in(cell_ids))
+                if metadata is not None
+                else None
+            )
 
         # Collect and convert back to lazy if original was lazy
         if isinstance(self._data, pl.LazyFrame):
@@ -407,7 +442,7 @@ class DandelionPolars:
         if isinstance(self._data, pd.DataFrame):
             return self._data
         if isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
-            return DataFrameAccessor(self._data)
+            return DataFrameAccessor(self._data, parent=self, attr_name="_data")
 
     @data.setter
     def data(
@@ -454,7 +489,9 @@ class DandelionPolars:
         if isinstance(self._metadata, pd.DataFrame):
             return self._metadata
         if isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
-            return DataFrameAccessor(self._metadata)
+            return DataFrameAccessor(
+                self._metadata, parent=self, attr_name="_metadata"
+            )
 
     @metadata.setter
     def metadata(self, value: pl.DataFrame | pl.LazyFrame | pd.DataFrame):
@@ -2632,8 +2669,10 @@ def load_polars(
 class DataFrameAccessor:
     """Wrapper that provides both DataFrame access and attribute-style column access."""
 
-    def __init__(self, df):
+    def __init__(self, df, parent=None, attr_name=None):
         object.__setattr__(self, "_df", df)
+        object.__setattr__(self, "_parent", parent)
+        object.__setattr__(self, "_attr_name", attr_name)
         # Cache schema for lazy frames to avoid repeated resolution
         if isinstance(df, pl.LazyFrame):
             object.__setattr__(self, "_schema", df.collect_schema())
@@ -2675,8 +2714,9 @@ class DataFrameAccessor:
         # For LazyFrame, check if it's a column using cached schema
         if isinstance(df, pl.LazyFrame):
             if schema is not None and name in schema.names():
-                # Return collected series for this column
-                return df.select(name).collect().to_series()
+                # Return collected series for this column wrapped in SeriesAccessor
+                series = df.select(name).collect().to_series()
+                return SeriesAccessor(series)
             # Not a column, try to get actual attribute
             try:
                 return object.__getattribute__(df, name)
@@ -2689,7 +2729,7 @@ class DataFrameAccessor:
         else:
             # Check if it's a column first
             if hasattr(df, "columns") and name in df.columns:
-                return df[name]
+                return SeriesAccessor(df[name])
             # Otherwise try actual attribute
             return getattr(df, name)
 
@@ -2700,9 +2740,10 @@ class DataFrameAccessor:
         # Handle column name string
         if isinstance(key, str):
             if isinstance(df, pl.LazyFrame):
-                return df.select(key).collect().to_series()
+                series = df.select(key).collect().to_series()
+                return SeriesAccessor(series)
             else:
-                return df[key]
+                return SeriesAccessor(df[key])
 
         # Handle list of column names
         elif isinstance(key, (list, tuple)):
@@ -2728,6 +2769,62 @@ class DataFrameAccessor:
             object.__setattr__(self, name, value)
         else:
             raise AttributeError("Cannot set attributes on DataFrameAccessor")
+
+    def __setitem__(self, key: str, value):
+        """Support column assignment like df['new_col'] = value."""
+        df = object.__getattribute__(self, "_df")
+
+        # Convert value to appropriate Polars format
+        if isinstance(value, (list, tuple)):
+            # Convert list/tuple to Series
+            new_col = pl.Series(key, value)
+        elif isinstance(value, pl.Series):
+            # Rename Series to match key if needed
+            new_col = value.alias(key) if value.name != key else value
+        elif isinstance(value, SeriesAccessor):
+            # Extract underlying Series from SeriesAccessor
+            series = object.__getattribute__(value, "_series")
+            new_col = series.alias(key) if series.name != key else series
+        elif isinstance(value, (int, float, str, bool)):
+            # Scalar value - create a Series filled with that value
+            # Get length from df
+            if isinstance(df, pl.LazyFrame):
+                length = df.select(pl.len()).collect().item()
+            else:
+                length = len(df)
+            new_col = pl.Series(key, [value] * length)
+        elif isinstance(value, pl.Expr):
+            # Expression - use with_columns directly
+            df = df.with_columns(value.alias(key))
+            object.__setattr__(self, "_df", df)
+            # Update schema cache
+            if isinstance(df, pl.LazyFrame):
+                object.__setattr__(self, "_schema", df.collect_schema())
+            # Update parent if it exists
+            parent = object.__getattribute__(self, "_parent")
+            attr_name = object.__getattribute__(self, "_attr_name")
+            if parent is not None and attr_name is not None:
+                setattr(parent, attr_name, df)
+            return
+        else:
+            raise TypeError(
+                f"Cannot assign value of type {type(value)} to column '{key}'. "
+                f"Expected list, Series, scalar, or Expression."
+            )
+
+        # Use with_columns to add/update the column
+        df = df.with_columns(new_col)
+        object.__setattr__(self, "_df", df)
+
+        # Update schema cache for lazy frames
+        if isinstance(df, pl.LazyFrame):
+            object.__setattr__(self, "_schema", df.collect_schema())
+
+        # Update parent if it exists
+        parent = object.__getattribute__(self, "_parent")
+        attr_name = object.__getattribute__(self, "_attr_name")
+        if parent is not None and attr_name is not None:
+            setattr(parent, attr_name, df)
 
     def __repr__(self):
         return repr(object.__getattribute__(self, "_df"))
