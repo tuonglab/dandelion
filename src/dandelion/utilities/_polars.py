@@ -3762,6 +3762,16 @@ def _sanitize_data_polars(
             continue
         exprs.append(col.alias(d))
     df = df.with_columns(exprs)
+    
+    # --- SORT BY cell_id, productive, umi_count (same as pandas version) ---
+    sort_cols = {"cell_id", "productive", "umi_count"}
+    if sort_cols.issubset(set(df.collect_schema().names())):
+        # sort so that the productive contig with the largest umi is first
+        df = df.sort(
+            by=["cell_id", "productive", "umi_count"],
+            descending=[False, True, True],
+        )
+    
     # --- AIRR VALIDATION (requires eager) ---
     _validate_airr_polars(df)
     return df.lazy() if lazy else df
@@ -4586,3 +4596,16 @@ def check_contigs(
         return (out_dat, adata_)
     else:
         return out_dat
+
+
+def all_missing_polars(col: pl.Series) -> bool:
+    """Check if all values in a Polars series are null or empty string."""
+    all_null = col.is_null().all()
+    if all_null:
+        return True
+
+    # For string columns, also check empty strings
+    if col.dtype in (pl.Utf8, pl.String):
+        return ((col.is_null()) | (col == "")).all()
+
+    return False
