@@ -2,6 +2,7 @@
 from __future__ import annotations
 import copy
 import h5py
+import json
 import os
 import re
 import tempfile
@@ -19,6 +20,7 @@ with warnings.catch_warnings():
     from airr import RearrangementSchema
 from anndata import AnnData
 from changeo.IO import readGermlines
+from collections import defaultdict, OrderedDict
 from functools import cmp_to_key, reduce
 from pandas.api.types import infer_dtype
 from pathlib import Path
@@ -28,11 +30,13 @@ from textwrap import dedent
 from typing import Literal
 from zarr.codecs import BloscCodec
 
+from dandelion.utilities._io import AIRR, CELLRANGER, fasta_iterator
 from dandelion.utilities._utilities import (
     RECEPTOR_SET,
     TRUES,
     EMPTIES_STR,
     BOOLEAN_LIKE_COLUMNS,
+    DEFAULT_PREFIX,
     deprecated,
     sanitize_boolean,
     sanitize_data_for_saving,
@@ -41,6 +45,7 @@ from dandelion.utilities._utilities import (
     clear_h5file,
     Contig,
 )
+
 
 CHECK_COLS = BOOLEAN_LIKE_COLUMNS + [
     "rev_comp",
@@ -4659,108 +4664,6 @@ def read_10x_vdj_polars(
         if contig_annotations.csv and all_contig_annotations.json file(s) not found in the input folder.
 
     """
-    import json
-    from collections import defaultdict, OrderedDict
-    from dandelion.utilities._utilities import DEFAULT_PREFIX
-
-    # Define mapping dictionaries
-    CELLRANGER = [
-        "barcode",
-        "contig_id",
-        "sequence",
-        "aa_sequence",
-        "productive",
-        "full_length",
-        "frame",
-        "chain",
-        "v_gene",
-        "d_gene",
-        "j_gene",
-        "c_gene",
-        "cdr3_nt",
-        "cdr3",
-        "reads",
-        "umis",
-        "cdr3_start",
-        "cdr3_stop",
-        "length",
-        "high_confidence",
-        "is_cell",
-        "fwr1",
-        "fwr1_nt",
-        "cdr1",
-        "cdr1_nt",
-        "fwr2",
-        "fwr2_nt",
-        "cdr2",
-        "cdr2_nt",
-        "fwr3",
-        "fwr3_nt",
-        "fwr4",
-        "fwr4_nt",
-        "raw_clonotype_id",
-        "raw_consensus_id",
-        "exact_subclonotype_id",
-    ]
-
-    AIRR = [
-        "cell_id",
-        "sequence_id",
-        "sequence",
-        "sequence_aa",
-        "productive",
-        "complete_vdj",
-        "vj_in_frame",
-        "locus",
-        "v_call",
-        "d_call",
-        "j_call",
-        "c_call",
-        "junction",
-        "junction_aa",
-        "consensus_count",
-        "umi_count",
-        "cdr3_start",
-        "cdr3_end",
-        "sequence_length_10x",
-        "high_confidence_10x",
-        "is_cell_10x",
-        "fwr1_aa",
-        "fwr1",
-        "cdr1_aa",
-        "cdr1",
-        "fwr2_aa",
-        "fwr2",
-        "cdr2_aa",
-        "cdr2",
-        "fwr3_aa",
-        "fwr3",
-        "fwr4_aa",
-        "fwr4",
-        "clone_id",
-        "raw_consensus_id_10x",
-        "exact_subclonotype_id_10x",
-    ]
-
-    def fasta_iterator(fh):
-        """Read in a fasta file as an iterator."""
-        while True:
-            line = fh.readline()
-            if line.startswith(">"):
-                break
-        while True:
-            header = line[1:-1].rstrip()
-            sequence = fh.readline().rstrip()
-            while True:
-                line = fh.readline()
-                if not line:
-                    break
-                if line.startswith(">"):
-                    break
-                sequence += line.rstrip()
-            yield (header, sequence)
-            if not line:
-                return
 
     def parse_annotation_polars(data: pl.DataFrame) -> dict:
         """Parse annotation file using Polars."""
@@ -5029,6 +4932,418 @@ def read_10x_vdj_polars(
 
     # Convert dict to Polars DataFrame
     res = pl.DataFrame([v for v in out.values()])
+
+    # Quick check if locus is malformed
+    if remove_malformed:
+        res = res.filter(~pl.col("locus").str.contains(r"\|"))
+
+    # Change all unknowns to blanks
+    for col in res.columns:
+        if res[col].dtype in (pl.Utf8, pl.String):
+            res = res.with_columns(
+                pl.col(col).str.replace("unknown", "").alias(col)
+            )
+
+    vdj = DandelionPolars(res, verbose=verbose)
+
+    if suffix is not None:
+        vdj.add_sequence_suffix(
+            suffix,
+            sep=sep,
+            remove_trailing_hyphen_number=remove_trailing_hyphen_number,
+        )
+    elif prefix is not None:
+        vdj.add_sequence_prefix(
+            prefix,
+            sep=sep,
+            remove_trailing_hyphen_number=remove_trailing_hyphen_number,
+        )
+    return vdj
+
+
+def read_10x_vdj_polars(
+    path: Path | str,
+    filename_prefix: str | None = None,
+    prefix: str | None = None,
+    suffix: str | None = None,
+    sep: str = "_",
+    remove_malformed: bool = True,
+    remove_trailing_hyphen_number: bool = False,
+    verbose: bool = False,
+) -> DandelionPolars:
+    """
+    A parser to read .csv and .json files directly from folder containing 10x cellranger-outputs.
+
+    This function parses the 10x output files into an AIRR compatible format using Polars.
+
+    Minimum requirement is one of either {filename_prefix}_contig_annotations.csv or all_contig_annotations.json.
+
+    If .fasta, .json files are found in the same folder, additional info will be appended to the final table.
+
+    Parameters
+    ----------
+    path : Path | str
+        path to folder containing `.csv` and/or `.json` files, or path to files directly.
+    filename_prefix : str | None, optional
+        prefix of file name preceding '_contig'. None defaults to 'all'.
+    prefix : str | None, optional
+        Prefix to append to sequence_id and cell_id.
+    suffix : str | None, optional
+        Suffix to append to sequence_id and cell_id.
+    sep : str, optional
+        the separator to append suffix/prefix.
+    remove_malformed : bool, optional
+        whether or not to remove malformed contigs.
+    remove_trailing_hyphen_number : bool, optional
+        whether or not to remove the trailing hyphen number e.g. '-1' from the
+        cell/contig barcodes.
+
+    Returns
+    -------
+    DandelionPolars
+        DandelionPolars object holding the parsed data.
+
+    Raises
+    ------
+    IOError
+        if contig_annotations.csv and all_contig_annotations.json file(s) not found in the input folder.
+
+    """
+
+    def parse_annotation_polars(data: pl.DataFrame) -> pl.DataFrame:
+        """Parse annotation file using Polars - fully vectorized."""
+        swap_dict = dict(zip(CELLRANGER, AIRR))
+
+        # Rename columns based on swap_dict
+        rename_map = {k: v for k, v in swap_dict.items() if k in data.columns}
+        data = data.rename(rename_map)
+
+        # Fill null values with empty strings for string columns
+        # Also replace string representations of None/NaN
+        for col in data.columns:
+            if data[col].dtype in (pl.Utf8, pl.String, pl.Categorical):
+                data = data.with_columns(
+                    pl.col(col)
+                    .fill_null("")
+                    .str.replace_all("^(None|none|nan|NaN)$", "")
+                    .alias(col)
+                )
+
+        # Ensure gene call columns exist
+        gene_call_cols = ["v_call", "d_call", "j_call", "c_call"]
+        for col in gene_call_cols:
+            if col not in data.columns:
+                data = data.with_columns(pl.lit("").alias(col))
+
+        if "locus" not in data.columns:
+            data = data.with_columns(pl.lit("").alias("locus"))
+
+        # Create derived locus: extract first 3 chars from each gene call, combine unique
+        def derive_locus_from_calls(v, d, j, c):
+            """Extract locus from gene calls."""
+            calls = []
+            for val in [v, d, j, c]:
+                if val and val not in ["None", "none", "", "nan"]:
+                    calls.append(str(val)[:3])
+            return "|".join(sorted(set(calls))) if calls else "|"
+
+        data = data.with_columns(
+            pl.when(
+                (pl.col("locus").is_in(["None", "none", "", "nan", None]))
+                | pl.col("locus").is_null()
+            )
+            .then(
+                pl.struct(gene_call_cols).map_elements(
+                    lambda x: derive_locus_from_calls(
+                        x["v_call"], x["d_call"], x["j_call"], x["c_call"]
+                    ),
+                    return_dtype=pl.Utf8,
+                )
+            )
+            .otherwise(pl.col("locus"))
+            .alias("locus")
+        )
+
+        # Replace empty locus with "|"
+        data = data.with_columns(
+            pl.when(pl.col("locus") == "")
+            .then(pl.lit("|"))
+            .otherwise(pl.col("locus"))
+            .alias("locus")
+        )
+
+        return data
+
+    def parse_json_polars(data: list) -> pl.DataFrame:
+        """Parse json file and return DataFrame."""
+        main_dict1 = {
+            "barcode": "cell_id",
+            "contig_name": "sequence_id",
+            "sequence": "sequence",
+            "aa_sequence": "sequence_aa",
+            "productive": "productive",
+            "full_length": "complete_vdj",
+            "frame": "vj_in_frame",
+            "cdr3_seq": "junction",
+            "cdr3": "junction_aa",
+        }
+        main_dict2 = {
+            "read_count": "consensus_count",
+            "umi_count": "umi_count",
+            "cdr3_start": "cdr3_start",
+            "cdr3_stop": "cdr3_end",
+        }
+        main_dict3 = {
+            "high_confidence": "high_confidence_10x",
+            "filtered": "filtered_10x",
+            "is_gex_cell": "is_cell_10x",
+            "is_asm_cell": "is_asm_cell_10x",
+        }
+        info_dict = {
+            "raw_clonotype_id": "clone_id",
+            "raw_consensus_id": "raw_consensus_id_10x",
+            "exact_subclonotype_id": "exact_subclonotype_id_10x",
+        }
+        region_type_dict = {
+            "L-REGION+V-REGION": "v_call",
+            "D-REGION": "d_call",
+            "J-REGION": "j_call",
+        }
+
+        out = defaultdict(OrderedDict)
+        for d in data:
+            # main level
+            for k in main_dict1:
+                if k in d:
+                    out[d["contig_name"]].update({main_dict1[k]: d[k]})
+            for k in main_dict2:
+                if k in d:
+                    out[d["contig_name"]].update({main_dict2[k]: d[k]})
+            for k in main_dict3:
+                if k in d:
+                    out[d["contig_name"]].update({main_dict3[k]: d[k]})
+            # info level
+            if "info" in d:
+                for k in info_dict:
+                    if k in d["info"]:
+                        out[d["contig_name"]].update(
+                            {info_dict[k]: d["info"][k]}
+                        )
+            # annotation level
+            if "annotations" in d:
+                for dat in d["annotations"]:
+                    if "feature" in dat:
+                        if "region_type" in dat["feature"]:
+                            region = dat["feature"]["region_type"]
+                            if region in region_type_dict:
+                                gene_name = dat["feature"]["gene_name"]
+                                chain = dat["feature"]["chain"]
+                                out[d["contig_name"]].update(
+                                    {region_type_dict[region]: gene_name}
+                                )
+                                out[d["contig_name"]].update({"locus": chain})
+                        if "chain" in dat["feature"]:
+                            if dat["feature"]["chain"] != "Multi":
+                                chain = dat["feature"]["chain"]
+                                out[d["contig_name"]].update({"locus": chain})
+                        if "cdr3_seq" not in d:
+                            if dat["feature"]["region_type"] == "CDR3":
+                                if "cdr3_start" in dat:
+                                    out[d["contig_name"]].update(
+                                        {"cdr3_start": dat["cdr3_start"]}
+                                    )
+                                if "cdr3_stop" in dat:
+                                    out[d["contig_name"]].update(
+                                        {"cdr3_end": dat["cdr3_stop"]}
+                                    )
+                        if dat["feature"]["feature_id"] == 0:
+                            if dat["feature"]["region_type"] == "5'UTR":
+                                if "contig_match_start" in dat:
+                                    out[d["contig_name"]].update(
+                                        {
+                                            "fwr1_start": dat[
+                                                "contig_match_start"
+                                            ]
+                                        }
+                                    )
+                        if "region_type" in dat["feature"]:
+                            if dat["feature"]["region_type"] == "C-REGION":
+                                c_gene = dat["feature"]["gene_name"]
+                                out[d["contig_name"]].update({"c_call": c_gene})
+
+        # Convert dict to DataFrame
+        return pl.DataFrame([v for v in out.values()])
+
+    filename_pre = (
+        DEFAULT_PREFIX if filename_prefix is None else filename_prefix
+    )
+
+    if os.path.isdir(str(path)):
+        files = os.listdir(path)
+        filelist = []
+        for fx in files:
+            if re.search(filename_pre + "_contig", fx):
+                if fx.endswith(".fasta") or fx.endswith(".csv"):
+                    filelist.append(fx)
+            if re.search(
+                f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
+                fx,
+            ):
+                if fx.endswith(".json"):
+                    filelist.append(fx)
+        csv_idx = [i for i, j in enumerate(filelist) if j.endswith(".csv")]
+        json_idx = [i for i, j in enumerate(filelist) if j.endswith(".json")]
+        if len(csv_idx) == 1:
+            file = str(path) + "/" + str(filelist[csv_idx[0]])
+            logg.info("Reading {}".format(str(file)))
+            raw = pl.read_csv(str(file))
+            fasta_file = str(file).split("_annotations.csv")[0] + ".fasta"
+            json_file = re.sub(
+                filename_pre + "_contig_annotations",
+                f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
+                str(file).split(".csv")[0] + ".json",
+            )
+            if os.path.exists(json_file):
+                logg.info(
+                    "Found {} file. Extracting extra information.".format(
+                        str(json_file)
+                    )
+                )
+                # Parse CSV to DataFrame
+                out_df = parse_annotation_polars(raw)
+
+                # Parse JSON to DataFrame
+                with open(json_file) as f:
+                    raw_json = json.load(f)
+                out_json_df = parse_json_polars(raw_json)
+
+                # Merge DataFrames
+                res = out_df.join(
+                    out_json_df, on="sequence_id", how="outer", suffix="_json"
+                )
+
+                # Coalesce columns that appear in both (prefer json version)
+                for col in out_json_df.columns:
+                    if col != "sequence_id" and f"{col}_json" in res.columns:
+                        res = res.with_columns(
+                            pl.coalesce(
+                                [pl.col(f"{col}_json"), pl.col(col)]
+                            ).alias(col)
+                        ).drop(f"{col}_json")
+
+            elif os.path.exists(fasta_file):
+                logg.info(
+                    "Found {} file. Extracting extra information.".format(
+                        str(fasta_file)
+                    )
+                )
+                seqs = {}
+                fh = open(fasta_file)
+                for header, sequence in fasta_iterator(fh):
+                    seqs[header] = sequence
+                # Add sequences using Polars
+                raw = raw.with_columns(
+                    pl.col("contig_id")
+                    .map_elements(
+                        lambda x: seqs.get(x, ""), return_dtype=pl.Utf8
+                    )
+                    .alias("sequence")
+                )
+                res = parse_annotation_polars(raw)
+            else:
+                res = parse_annotation_polars(raw)
+        elif len(csv_idx) < 1:
+            if len(json_idx) == 1:
+                json_file = str(path) + "/" + str(filelist[json_idx[0]])
+                logg.info("Reading {}".format(json_file))
+                if os.path.exists(json_file):
+                    with open(json_file) as f:
+                        raw = json.load(f)
+                    res = parse_json_polars(raw)
+            else:
+                raise OSError(
+                    "{}_contig_annotations.csv and {}_contig_annotations.json file(s) not found in {} folder.".format(
+                        str(filename_pre),
+                        filename_pre.replace("filtered", "all"),
+                        str(path),
+                    )
+                )
+        elif len(csv_idx) > 1:
+            raise OSError(
+                "There are multiple input .csv files with the same filename prefix {} in {} folder.".format(
+                    str(filename_pre), str(path)
+                )
+            )
+    elif os.path.isfile(str(path)):
+        file = path
+        if str(file).endswith(".csv"):
+            logg.info("Reading {}.".format(str(file)))
+            raw = pl.read_csv(str(file))
+            fasta_file = str(file).split("_annotations.csv")[0] + ".fasta"
+            json_file = re.sub(
+                filename_pre + "_contig_annotations",
+                f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
+                str(file).split(".csv")[0] + ".json",
+            )
+            if os.path.exists(json_file):
+                logg.info(
+                    "Found {} file. Extracting extra information.".format(
+                        str(json_file)
+                    )
+                )
+                # Parse CSV to DataFrame
+                out_df = parse_annotation_polars(raw)
+
+                # Parse JSON to DataFrame
+                with open(json_file) as f:
+                    raw_json = json.load(f)
+                out_json_df = parse_json_polars(raw_json)
+
+                # Merge DataFrames
+                res = out_df.join(
+                    out_json_df, on="sequence_id", how="outer", suffix="_json"
+                )
+
+                # Coalesce columns that appear in both (prefer json version)
+                for col in out_json_df.columns:
+                    if col != "sequence_id" and f"{col}_json" in res.columns:
+                        res = res.with_columns(
+                            pl.coalesce(
+                                [pl.col(f"{col}_json"), pl.col(col)]
+                            ).alias(col)
+                        ).drop(f"{col}_json")
+
+            elif os.path.exists(fasta_file):
+                logg.info(
+                    "Found {} file. Extracting extra information.".format(
+                        str(fasta_file)
+                    )
+                )
+                seqs = {}
+                fh = open(fasta_file)
+                for header, sequence in fasta_iterator(fh):
+                    seqs[header] = sequence
+                # Add sequences using Polars
+                raw = raw.with_columns(
+                    pl.col("contig_id")
+                    .map_elements(
+                        lambda x: seqs.get(x, ""), return_dtype=pl.Utf8
+                    )
+                    .alias("sequence")
+                )
+                res = parse_annotation_polars(raw)
+            else:
+                res = parse_annotation_polars(raw)
+        elif str(file).endswith(".json"):
+            if os.path.exists(file):
+                logg.info("Reading {}".format(file))
+                with open(file) as f:
+                    raw = json.load(f)
+                res = parse_json_polars(raw)
+            else:
+                raise OSError("{} not found.".format(file))
+    else:
+        raise OSError("{} not found.".format(path))
 
     # Quick check if locus is malformed
     if remove_malformed:
