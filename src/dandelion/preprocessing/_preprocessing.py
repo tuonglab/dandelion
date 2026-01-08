@@ -634,14 +634,12 @@ def assign_isotype(
     else:
         out_ex = "_igblast_db-pass_genotyped.tsv"
     dat = load_data(_processedfile)
-    logg.info("Loading 10X annotations \n")
     if _10xfile is not None:
         dat_10x = read_10x_vdj(_10xfile)
         res_10x = pd.DataFrame(dat_10x._data["c_call"].replace("", "None"))
     else:  # pragma: no cover
         res_10x = pd.DataFrame(dat["c_call"])
         res_10x["c_call"] = "None"
-    logg.info("Preparing new calls \n")
     for col in [
         "c_call",
         "c_sequence_alignment",
@@ -671,7 +669,6 @@ def assign_isotype(
     if (
         correct_c_call
     ):  # TODO: figure out if i need to set up a None correction?
-        logg.info("Correcting C calls \n")
         dat = _correct_c_call(dat, primers_dict=correction_dict, org=org)
         res_corrected = pd.DataFrame(dat["c_call"].replace("", "None"))
         res_corrected = res_corrected.fillna(value="None")
@@ -685,7 +682,6 @@ def assign_isotype(
         res = pd.concat([res_10x_sum, res_blast_sum, res_corrected_sum])
     else:  # pragma: no cover
         res = pd.concat([res_10x_sum, res_blast_sum])
-
     res = res.reset_index(drop=True)
     res["c_call"] = res["c_call"].fillna(value="None")
     res["c_call"] = [re.sub("[*][0-9][0-9]", "", c) for c in res["c_call"]]
@@ -693,8 +689,6 @@ def assign_isotype(
     res["c_call"] = res["c_call"].cat.reorder_categories(
         sorted(list(set(res["c_call"])), reverse=True)
     )
-
-    logg.info("Finishing up \n")
     dat["c_call_10x"] = pd.Series(res_10x["c_call"])
     # some minor adjustment to the final output table
     airr_output = load_data(_airrfile)
