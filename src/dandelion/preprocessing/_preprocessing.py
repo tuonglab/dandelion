@@ -576,7 +576,8 @@ def assign_isotype(
             if pd.notnull(dat.loc[i, "c_call"]):
                 for k, genes in primer_dict.items():
                     if k in dat.loc[i, "c_call"]:
-                        gene_correction(dat, i, genes)
+                        if "IGHG4A" not in dat.loc[i, "c_call"]:
+                            gene_correction(dat, i, genes)
         return dat
 
     filePath = check_filepath(
@@ -1705,15 +1706,20 @@ def reassign_alleles(
                         / len(V_g)
                         * 100,
                     )
+
+                    # FIXED: Create DataFrame correctly
+                    # Each tuple represents (before, after) for a metric
                     stats = pd.DataFrame(
-                        [ambiguous, not_in_genotype],
-                        columns=["ambiguous", "not_in_genotype"],
-                        index=["before", "after"],
-                    ).T
+                        {
+                            "before": [ambiguous[0], not_in_genotype[0]],
+                            "after": [ambiguous[1], not_in_genotype[1]],
+                        },
+                        index=["ambiguous", "not_in_genotype"],
+                    )
+
                     stats.index.set_names(["vgroup"], inplace=True)
                     stats.reset_index(drop=False, inplace=True)
                     stats["sample_id"] = samp
-                    # stats['donor'] = str(combined_folder)
                     results.append(stats)
                 results = pd.concat(results)
                 ambiguous_table = results[results["vgroup"] == "ambiguous"]
