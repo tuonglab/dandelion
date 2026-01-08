@@ -5,6 +5,8 @@ import pytest
 import dandelion as ddl
 import pandas as pd
 
+from dandelion.tools._tools import to_ak, from_ak
+
 
 @pytest.mark.usefixtures("create_testfolder", "airr_10x")
 def test_write_airr(create_testfolder, airr_10x):
@@ -344,7 +346,7 @@ def test_convert_obsm_airr_to_data(create_testfolder):
     vdj = ddl.read_10x_vdj(create_testfolder, filename_prefix="test_all")
     mdata = ddl.tl.to_scirpy(vdj)
 
-    result = ddl.tl.from_ak(mdata["airr"].obsm["airr"])
+    result = from_ak(mdata["airr"].obsm["airr"])
 
     assert result.shape == vdj._data.shape
     assert result.shape[0] == 26
@@ -353,7 +355,7 @@ def test_convert_obsm_airr_to_data(create_testfolder):
 def test_convert_data_to_obsm_airr(create_testfolder):
     vdj = ddl.read_10x_vdj(create_testfolder, filename_prefix="test_all")
     anndata = ddl.tl.to_scirpy(vdj, to_mudata=False)
-    obsm_airr, obs = ddl.tl.to_ak(vdj._data)
+    obsm_airr, obs = to_ak(vdj._data)
     assert len(anndata.obsm["airr"]) == len(obsm_airr)
     # assert anndata.obsm["airr"].type.show() == obsm_airr.type.show()
     assert anndata.obs.shape == obs.shape

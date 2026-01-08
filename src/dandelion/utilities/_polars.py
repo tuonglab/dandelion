@@ -118,7 +118,7 @@ class DandelionPolars:
         self._backend = "polars"
         self._tmpfiles = {}
 
-        self._data = data
+        self._data = load_polars(data)
         self._metadata = metadata
         self.layout = layout
         self.graph = graph
@@ -1696,11 +1696,49 @@ class DandelionPolars:
                 ".metadata is None, cannot convert to AnnData. Please initialize metadata first."
             )
 
-    def collect(self):
-        """Convert self.distances from a lazy array to a concrete numpy array."""
-        if not isinstance(self.distances, np.ndarray):
-            self.distances = csr_matrix(self.distances.compute())
+    def to_eager(self) -> None:
+        """Convert lazy slots to eager slots."""
+        if self._backend == "polars":
+            if isinstance(self._data, pl.LazyFrame):
+                self._data = self._data.collect()
+            if self._metadata is not None:
+                if isinstance(self._metadata, pl.LazyFrame):
+                    self._metadata = self._metadata.collect()
+            # distances: eager types are np.ndarray or csr_matrix
+        if not isinstance(self.distances, (np.ndarray, csr_matrix)):
+            # assume anything else is lazy and computable
+            computed = self.distances.compute()
+            if isinstance(computed, csr_matrix):
+                self.distances = computed
+            else:
+                self.distances = csr_matrix(computed)
             self.distances._index_names = self.metadata_names
+        self.lazy = False
+
+    def to_lazy(self, *, chunks="auto") -> None:
+        """Convert eager slots to lazy slots."""
+        if self._backend == "polars":
+            if isinstance(self._data, pl.DataFrame):
+                self._data = self._data.lazy()
+            if self._metadata is not None and isinstance(
+                self._metadata, pl.DataFrame
+            ):
+                self._metadata = self._metadata.lazy()
+        if isinstance(self.distances, np.ndarray):
+            import dask.array as da
+
+            self.distances = da.from_array(self.distances, chunks=chunks)
+        elif isinstance(self.distances, csr_matrix):
+            import dask.array as da
+
+            # Dask does NOT natively support sparse CSR well,
+            # so you must decide what "lazy" means here.
+            self.distances = da.from_array(
+                self.distances.toarray(),
+                chunks=chunks,
+                asarray=False,
+            )
+        self.lazy = True
 
     def copy(self) -> DandelionPolars:
         """
@@ -2140,14 +2178,10 @@ class DandelionPolars:
         **kwargs
             passed to `pandas.DataFrame.to_csv` or `polars.DataFrame.write_csv`.
         """
-        if isinstance(self._data, pd.DataFrame):
-            data = sanitize_data(self._data)
-            data.to_csv(filename, sep="\t", index=False, **kwargs)
-        elif isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
-            data = _sanitize_data_polars(self._data)
-            if isinstance(data, pl.LazyFrame):
-                data = data.collect()
-            data.write_csv(filename, separator="\t", **kwargs)
+        if self._backend == "pandas":
+            # convert to polars first
+            self.to_polars()
+        _write_airr(self._data, filename, **kwargs)
 
     def write_zipddl(
         self,
@@ -2637,7 +2671,10 @@ def load_polars(
         elif isinstance(obj, pl.DataFrame):  # Check for eager DataFrame
             df = obj.lazy()
         elif isinstance(obj, pd.DataFrame):
-            df = pl.from_pandas(obj).lazy()
+            try:
+                df = pl.from_pandas(obj).lazy()
+            except TypeError:  # because of mixed dtypes, sanitize first
+                df = _sanitize_data_polars(obj)
 
         if (
             "sequence_id" in df.collect_schema()
@@ -3175,11 +3212,13 @@ def _write_output(out: str, file: Path | str) -> None:
 
 
 def _write_airr(
-    data: pd.DataFrame | pl.DataFrame | pl.LazyFrame, save: Path | str
+    data: pd.DataFrame | pl.DataFrame | pl.LazyFrame, save: Path | str, **kwargs
 ) -> None:
     """Save as airr formatted file."""
     data = _sanitize_data_polars(data)
-    data.write_csv(save, separator="\t")
+    if isinstance(data, pl.LazyFrame):
+        data = data.collect()
+    data.write_csv(save, separator="\t", **kwargs)
 
 
 ### --- Helper functions for metadata initialization ---
@@ -3702,17 +3741,38 @@ def _sanitize_data_polars(
     Works for eager and lazy DataFrames.
     """
     if isinstance(data, pd.DataFrame):
+        # Handle mixed-type columns before converting to Polars
+        data = data.copy()
+        for col in data.columns:
+            if data[col].dtype == object:
+                # Check if column has mixed types (numeric and string)
+                non_null = data[col].dropna()
+                if len(non_null) > 0:
+                    # Try to detect if it's supposed to be numeric
+                    numeric_mask = pd.to_numeric(
+                        non_null, errors="coerce"
+                    ).notna()
+                    if numeric_mask.any():
+                        # Has some numeric values - convert empty strings to None
+                        data[col] = data[col].replace("", None)
+                        # Try to convert to numeric
+                        data[col] = pd.to_numeric(data[col], errors="ignore")
+
         data = pl.from_pandas(data.reset_index(drop=True))
+
     lazy = isinstance(data, pl.LazyFrame)
     df = data.collect() if lazy else data
     exprs: list[pl.Expr] = []
+
     for d in df.collect_schema().names():
         is_string = _is_polars_string_dtype(df, d)
         col = pl.col(d)
+
         # --- BOOLEAN-LIKE COLUMNS ---
         if d in BOOLEAN_LIKE_COLUMNS:
             exprs.append(_sanitize_boolean_expr(d).alias(d))
             continue
+
         # --- SCHEMA-DEFINED COLUMNS ---
         if d in RearrangementSchema.properties:
             dtype = RearrangementSchema.properties[d]["type"]
@@ -3765,7 +3825,9 @@ def _sanitize_data_polars(
                 )
             exprs.append(col.alias(d))
             continue
+
         exprs.append(col.alias(d))
+
     df = df.with_columns(exprs)
 
     # --- SORT BY cell_id, productive, umi_count (same as pandas version) ---
@@ -4313,8 +4375,8 @@ def mark_ambiguous_contigs(
 
 
 def check_contigs(
-    data: DandelionPolars | pl.DataFrame | str,
-    adata: AnnData | None = None,
+    vdj_data: DandelionPolars | pl.DataFrame | str,
+    gex_data: AnnData | None = None,
     productive_only: bool = True,
     library_type: Literal["ig", "tr-ab", "tr-gd"] | None = None,
     umi_foldchange_cutoff: float = 2.0,
@@ -4428,21 +4490,21 @@ def check_contigs(
         print("Filtering contigs...")
 
     # Load data
-    if isinstance(data, DandelionPolars):
-        dat_ = data.data
+    if isinstance(vdj_data, DandelionPolars):
+        dat_ = vdj_data.data
         # Keep as LazyFrame if possible
         if isinstance(dat_, pl.DataFrame):
             dat_ = dat_.lazy()
-        lib_type_from_obj = data.library_type
-    elif isinstance(data, pl.DataFrame):
-        dat_ = data.lazy()
+        lib_type_from_obj = vdj_data.library_type
+    elif isinstance(vdj_data, pl.DataFrame):
+        dat_ = vdj_data.lazy()
         lib_type_from_obj = None
-    elif isinstance(data, pl.LazyFrame):
-        dat_ = data
+    elif isinstance(vdj_data, pl.LazyFrame):
+        dat_ = vdj_data
         lib_type_from_obj = None
     else:
         # File path
-        dat_ = load_polars(data, as_pandas=False)
+        dat_ = load_polars(vdj_data, as_pandas=False)
         if isinstance(dat_, pl.DataFrame):
             dat_ = dat_.lazy()
         lib_type_from_obj = None
@@ -4485,9 +4547,9 @@ def check_contigs(
     barcode = dat.select("cell_id").unique().collect().to_series().to_list()
 
     # Handle AnnData integration
-    if adata is not None:
+    if gex_data is not None:
         adata_provided = True
-        adata_ = adata.copy()
+        adata_ = gex_data.copy()
 
         # Mark cells with contigs
         contig_check = pd.DataFrame(index=adata_.obs_names)
@@ -4556,25 +4618,19 @@ def check_contigs(
             "No contigs passed filtering. Check that cell barcodes match."
         )
 
-    # Helper function to write polars dataframe to TSV
-    def _write_tsv(df: pl.DataFrame, filepath: str) -> None:
-        """Write polars DataFrame to TSV file."""
-        df_sanitized = _sanitize_data_polars(df)
-        if isinstance(df_sanitized, pl.LazyFrame):
-            df_sanitized = df_sanitized.collect()
-        df_sanitized.write_csv(filepath, separator="\t")
-
     # Save if requested
     if save is not None:
         if save.endswith(".tsv"):
-            _write_tsv(dat, save)
+            _write_airr(dat, save)
         else:
             raise ValueError(
                 f"{save} not suitable. Please provide filename ending with .tsv"
             )
-    elif isinstance(data, str) and os.path.isfile(data):
-        data_path = Path(data)
-        _write_tsv(dat, str(data_path.parent / f"{data_path.stem}_checked.tsv"))
+    elif isinstance(vdj_data, str) and os.path.isfile(vdj_data):
+        data_path = Path(vdj_data)
+        _write_airr(
+            dat, str(data_path.parent / f"{data_path.stem}_checked.tsv")
+        )
 
     # Apply filters
     if filter_extra:
@@ -4589,10 +4645,10 @@ def check_contigs(
     out_dat = DandelionPolars(data=dat, verbose=False, **kwargs)
 
     # Copy germline if from DandelionPolars input
-    if isinstance(data, DandelionPolars):
-        out_dat.germline = data.germline
+    if isinstance(vdj_data, DandelionPolars):
+        out_dat.germline = vdj_data.germline
 
-    if adata_provided:
+    if gex_data is not None:
         # Import transfer function from tools
         from dandelion.tools import transfer
 

@@ -1,7 +1,6 @@
 import os
 import json
 import shutil
-import tempfile
 import warnings
 
 import numpy as np
@@ -32,7 +31,7 @@ from time import sleep
 from tqdm import tqdm
 from typing import Literal
 
-from dandelion.external.immcantation.changeo import (
+from dandelion.external.immcantation.changeo_polars import (
     assigngenes_igblast,
     makedb_igblast,
     parsedb_heavy,
@@ -46,7 +45,6 @@ from dandelion.utilities._core import (
 )
 
 from dandelion.utilities._polars import (
-    DandelionPolars,
     load_polars,
     read_10x_vdj_polars,
     _check_travdv_polars,
@@ -2064,142 +2062,6 @@ def reassign_alleles(
         _write_airr(
             out_file, outfilepath.parent / (outfilepath.stem + "_genotyped.tsv")
         )
-
-
-def create_germlines(
-    vdj_data: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
-    germline: str | None = None,
-    org: Literal["human", "mouse"] = "human",
-    db: Literal["imgt", "ogrdb"] = "imgt",
-    strain: (
-        Literal[
-            "c57bl6",
-            "balbc",
-            "129S1_SvImJ",
-            "AKR_J",
-            "A_J",
-            "BALB_c_ByJ",
-            "BALB_c",
-            "C3H_HeJ",
-            "C57BL_6J",
-            "C57BL_6",
-            "CAST_EiJ",
-            "CBA_J",
-            "DBA_1J",
-            "DBA_2J",
-            "LEWES_EiJ",
-            "MRL_MpJ",
-            "MSM_MsJ",
-            "NOD_ShiLtJ",
-            "NOR_LtJ",
-            "NZB_BlNJ",
-            "PWD_PhJ",
-            "SJL_J",
-        ]
-        | None
-    ) = None,
-    genotyped_fasta: str | None = None,
-    additional_args: list[str] = [],
-    save: str | None = None,
-) -> DandelionPolars:
-    """
-    Run CreateGermlines.py to reconstruct the germline V(D)J sequence.
-
-    Parameters
-    ----------
-    vdj_data : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
-        DandelionPolars object, polars DataFrame/LazyFrame in changeo/airr format, or file path to changeo/airr
-        file after clones have been determined.
-    germline : str | None, optional
-        path to germline database folder. `None` defaults to  environmental variable.
-    org : Literal["human", "mouse"], optional
-        organism of germline database.
-    db : Literal["imgt", "ogrdb"], optional
-        `imgt` or `ogrdb` reference database.
-    strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
-        strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
-        The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
-    genotyped_fasta : str | None, optional
-        location to corrected v genotyped fasta file.
-    additional_args : list[str], optional
-        additional arguments to pass to `CreateGermlines.py.`
-    save : str | None, optional
-        if provided, saves to specified file path.
-
-    Returns
-    -------
-    DandelionPolars
-        DandelionPolars object with `.germlines` slot populated.
-    """
-    start = logg.info("Reconstructing germline sequences")
-    if not isinstance(vdj_data, DandelionPolars):
-        tmpfile = (
-            Path(vdj_data)
-            if os.path.isfile(vdj_data)
-            else Path(tempfile.TemporaryDirectory().name) / "tmp.tsv"
-        )
-        if isinstance(vdj_data, (pl.DataFrame, pl.LazyFrame)):
-            _write_airr(data=vdj_data, save=tmpfile)
-        creategermlines(
-            airr_file=tmpfile,
-            germline=germline,
-            org=org,
-            genotyped_fasta=genotyped_fasta,
-            db=db,
-            strain=strain,
-            additional_args=additional_args,
-        )
-    else:
-        tmppath = Path(tempfile.TemporaryDirectory().name)
-        tmppath.mkdir(parents=True, exist_ok=True)
-        tmpfile = tmppath / "tmp.tsv"
-        vdj_data._write_airr(filename=tmpfile)
-        if len(vdj_data.germline) > 0:
-            tmpgmlfile = tmppath / "germ.fasta"
-            write_fasta(fasta_dict=vdj_data.germline, out_fasta=tmpgmlfile)
-            creategermlines(
-                airr_file=tmpfile,
-                germline=tmpgmlfile,
-                org=org,
-                db=db,
-                strain=strain,
-                additional_args=additional_args,
-            )
-        else:
-            creategermlines(
-                airr_file=tmpfile,
-                germline=germline,
-                org=org,
-                genotyped_fasta=genotyped_fasta,
-                db=db,
-                strain=strain,
-                additional_args=additional_args,
-            )
-    # return as DandelionPolars object
-    germpass_outfile = tmpfile.parent / (tmpfile.stem + "_germ-pass.tsv")
-    if isinstance(vdj_data, DandelionPolars):
-        vdj_data.__init__(
-            data=germpass_outfile,
-            metadata=vdj_data._metadata,
-            germline=vdj_data.germline,
-            layout=vdj_data.layout,
-            graph=vdj_data.graph,
-            verbose=False,
-        )
-        out_vdj = vdj_data.copy()
-    else:
-        out_vdj = DandelionPolars(germpass_outfile, verbose=False)
-        out_vdj.store_germline_reference(
-            corrected=genotyped_fasta, germline=germline, org=org
-        )
-    if save is not None:
-        shutil.move(germpass_outfile, save)
-    logg.info(
-        " finished",
-        time=start,
-        deep=("Returning DandelionPolars object: \n"),
-    )
-    return out_vdj
 
 
 def run_igblastn(

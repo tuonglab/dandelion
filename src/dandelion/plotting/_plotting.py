@@ -628,7 +628,7 @@ def spectratype(
 
 
 def clone_overlap(
-    adata: AnnData,
+    gex_data: AnnData,
     groupby: str,
     colorby: str | None = None,
     weighted_overlap: bool = False,
@@ -656,7 +656,7 @@ def clone_overlap(
 
     Parameters
     ----------
-    adata : AnnData
+    gex_data : AnnData
         AnnData object.
     groupby : str
         column name in obs for collapsing to nodes in circos plot.
@@ -708,14 +708,14 @@ def clone_overlap(
     else:
         clone_ = clone_key
 
-    if isinstance(adata, AnnData):
-        data = adata.obs.copy()
+    if isinstance(gex_data, AnnData):
+        data = gex_data.obs.copy()
         # get rid of problematic rows that appear because of category conversion?
-        if "clone_overlap" in adata.uns:
-            overlap = adata.uns["clone_overlap"].copy()
+        if "clone_overlap" in gex_data.uns:
+            overlap = gex_data.uns["clone_overlap"].copy()
         else:
             raise KeyError(
-                "`clone_overlap` not found in `adata.uns`. Did you run `tl.clone_overlap`?"
+                "`clone_overlap` not found in `gex_data.uns`. Did you run `tl.clone_overlap`?"
             )
     else:
         raise ValueError("Please provide a AnnData object.")
@@ -813,26 +813,26 @@ def clone_overlap(
             if pd.api.types.is_categorical_dtype(adata.obs[groupby]):
                 colorby_dict = dict(
                     zip(
-                        list(adata.obs[str(colorby)].cat.categories),
-                        adata.uns[str(colorby) + "_colors"],
+                        list(gex_data.obs[str(colorby)].cat.categories),
+                        gex_data.uns[str(colorby) + "_colors"],
                     )
                 )
             else:
                 colorby_dict = dict(
                     zip(
-                        list(adata.obs[str(colorby)].unique()),
-                        adata.uns[str(colorby) + "_colors"],
+                        list(gex_data.obs[str(colorby)].unique()),
+                        gex_data.uns[str(colorby) + "_colors"],
                     )
                 )
         else:
-            if len(adata.obs[str(colorby)].unique()) <= 20:
+            if len(gex_data.obs[str(colorby)].unique()) <= 20:
                 pal = cycle(palettes.default_20)
-            elif len(adata.obs[str(colorby)].unique()) <= 28:
+            elif len(gex_data.obs[str(colorby)].unique()) <= 28:
                 pal = cycle(palettes.default_28)
             else:
                 pal = cycle(palettes.default_102)
             colorby_dict = dict(
-                zip(list(adata.obs[str(colorby)].unique()), pal)
+                zip(list(gex_data.obs[str(colorby)].unique()), pal)
             )
     else:
         if type(color_mapping) is dict:
@@ -896,7 +896,7 @@ def clone_overlap(
 
 
 def productive_ratio(
-    adata: AnnData,
+    gex_data: AnnData,
     figsize: tuple[float, float] = (8, 4),
     palette: list[str] = ["lightblue", "darkblue"],
     fontsize: int | float = 8,
@@ -911,7 +911,7 @@ def productive_ratio(
 
     Parameters
     ----------
-    adata : AnnData
+    gex_data : AnnData
         AnnData object with `.uns['productive_ratio']` computed from
         `tl.productive_ratio`.
     figsize : tuple[float, float], optional
@@ -925,9 +925,9 @@ def productive_ratio(
     legend_kwargs : dict, optional
         Any additional kwargs to `plt.legend`
     """
-    res = adata.uns["productive_ratio"]["results"]
-    locus = adata.uns["productive_ratio"]["locus"]
-    groupby = adata.uns["productive_ratio"]["groupby"]
+    res = gex_data.uns["productive_ratio"]["results"]
+    locus = gex_data.uns["productive_ratio"]["locus"]
+    groupby = gex_data.uns["productive_ratio"]["groupby"]
 
     plt.figure(figsize=figsize)
     ax = sns.barplot(

@@ -1,17 +1,23 @@
+#!/usr/bin/env python
 import os
 import sys
 import shutil
 import tempfile
-import numpy as np
-import pandas as pd
+
+import polars as pl
+
+from changeo.Gene import getGene
 from pathlib import Path
 from scanpy import logging as logg
 from subprocess import run
 from typing import Literal
 
-from changeo.Gene import getGene
-from dandelion.utilities._core import Dandelion, load_data, write_fasta
-from dandelion.utilities._io import write_airr
+from dandelion.utilities._polars import (
+    DandelionPolars,
+    load_polars,
+    _write_airr,
+)
+from dandelion.utilities._core import write_fasta
 from dandelion.utilities._utilities import (
     set_germline_env,
     set_igblast_env,
@@ -340,7 +346,7 @@ def creategermlines(
 
 
 def define_clones(
-    vdj_data: Dandelion | pd.DataFrame | str,
+    vdj_data: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
     dist: float,
     action: Literal["first", "set"] = "set",
     model: Literal[
@@ -357,11 +363,11 @@ def define_clones(
     doublets: Literal["drop", "count"] = "drop",
     fileformat: Literal["changeo", "airr"] = "airr",
     n_cpus: int | None = None,
-    outFilePrefix: int | None = None,
-    key_added: int | None = None,
+    outFilePrefix: str | None = None,
+    key_added: str | None = None,
     out_dir: Path | str | None = None,
     additional_args: list[str] = [],
-) -> Dandelion:
+) -> DandelionPolars:
     """
     Find clones using changeo's `DefineClones.py <https://changeo.readthedocs.io/en/stable/tools/DefineClones.html>`__.
 
@@ -369,8 +375,8 @@ def define_clones(
 
     Parameters
     ----------
-    vdj_data : Dandelion | pd.DataFrame | str
-        Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr file after
+    vdj_data : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
+        DandelionPolars object, Polars DataFrame/LazyFrame in changeo/airr format, or file path to changeo/airr file after
         clones have been determined.
     dist : float
         The distance threshold for clonal grouping.
@@ -397,9 +403,9 @@ def define_clones(
         Format of V(D)J file/objects. Default is 'airr'. Also accepts 'changeo'.
     n_cpus : int | None, optional
         Number of cpus for parallelization. Default is 1, no parallelization.
-    outFilePrefix : int | None, optional
+    outFilePrefix : str | None, optional
         If specified, the out file name will have this prefix. `None` defaults to 'dandelion_define_clones'
-    key_added : int | None, optional
+    key_added : str | None, optional
         Column name to add for define_clones.
     out_dir : Path | str | None, optional
         If specified, the files will be written to this directory.
@@ -408,8 +414,8 @@ def define_clones(
 
     Returns
     -------
-    Dandelion
-        Dandelion object with clone_id annotated in `.data` slot and `.metadata` initialized.
+    DandelionPolars
+        DandelionPolars object with clone_id annotated in `.data` slot and `.metadata` initialized.
     """
     start = logg.info("Finding clones")
     if n_cpus is None:
@@ -419,17 +425,27 @@ def define_clones(
 
     clone_key = key_added if key_added is not None else "clone_id"
 
-    if isinstance(vdj_data, Dandelion):
-        dat_ = load_data(vdj_data._data)
+    # Load data as Polars
+    if isinstance(vdj_data, DandelionPolars):
+        dat_ = load_polars(vdj_data._data)
     else:
-        dat_ = load_data(vdj_data)
-    if "ambiguous" in dat_:
-        dat = dat_[dat_["ambiguous"] == "F"].copy()
-    else:
-        dat = dat_.copy()
-    dat_h = dat[dat["locus"] == "IGH"]
-    dat_l = dat[dat["locus"].isin(["IGK", "IGL"])]
+        dat_ = load_polars(vdj_data)
 
+    # Ensure we have eager DataFrame for operations
+    if isinstance(dat_, pl.LazyFrame):
+        dat_ = dat_.collect()
+
+    # Filter ambiguous sequences
+    if "ambiguous" in dat_.columns:
+        dat = dat_.filter(pl.col("ambiguous") == "F")
+    else:
+        dat = dat_
+
+    # Split into heavy and light chains
+    dat_h = dat.filter(pl.col("locus") == "IGH")
+    dat_l = dat.filter(pl.col("locus").is_in(["IGK", "IGL"]))
+
+    # Setup output directories
     if os.path.isfile(str(vdj_data)):
         vdj_path = Path(vdj_data)
         tmpFolder = vdj_path.parent / "tmp"
@@ -439,14 +455,13 @@ def define_clones(
         tmpFolder = vdj_path / "tmp"
         outFolder = vdj_path
     else:
-        import tempfile
-
         outFolder = Path(tempfile.TemporaryDirectory().name)
         tmpFolder = outFolder / "tmp"
 
-    for _ in [outFolder, tmpFolder]:
-        _.mkdir(parents=True, exist_ok=True)
+    for folder in [outFolder, tmpFolder]:
+        folder.mkdir(parents=True, exist_ok=True)
 
+    # Setup file paths
     if "vdj_path" in locals():
         h_file1 = tmpFolder / (vdj_path.stem + "_heavy-clone.tsv")
         h_file2 = outFolder / (vdj_path.stem + "_heavy-clone.tsv")
@@ -462,12 +477,17 @@ def define_clones(
         h_file2 = outFolder / (out_FilePrefix + "_heavy-clone.tsv")
         l_file = tmpFolder / (out_FilePrefix + "_light.tsv")
         outfile = outFolder / (out_FilePrefix + "_clone.tsv")
-    write_airr(dat_h, h_file1)
-    write_airr(dat_l, l_file)
+
+    # Write files
+    _write_airr(dat_h, h_file1)
+    _write_airr(dat_l, l_file)
+
+    # Determine v_call field
     v_field = (
         "v_call_genotyped" if "v_call_genotyped" in dat.columns else "v_call"
     )
 
+    # Build DefineClones.py command
     cmd = [
         "DefineClones.py",
         "-d",
@@ -544,17 +564,16 @@ def define_clones(
 
         return assign_dict
 
-    # TODO: might need to remove this function to drop requirement to maintain this as a dependency internally
     def _lightCluster(heavy_file, light_file, out_file, doublets, fileformat):
         """
-        Split heavy chain clones based on light chains.
+        Split heavy chain clones based on light chains using Polars.
 
         Arguments:
         heavy_file (str): heavy chain input file.
         light_file (str): light chain input file.
         out_file (str): heavy chain output file.
         doublets (str): method for handling multiple heavy chains per cell. one of 'drop' or 'count'.
-        format (str): file format. one of 'changeo' or 'airr'.
+        fileformat (str): file format. one of 'changeo' or 'airr'.
         """
         # Set column names
         if fileformat == "changeo":
@@ -574,15 +593,21 @@ def define_clones(
         else:
             sys.exit("Invalid format %s" % fileformat)
 
-        # read in heavy and light DFs
-        heavy_df = pd.read_csv(
-            heavy_file, dtype="object", na_values=["", "None", "NA"], sep="\t"
+        # Read in heavy and light DataFrames using Polars
+        heavy_df = pl.read_csv(
+            heavy_file,
+            separator="\t",
+            null_values=["", "None", "NA"],
+            infer_schema_length=10000,
         )
-        light_df = pd.read_csv(
-            light_file, dtype="object", na_values=["", "None", "NA"], sep="\t"
+        light_df = pl.read_csv(
+            light_file,
+            separator="\t",
+            null_values=["", "None", "NA"],
+            infer_schema_length=10000,
         )
 
-        # column checking
+        # Column checking
         expected_heavy_columns = [
             cell_id,
             clone_id,
@@ -591,7 +616,7 @@ def define_clones(
             junction_length,
             umi_count,
         ]
-        if set(expected_heavy_columns).issubset(heavy_df.columns) is False:
+        if not set(expected_heavy_columns).issubset(heavy_df.columns):
             raise ValueError(
                 "Missing one or more columns in heavy chain file: "
                 + ", ".join(expected_heavy_columns)
@@ -603,85 +628,102 @@ def define_clones(
             junction_length,
             umi_count,
         ]
-        if set(expected_light_columns).issubset(light_df.columns) is False:
+        if not set(expected_light_columns).issubset(light_df.columns):
             raise ValueError(
                 "Missing one or more columns in light chain file: "
                 + ", ".join(expected_light_columns)
             )
 
-        # Fix types
+        # Fix types for junction_length
         try:
-            heavy_df[junction_length] = heavy_df[junction_length].astype("int")
-            light_df[junction_length] = light_df[junction_length].astype("int")
-        except:
-            heavy_df[junction_length] = heavy_df[junction_length].replace(
-                np.nan, pd.NA
+            heavy_df = heavy_df.with_columns(
+                pl.col(junction_length).cast(pl.Int64)
             )
-            light_df[junction_length] = light_df[junction_length].replace(
-                np.nan, pd.NA
+            light_df = light_df.with_columns(
+                pl.col(junction_length).cast(pl.Int64)
             )
-            heavy_df[junction_length] = heavy_df[junction_length].astype(
-                "Int64"
-            )
-            light_df[junction_length] = light_df[junction_length].astype(
-                "Int64"
-            )
+        except Exception:
+            # Already nullable integer type
+            pass
 
-        # filter multiple heavy chains
+        # Filter multiple heavy chains
         if doublets == "drop":
-            heavy_df = heavy_df.drop_duplicates(cell_id, keep=False)
-            if heavy_df.empty is True:
+            # Keep only cells with exactly one heavy chain
+            cell_counts = heavy_df.group_by(cell_id).len()
+            single_cells = cell_counts.filter(pl.col("len") == 1)[cell_id]
+            heavy_df = heavy_df.filter(pl.col(cell_id).is_in(single_cells))
+            if len(heavy_df) == 0:
                 raise ValueError(
                     "Empty heavy chain data, after doublets drop. Are you combining experiments "
                     "in a single file? If so, split your data into multiple files."
                 )
         elif doublets == "count":
-            heavy_df[umi_count] = heavy_df[umi_count].astype("int")
-            heavy_df = heavy_df.groupby(cell_id, sort=False).apply(
-                lambda x: x.nlargest(1, umi_count)
+            # Keep only the highest UMI count contig per cell
+            heavy_df = heavy_df.with_columns(pl.col(umi_count).cast(pl.Int64))
+            heavy_df = (
+                heavy_df.sort(umi_count, descending=True)
+                .group_by(cell_id, maintain_order=True)
+                .first()
             )
 
-        # transfer clone IDs from heavy chain df to light chain df
-        clone_dict = {
-            v[cell_id]: v[clone_id]
-            for k, v in heavy_df[[clone_id, cell_id]].T.to_dict().items()
-        }
-        light_df = light_df.loc[
-            light_df[cell_id].apply(lambda x: x in clone_dict.keys()),
-        ]
-        light_df[clone_id] = light_df.apply(
-            lambda row: clone_dict[row[cell_id]], axis=1
+        # Transfer clone IDs from heavy chain df to light chain df
+        # Ensure clone_id is string type for consistent handling
+        heavy_df = heavy_df.with_columns(pl.col(clone_id).cast(pl.String))
+        clone_dict = dict(
+            zip(
+                heavy_df[cell_id].to_list(),
+                heavy_df[clone_id].to_list(),
+            )
+        )
+        light_df = light_df.filter(
+            pl.col(cell_id).is_in(list(clone_dict.keys()))
+        )
+        light_df = light_df.with_columns(
+            pl.col(cell_id)
+            .map_elements(lambda x: clone_dict.get(x), return_dtype=pl.String)
+            .alias(clone_id)
         )
 
-        # generate a "cluster_dict" of CELL:CLONE dictionary from light df  (TODO: use receptor object V/J gene names)
+        # Generate a "cluster_dict" of CELL:CLONE dictionary from light df
+        # Build grouping key from v_call, j_call, junction_length, and clone_id
+        light_grouping = light_df.with_columns(
+            (
+                pl.col(v_call).map_elements(
+                    lambda x: getGene(x) if x else "", return_dtype=pl.String
+                )
+                + pl.lit(",")
+                + pl.col(j_call).map_elements(
+                    lambda x: getGene(x) if x else "", return_dtype=pl.String
+                )
+                + pl.lit(",")
+                + pl.col(junction_length).cast(pl.String)
+                + pl.lit(",")
+                + pl.col(clone_id)
+            ).alias("grouping_key")
+        )
+
         cluster_dict = clusterLinkage(
-            light_df[cell_id],
-            light_df.apply(
-                lambda row: getGene(row[v_call])
-                + ","
-                + getGene(row[j_call])
-                + ","
-                + str(row[junction_length])
-                + ","
-                + row[clone_id],
-                axis=1,
-            ),
+            light_grouping[cell_id].to_list(),
+            light_grouping["grouping_key"].to_list(),
         )
 
-        # add assignments to heavy_df
-        heavy_df = heavy_df.loc[
-            heavy_df[cell_id].apply(lambda x: x in cluster_dict.keys()), :
-        ]
-        heavy_df[clone_id] = (
-            heavy_df[clone_id]
-            + "_"
-            + heavy_df.apply(
-                lambda row: str(cluster_dict[row[cell_id]]), axis=1
-            )
+        # Add assignments to heavy_df
+        heavy_df = heavy_df.filter(
+            pl.col(cell_id).is_in(list(cluster_dict.keys()))
+        )
+        heavy_df = heavy_df.with_columns(
+            (
+                pl.col(clone_id)
+                + pl.lit("_")
+                + pl.col(cell_id).map_elements(
+                    lambda x: str(cluster_dict.get(x, "")),
+                    return_dtype=pl.String,
+                )
+            ).alias(clone_id)
         )
 
-        # write heavy chains
-        write_airr(heavy_df, out_file)
+        # Write heavy chains
+        _write_airr(heavy_df, out_file)
         return (heavy_df, light_df)
 
     logg.info("Running command: %s\n" % (" ".join(cmd)))
@@ -691,51 +733,94 @@ def define_clones(
         h_file2, l_file, outfile, doublets=doublets, fileformat=fileformat
     )
 
-    h_df = load_data(h_df)
-    # create a dictionary for cell_id : clone_id from h_df
-    linked_clones = dict(zip(h_df["cell_id"], h_df["clone_id"]))
+    h_df = load_polars(h_df)
+    if isinstance(h_df, pl.LazyFrame):
+        h_df = h_df.collect()
 
-    # create a clone_reference
-    clone_ref = list(set(h_df["clone_id"]))
-    clone_ref = [c.split("_")[1] if c is not np.nan else c for c in clone_ref]
-    l_df = load_data(l_df)
+    # Create a dictionary for cell_id : clone_id from h_df
+    linked_clones = dict(
+        zip(h_df["cell_id"].to_list(), h_df["clone_id"].to_list())
+    )
 
-    for x in l_df.index:
-        if l_df.loc[x, "clone_id"] in clone_ref:
-            l_df.at[x, "clone_id"] = linked_clones[l_df.loc[x, "cell_id"]]
+    # Create a clone_reference
+    clone_ref = list(set(h_df["clone_id"].to_list()))
+    clone_ref = [
+        c.split("_")[1] if c and str(c) != "nan" else c for c in clone_ref
+    ]
+
+    l_df = load_polars(l_df)
+    if isinstance(l_df, pl.LazyFrame):
+        l_df = l_df.collect()
+
+    # Update light chain clone_ids based on linkage
+    def update_light_clone(cell_id, clone_id):
+        if clone_id in clone_ref:
+            return linked_clones.get(cell_id, cell_id + "_notlinked")
         else:
-            try:
-                l_df.at[x, "clone_id"] = l_df.loc[x, "cell_id"] + "_notlinked"
-            except:
-                pass
+            return cell_id + "_notlinked"
 
-    cloned_ = pd.concat([h_df, l_df])
-    # transfer the new clone_id to the heavy + light file
-    dat_[str(clone_key)] = pd.Series(cloned_["clone_id"])
-    dat_[str(clone_key)] = dat_[str(clone_key)].fillna("")
-    if isinstance(vdj_data, Dandelion):
-        vdj_data._data[str(clone_key)] = dat_[str(clone_key)]
+    l_df = l_df.with_columns(
+        pl.struct(["cell_id", "clone_id"])
+        .map_elements(
+            lambda row: update_light_clone(row["cell_id"], row["clone_id"]),
+            return_dtype=pl.String,
+        )
+        .alias("clone_id")
+    )
+
+    # Concatenate heavy and light chains
+    cloned_ = pl.concat([h_df, l_df], how="diagonal_relaxed")
+
+    # Transfer the new clone_id to the original data
+    clone_mapping = dict(
+        zip(cloned_["sequence_id"].to_list(), cloned_["clone_id"].to_list())
+    )
+
+    dat_ = dat_.with_columns(
+        pl.col("sequence_id")
+        .map_elements(
+            lambda x: clone_mapping.get(x, ""),
+            return_dtype=pl.String,
+        )
+        .alias(str(clone_key))
+    )
+
+    # Ensure clone_key has empty strings instead of nulls
+    dat_ = dat_.with_columns(pl.col(str(clone_key)).fill_null(""))
+
+    if isinstance(vdj_data, DandelionPolars):
+        vdj_data._data = dat_
         vdj_data.update_metadata(clone_key=str(clone_key))
+        logg.info(
+            " finished",
+            time=start,
+            deep=(
+                "Updated DandelionPolars object: \n"
+                "   'data', contig-indexed AIRR table\n"
+                "   'metadata', cell-indexed observations table\n"
+            ),
+        )
+        return vdj_data
     else:
-        out = Dandelion(
+        out = DandelionPolars(
             data=dat_,
-            clone_key=clone_key,
             verbose=False,
         )
+        out.update_metadata(clone_key=str(clone_key))
+        logg.info(
+            " finished",
+            time=start,
+            deep=(
+                "Returning DandelionPolars object: \n"
+                "   'data', contig-indexed AIRR table\n"
+                "   'metadata', cell-indexed observations table\n"
+            ),
+        )
         return out
-    logg.info(
-        " finished",
-        time=start,
-        deep=(
-            "Updated Dandelion object: \n"
-            "   'data', contig-indexed AIRR table\n"
-            "   'metadata', cell-indexed observations table\n"
-        ),
-    )
 
 
 def create_germlines(
-    vdj_data: Dandelion | pd.DataFrame | str,
+    vdj_data: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
     db: Literal["imgt", "ogrdb"] = "imgt",
@@ -769,14 +854,14 @@ def create_germlines(
     genotyped_fasta: str | None = None,
     additional_args: list[str] = [],
     save: str | None = None,
-) -> Dandelion:
+) -> DandelionPolars:
     """
     Run CreateGermlines.py to reconstruct the germline V(D)J sequence.
 
     Parameters
     ----------
-    vdj_data : Dandelion | pd.DataFrame | str
-        Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr
+    vdj_data : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
+        DandelionPolars object, polars DataFrame/LazyFrame in changeo/airr format, or file path to changeo/airr
         file after clones have been determined.
     germline : str | None, optional
         path to germline database folder. `None` defaults to  environmental variable.
@@ -796,18 +881,18 @@ def create_germlines(
 
     Returns
     -------
-    Dandelion
-        Dandelion object with `.germlines` slot populated.
+    DandelionPolars
+        DandelionPolars object with `.germlines` slot populated.
     """
     start = logg.info("Reconstructing germline sequences")
-    if not isinstance(vdj_data, Dandelion):
+    if not isinstance(vdj_data, DandelionPolars):
         tmpfile = (
             Path(vdj_data)
             if os.path.isfile(vdj_data)
             else Path(tempfile.TemporaryDirectory().name) / "tmp.tsv"
         )
-        if isinstance(vdj_data, pd.DataFrame):
-            write_airr(data=vdj_data.germline, save=tmpfile)
+        if isinstance(vdj_data, (pl.DataFrame, pl.LazyFrame)):
+            _write_airr(data=vdj_data, save=tmpfile)
         creategermlines(
             airr_file=tmpfile,
             germline=germline,
@@ -843,9 +928,9 @@ def create_germlines(
                 strain=strain,
                 additional_args=additional_args,
             )
-    # return as Dandelion object
+    # return as DandelionPolars object
     germpass_outfile = tmpfile.parent / (tmpfile.stem + "_germ-pass.tsv")
-    if isinstance(vdj_data, Dandelion):
+    if isinstance(vdj_data, DandelionPolars):
         vdj_data.__init__(
             data=germpass_outfile,
             metadata=vdj_data._metadata,
@@ -856,15 +941,15 @@ def create_germlines(
         )
         out_vdj = vdj_data.copy()
     else:
-        out_vdj = Dandelion(germpass_outfile, verbose=False)
-    out_vdj.store_germline_reference(
-        corrected=genotyped_fasta, germline=germline, org=org
-    )
+        out_vdj = DandelionPolars(germpass_outfile, verbose=False)
+        out_vdj.store_germline_reference(
+            corrected=genotyped_fasta, germline=germline, org=org
+        )
     if save is not None:
         shutil.move(germpass_outfile, save)
     logg.info(
         " finished",
         time=start,
-        deep=("Returning Dandelion object: \n"),
+        deep=("Returning DandelionPolars object: \n"),
     )
     return out_vdj

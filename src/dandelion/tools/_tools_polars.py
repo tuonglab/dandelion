@@ -7,6 +7,7 @@ import warnings
 import networkx as nx
 import numpy as np
 import pandas as pd
+import polars as pl
 import scanpy as sc
 
 from anndata import AnnData
@@ -24,8 +25,11 @@ if TYPE_CHECKING:
     from mudata import MuData
     from awkward import Array
 
-from dandelion.utilities._core import Dandelion, load_data
-from dandelion.utilities._io import write_airr
+from dandelion.utilities._polars import (
+    DandelionPolars,
+    load_polars,
+    _write_airr,
+)
 from dandelion.utilities._utilities import (
     FALSES,
     VCALL,
@@ -44,7 +48,14 @@ from dandelion.utilities._utilities import (
 
 
 def find_clones(
-    vdj_data: Dandelion | pd.DataFrame,
+    vdj_data: (
+        DandelionPolars
+        | pl.DataFrame
+        | pl.LazyFrame
+        | pd.DataFrame
+        | Path
+        | str
+    ),
     identity: dict[str, float] | float = 0.85,
     key: dict[str, str] | str | None = None,
     by_alleles: bool = False,
@@ -52,13 +63,13 @@ def find_clones(
     recalculate_length: bool = True,
     verbose: bool = True,
     **kwargs,
-) -> Dandelion:
+) -> DandelionPolars:
     """
     Find clones based on VDJ chain and VJ chain CDR3 junction hamming distance.
 
     Parameters
     ----------
-    vdj_data : Dandelion | pd.DataFrame
+    vdj_data : DandelionPolars | polars.DataFrame | polars.LazyFrame | pandas.DataFrame | Path | str
         Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr file
         after clones have been determined.
     identity : dict[str, float] | float, optional
@@ -92,10 +103,10 @@ def find_clones(
     """
     start = logg.info("Finding clonotypes")
     pd.set_option("mode.chained_assignment", None)
-    if isinstance(vdj_data, Dandelion):
-        dat_ = load_data(vdj_data._data)
+    if isinstance(vdj_data, DandelionPolars):
+        dat_ = load_polars(vdj_data._data)
     else:
-        dat_ = load_data(vdj_data)
+        dat_ = load_polars(vdj_data)
 
     clone_key = key_added if key_added is not None else "clone_id"
     dat_[clone_key] = ""
@@ -108,11 +119,6 @@ def find_clones(
     locus_dict1 = {"ig": ["IGH"], "tr-ab": ["TRB"], "tr-gd": ["TRD"]}
     locus_dict2 = {"ig": ["IGK", "IGL"], "tr-ab": ["TRA"], "tr-gd": ["TRG"]}
     DEFAULTIDENTITY = {"ig": 0.85, "tr-ab": 1, "tr-gd": 1}
-
-    # key_ = key if key is not None else "junction_aa"  # default
-
-    # if key_ not in dat.columns:
-    #     raise ValueError("key {} not found in input table.".format(key_))
 
     locuses = ["ig", "tr-ab", "tr-gd"]
 
@@ -228,10 +234,10 @@ def find_clones(
     # dat_[clone_key].replace('', 'unassigned')
     if os.path.isfile(str(vdj_data)):
         data_path = Path(vdj_data)
-        write_airr(dat_, data_path.parent / (data_path.stem + "_clone.tsv"))
+        _write_airr(dat_, data_path.parent / (data_path.stem + "_clone.tsv"))
     if verbose:
         logg.info("Initialising Dandelion object")
-    if isinstance(vdj_data, Dandelion):
+    if isinstance(vdj_data, DandelionPolars):
         vdj_data._data[str(clone_key)] = dat_[str(clone_key)]
         vdj_data.update_metadata(clone_key=str(clone_key))
         logg.info(
@@ -244,7 +250,7 @@ def find_clones(
             ),
         )
     else:
-        out = Dandelion(
+        out = DandelionPolars(
             data=dat_,
             clone_key=clone_key,
             verbose=False,
@@ -264,7 +270,7 @@ def find_clones(
 
 def transfer(
     gex_data: AnnData | MuData,
-    vdj_data: Dandelion,
+    vdj_data: DandelionPolars,
     expanded: bool = False,
     gex_key: str | None = None,
     vdj_key: str | None = None,
@@ -286,9 +292,9 @@ def transfer(
 
     Parameters
     ----------
-    gex_data : AnnData | MuData
+    adata : AnnData | MuData
         AnnData object or `MuData` object.
-    vdj_data : Dandelion
+    dandelion : DandelionPolars
         Dandelion object.
     expanded : bool, optional
         Whether or not to transfer the embedding with all cells with BCR (False) or only for expanded clones (True).
@@ -308,7 +314,7 @@ def transfer(
     start = logg.info("Transferring network")
 
     # if the provide adata is an MuData, we need to transfer to mudata.mod['gex']
-    # but we don’t want to add mudata as a dependency here, so we do a duck-typing check
+    # but we don't want to add mudata as a dependency here, so we do a duck-typing check
     if hasattr(gex_data, "mod"):
         if "airr" in gex_data.mod:
             recipient = gex_data.mod["airr"]
@@ -316,9 +322,12 @@ def transfer(
             raise ValueError(
                 "Provided AnnData is a MuData object without 'airr' modality."
             )
-    # we just associate recipient to gex_data directly
+    # we just associate recipient to adata directly
     else:
         recipient = gex_data
+    if isinstance(vdj_data, DandelionPolars):
+        if vdj_data._backend == "polars":
+            vdj_data.to_pandas()
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
         for x in vdj_data._metadata.columns:
@@ -342,7 +351,7 @@ def transfer(
                         np.nan, "No_contig"
                     )
 
-    # also check that all the cells in vdj_data are in recipient
+    # also check that all the cells in dandelion are in recipient
     common_cells = recipient.obs_names.intersection(vdj_data._metadata.index)
     # subset to common cells only
     vdj_data = vdj_data[vdj_data._metadata.index.isin(common_cells)].copy()
@@ -661,7 +670,7 @@ def clone_view(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         The AnnData object.
     mode : Literal["all", "expanded", "full", "gex"] | None, optional
         If specified, set the active connectivities/distances/embedding to one of the preset modes.
@@ -755,7 +764,7 @@ def tabulate_clone_sizes(
 
 
 def clone_size(
-    vdj_data: Dandelion | AnnData | MuData,
+    vdj_data: DandelionPolars | AnnData | MuData,
     groupby: str | None = None,
     max_size: int | None = None,
     clone_key: str | None = None,
@@ -789,7 +798,9 @@ def clone_size(
         metadata_ = vdj_data.mod["airr"].obs.copy()
     elif isinstance(vdj_data, AnnData):
         metadata_ = vdj_data.obs.copy()
-    elif isinstance(vdj_data, Dandelion):
+    elif isinstance(vdj_data, DandelionPolars):
+        if vdj_data._backend == "polars":
+            vdj_data.to_pandas()
         metadata_ = vdj_data._metadata.copy()
 
     clone_key = "clone_id" if clone_key is None else clone_key
@@ -929,7 +940,7 @@ def clone_size(
     # --- Write results back to object
     col_key = key_added if key_added is not None else clone_key
 
-    if isinstance(vdj_data, Dandelion):
+    if isinstance(vdj_data, DandelionPolars):
         vdj_data._metadata[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
         vdj_data._metadata[f"{col_key}_size_prop"] = metadata_[
             f"{clone_key}_size_prop"
@@ -970,7 +981,7 @@ def clone_size(
 
 
 def clone_overlap(
-    vdj_data: Dandelion | AnnData,
+    vdj_data: DandelionPolars | AnnData,
     groupby: str,
     min_clone_size: int | None = None,
     weighted_overlap: bool = False,
@@ -1004,7 +1015,9 @@ def clone_overlap(
         if min_clone_size is 0.
     """
     start = logg.info("Calculating clone overlap")
-    if isinstance(vdj_data, Dandelion):
+    if isinstance(vdj_data, DandelionPolars):
+        if vdj_data._backend == "polars":
+            vdj_data.to_pandas()
         data = vdj_data._metadata.copy()
     elif isinstance(vdj_data, AnnData):
         data = vdj_data.obs.copy()
@@ -1149,7 +1162,7 @@ def clustering(
 
 def productive_ratio(
     gex_data: AnnData,
-    vdj_data: Dandelion,
+    vdj_data: DandelionPolars,
     groupby: str,
     groups: list[str] | None = None,
     locus: Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"] = "TRB",
@@ -1164,7 +1177,7 @@ def productive_ratio(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         AnnData object holding the cell level metadata (`.obs`).
     vdj : Dandelion
         Dandelion object holding the repertoire data (`.data`).
@@ -1260,7 +1273,7 @@ def vj_usage_pca(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         AnnData object holding the cell level metadata with Dandelion VDJ info transferred.
     groupby : str
         Column name in `adata.obs` to groupby as observations for PCA.
@@ -1760,13 +1773,13 @@ def check_chains(dat_vdj: pd.DataFrame, dat_vj: pd.DataFrame) -> pd.DataFrame:
 
 
 def vdj_sample(
-    vdj_data: Dandelion,
+    vdj_data: DandelionPolars,
     size: int,
     gex_data: AnnData | MuData | None = None,
     p: list[float] | np.ndarray[float] | None = None,
     force_replace: bool = False,
     random_state: int | np.random.RandomState | None = None,
-) -> tuple[Dandelion, AnnData] | Dandelion:
+) -> tuple[DandelionPolars, AnnData] | DandelionPolars:
     """
     Resample vdj data and corresponding AnnData to a specified size.
 
@@ -1788,7 +1801,7 @@ def vdj_sample(
 
     Returns
     -------
-    tuple[Dandelion, AnnData] | Dandelion
+    tuple[DandelionPolars, AnnData] | DandelionPolars
         Resampled Dandelion and AnnData objects if gex_data is provided, otherwise only Dandelion.
     """
     logg.info("Resampling to {} cells.".format(str(size)))
@@ -1796,6 +1809,8 @@ def vdj_sample(
         replace = True if size > vdj_data._metadata.shape[0] else False
         if force_replace:
             replace = True
+        if vdj_data.lazy:
+            vdj_data.to_eager()
         keep_cells = vdj_data._metadata.sample(
             size, replace=replace, random_state=random_state, weights=p
         )
@@ -1874,7 +1889,7 @@ def vdj_sample(
             )
 
     # reinitialise a copy of the sampled dandelion object using vdj_dat
-    vdj_data = Dandelion(vdj_dat)
+    vdj_data = DandelionPolars(vdj_dat)
     if gex_data is not None:
         adata.obs_names_make_unique()
         if hasattr(gex_data, "mod"):
@@ -1887,7 +1902,7 @@ def vdj_sample(
 
 
 def to_scirpy(
-    vdj: Dandelion,
+    data: DandelionPolars,
     transfer: bool = False,
     to_mudata: bool = True,
     gex_adata: AnnData | None = None,
@@ -1899,7 +1914,7 @@ def to_scirpy(
 
     Parameters
     ----------
-    vdj : Dandelion
+    data: DandelionPolars
         The Dandelion object containing the data to be converted.
     transfer : bool, optional
         Whether to transfer additional information from Dandelion to the converted data. Defaults to False.
@@ -1918,20 +1933,22 @@ def to_scirpy(
     AnnData | MuData
         The converted data in either AnnData or MuData format.
     """
+    if data._backend == "polars":
+        data.to_pandas()
     # if gex_adata is provided, make sure to only transfer cells that are present in both
-    # we will only filter the vdj data to match gex_adata
+    # we will only filter the data to match gex_adata
     if gex_adata is not None:
-        vdj = vdj[vdj.metadata_names.isin(gex_adata.obs_names)].copy()
+        data = data[data.metadata_names.isin(gex_adata.obs_names)].copy()
         tmp_gex = gex_adata.copy()
         if not to_mudata:
             tf(
-                tmp_gex, vdj, obs=False, uns=True, obsp=False, obsm=False
+                tmp_gex, data, obs=False, uns=True, obsp=False, obsm=False
             )  # so that the slots are properly filled
     else:
         tmp_gex = None
 
-    if "umi_count" not in vdj._data and "duplicate_count" in vdj._data:
-        vdj._data["umi_count"] = vdj._data["duplicate_count"]
+    if "umi_count" not in data._data and "duplicate_count" in data._data:
+        data._data["umi_count"] = data._data["duplicate_count"]
     for h in [
         "sequence",
         "rev_comp",
@@ -1941,26 +1958,33 @@ def to_scirpy(
         "d_cigar",
         "j_cigar",
     ]:
-        if h not in vdj._data:
-            vdj._data[h] = None
+        if h not in data._data:
+            data._data[h] = None
 
-    airr, obs = to_ak(vdj._data, **kwargs)
+    airr, obs = to_ak(data._data, **kwargs)
     if to_mudata:
         airr_adata = _create_anndata(airr, obs)
         if tmp_gex is not None:
-            tf(airr_adata, vdj, obs=False, uns=True, obsp=False, obsm=False)
+            tf(
+                airr_adata,
+                data,
+                obs=False,
+                uns=True,
+                obsp=False,
+                obsm=False,
+            )
         mdata = _create_mudata(tmp_gex, airr_adata, key)
         if transfer:
-            tf(mdata, vdj)
+            tf(mdata, data)
         return mdata
     else:
         adata = _create_anndata(airr, obs, tmp_gex)
         if transfer:
-            tf(adata, vdj)
+            tf(adata, data)
         return adata
 
 
-def from_scirpy(data: AnnData | MuData) -> Dandelion:
+def from_scirpy(data: AnnData | MuData) -> DandelionPolars:
     """
     Convert data from scirpy format to Dandelion format.
 
@@ -1971,7 +1995,7 @@ def from_scirpy(data: AnnData | MuData) -> Dandelion:
 
     Returns
     -------
-    Dandelion
+    DandelionPolars
         The converted data in Dandelion format.
     """
     if not isinstance(data, AnnData):
@@ -1979,7 +2003,7 @@ def from_scirpy(data: AnnData | MuData) -> Dandelion:
     data = data.copy()
     data.obsm["airr"]["cell_id"] = data.obs.index
     df = from_ak(data.obsm["airr"])
-    vdj = Dandelion(df, verbose=False)
+    vdj = DandelionPolars(df, verbose=False)
     # Reverse transfer (recover metadata + clone graph)
     _reverse_transfer(data, vdj)
     return vdj
@@ -1987,7 +2011,7 @@ def from_scirpy(data: AnnData | MuData) -> Dandelion:
 
 def _reverse_transfer(
     data: AnnData | MuData,
-    dandelion: Dandelion,
+    dandelion: DandelionPolars,
     clone_key: str = "clone_id",
 ) -> None:
     """
@@ -2193,7 +2217,12 @@ def _create_mudata(
 
 
 def concat(
-    arrays: list[pd.DataFrame | Dandelion] | dict[pd.DataFrame | Dandelion],
+    arrays: (
+        list[DandelionPolars | pl.DataFrame | pl.LazyFrame | pd.DataFrame]
+        | dict[
+            str, DandelionPolars | pl.DataFrame | pl.LazyFrame | pd.DataFrame
+        ]
+    ),
     check_unique: bool = True,
     collapse_cells: bool = True,
     sep: str = "_",
@@ -2201,7 +2230,7 @@ def concat(
     prefixes: list[str] | None = None,
     remove_trailing_hyphen_number: bool = False,
     verbose: bool = True,
-) -> Dandelion:
+) -> DandelionPolars:
     """
     Concatenate data frames and return as Dandelion object.
 
@@ -2209,8 +2238,10 @@ def concat(
 
     Parameters
     ----------
-    arrays : list[pd.DataFrame | Dandelion] | dict[pd.DataFrame | Dandelion]
-        List or dictionary of Dandelion objects or pandas DataFrames to concatenate.
+    arrays : list[DandelionPolars | pl.DataFrame | pl.LazyFrame | pd.DataFrame] | dict[
+            str, DandelionPolars | pl.DataFrame | pl.LazyFrame | pd.DataFrame
+        ]
+        List or dictionary of DandelionPolars objects or pandas/polars DataFrames to concatenate.
     check_unique : bool, optional
         Check the new index for duplicates. Otherwise defer the check until necessary.
         Setting to False will improve the performance of this method.
@@ -2231,7 +2262,7 @@ def concat(
 
     Returns
     -------
-    Dandelion
+    DandelionPolars
         concatenated Dandelion object
 
     Raises
@@ -2253,70 +2284,77 @@ def concat(
             raise ValueError(
                 "Please provide the same number of prefixes as the number of objects to concatenate."
             )
-    # first convert dict to list if necessary
+
+    # Convert dict to list if necessary
     if isinstance(arrays, dict):
-        arrays = [arrays[x].copy() for x in arrays]
-    # first, check if all input are dandelion instances
-    ddl_check = [True if isinstance(x, Dandelion) else False for x in arrays]
-    if all(ddl_check):
-        vdjs_ = [vdj.copy() for vdj in arrays]
-    else:
-        # first check if any of the input arrays are compatible
-        ddl_check2 = [
+        arrays = [
             (
-                True
-                if isinstance(x, Dandelion)
-                else True if isinstance(x, pd.DataFrame) else False
+                arrays[x].copy()
+                if isinstance(arrays[x], DandelionPolars)
+                else arrays[x]
             )
             for x in arrays
         ]
-        if all(ddl_check2):
-            vdjs_ = [
-                (
-                    x.copy()
-                    if isinstance(x, Dandelion)
-                    else Dandelion(x, verbose=False)
-                )
-                for x in arrays
-            ]
+
+    # Convert all inputs to DandelionPolars
+    vdjs_ = []
+    for x in arrays:
+        if isinstance(x, DandelionPolars):
+            vdjs_.append(x.copy())
+        elif isinstance(x, pl.LazyFrame):
+            vdjs_.append(DandelionPolars(x.collect(), verbose=False))
+        elif isinstance(x, pl.DataFrame):
+            vdjs_.append(DandelionPolars(x, verbose=False))
+        elif isinstance(x, pd.DataFrame):
+            # Convert pandas to polars
+            vdjs_.append(DandelionPolars(pl.from_pandas(x), verbose=False))
         else:
             raise ValueError(
-                "All input arrays must be either Dandelion instances or pandas DataFrames."
+                "All input arrays must be either DandelionPolars instances, "
+                "Polars DataFrames/LazyFrames, or pandas DataFrames."
             )
 
-        # create a check here if v_call_genotyped is only in some of the data
-    # if it's not uniformly present, create "v_call_genotyped" column with values from "v_call" for the missing ones.
-
-    # let's do a check now of all the metadata indices that there are no duplicates
-    # this list will double up as the metadata index order after concatenation
+    # Collect metadata and data names
     tmp_meta_names, tmp_data_names = [], []
     for tmp in vdjs_:
-        tmp_meta_names.extend(list(tmp.metadata_names))
-        tmp_data_names.extend(list(tmp.data_names))
+        # Get names as lists
+        if isinstance(tmp._metadata, pl.LazyFrame):
+            tmp_meta_names.extend(
+                tmp._metadata.select("cell_id").collect().to_series().to_list()
+            )
+        elif isinstance(tmp._metadata, pl.DataFrame):
+            tmp_meta_names.extend(
+                tmp._metadata.select("cell_id").to_series().to_list()
+            )
+
+        if isinstance(tmp._data, pl.LazyFrame):
+            tmp_data_names.extend(
+                tmp._data.select("sequence_id").collect().to_series().to_list()
+            )
+        elif isinstance(tmp._data, pl.DataFrame):
+            tmp_data_names.extend(
+                tmp._data.select("sequence_id").to_series().to_list()
+            )
 
     if collapse_cells:
-        # we should preserve the order but remove duplicates
+        # Preserve order but remove duplicates
         tmp_meta_names = list(dict.fromkeys(tmp_meta_names))
 
     if len(tmp_meta_names) != len(set(tmp_meta_names)):
         metadata_index_order = None
     else:
-        # we will use this list to reindex the metadata after concatenation
         metadata_index_order = tmp_meta_names
 
     if len(tmp_data_names) != len(set(tmp_data_names)):
         data_index_order = None
     else:
-        # we will use this list to reindex the data after concatenation
         data_index_order = tmp_data_names
 
-    # now, if check_unique is True, we will append suffixes/prefixes to both metadata and data indices
+    # Handle unique indices with suffixes/prefixes
     if check_unique:
         if metadata_index_order is None and data_index_order is None:
-            # store the modified names as well
             metadata_index_order, data_index_order = [], []
             for i in range(0, len(vdjs_)):
-                # this will always sync to the sequence_id in .data
                 if (suffixes is None) and (prefixes is None):
                     vdjs_[i].add_cell_suffix(
                         str(i),
@@ -2335,12 +2373,42 @@ def concat(
                         sep=sep,
                         remove_trailing_hyphen_number=remove_trailing_hyphen_number,
                     )
-                metadata_index_order.extend(list(vdjs_[i].metadata_names))
-                data_index_order.extend(list(vdjs_[i].data_names))
+                # Collect updated names
+                if isinstance(vdjs_[i]._metadata, pl.LazyFrame):
+                    metadata_index_order.extend(
+                        vdjs_[i]
+                        ._metadata.select("cell_id")
+                        .collect()
+                        .to_series()
+                        .to_list()
+                    )
+                else:
+                    metadata_index_order.extend(
+                        vdjs_[i]
+                        ._metadata.select("cell_id")
+                        .to_series()
+                        .to_list()
+                    )
+
+                if isinstance(vdjs_[i]._data, pl.LazyFrame):
+                    data_index_order.extend(
+                        vdjs_[i]
+                        ._data.select("sequence_id")
+                        .collect()
+                        .to_series()
+                        .to_list()
+                    )
+                else:
+                    data_index_order.extend(
+                        vdjs_[i]
+                        ._data.select("sequence_id")
+                        .to_series()
+                        .to_list()
+                    )
+
         elif data_index_order is None:
             data_index_order = []
             for i in range(0, len(vdjs_)):
-                # this will always sync to the sequence_id in .data
                 if (suffixes is None) and (prefixes is None):
                     vdjs_[i].add_sequence_suffix(
                         str(i),
@@ -2362,65 +2430,141 @@ def concat(
                         sync=False,
                         remove_trailing_hyphen_number=remove_trailing_hyphen_number,
                     )
-                data_index_order.extend(list(vdjs_[i].data_names))
+                if isinstance(vdjs_[i]._data, pl.LazyFrame):
+                    data_index_order.extend(
+                        vdjs_[i]
+                        ._data.select("sequence_id")
+                        .collect()
+                        .to_series()
+                        .to_list()
+                    )
+                else:
+                    data_index_order.extend(
+                        vdjs_[i]
+                        ._data.select("sequence_id")
+                        .to_series()
+                        .to_list()
+                    )
     else:
-        # don't add suffixes/prefixes, but check if indices are unique
         if metadata_index_order is None or data_index_order is None:
             raise ValueError(
                 "Cell/contig indices are not unique. Please set check_unique=True to append suffixes/prefixes or ensure unique indices before concatenation."
             )
 
-    # now, instead of just concatenating the metadata as is, we should use dandelion to reinitialise the metadata from scratch, and then add the missing columns, filling out any missing values appropriately
-    # first, obtain all the metadata column names
+    # Collect all metadata column names
     all_meta_cols = set()
     for vdj_ in vdjs_:
-        all_meta_cols.update(set(vdj_._metadata.columns))
+        if isinstance(vdj_._metadata, pl.LazyFrame):
+            all_meta_cols.update(vdj_._metadata.collect_schema().names())
+        else:
+            all_meta_cols.update(vdj_._metadata.columns)
 
+    # Handle v_call_genotyped consistency
     genotyped_v_call = [
-        True for vdj in vdjs_ if "v_call_genotyped" in vdj._data
+        True
+        for vdj in vdjs_
+        if "v_call_genotyped"
+        in (
+            vdj._data.collect_schema().names()
+            if isinstance(vdj._data, pl.LazyFrame)
+            else vdj._data.columns
+        )
     ]
     if len(genotyped_v_call) > 0:
         if len(genotyped_v_call) != len(vdjs_):
             if verbose:
-                # print a warning
                 logg.info(
                     "For consistency, 'v_call_genotyped' will be used where available. Filling missing values from 'v_call'."
                 )
             for i in range(0, len(vdjs_)):
-                if "v_call_genotyped" not in vdjs_[i]._data:
-                    vdjs_[i]._data["v_call_genotyped"] = vdjs_[i]._data[
-                        "v_call"
-                    ]
+                data_cols = (
+                    vdjs_[i]._data.collect_schema().names()
+                    if isinstance(vdjs_[i]._data, pl.LazyFrame)
+                    else vdjs_[i]._data.columns
+                )
+                if "v_call_genotyped" not in data_cols:
+                    vdjs_[i]._data = vdjs_[i]._data.with_columns(
+                        pl.col("v_call").alias("v_call_genotyped")
+                    )
 
+    # Concatenate the data (Polars DataFrames)
     arrays_ = [vdj._data for vdj in vdjs_]
-    vdj_concat = Dandelion(pd.concat(arrays_), verbose=False)
-    # find out if there are missing metadata in the initialised vdj_concat.metadata
-    vdj_meta_cols = set(vdj_concat._metadata.columns)
-    # find out what are the missing columns from all_meta_cols
+    vdj_concat = DandelionPolars(
+        pl.concat(arrays_, how="diagonal"), verbose=False
+    )
+
+    # Handle missing metadata columns
+    vdj_meta_cols = set(
+        vdj_concat._metadata.collect_schema().names()
+        if isinstance(vdj_concat._metadata, pl.LazyFrame)
+        else vdj_concat._metadata.columns
+    )
     missing_meta_cols = all_meta_cols - vdj_meta_cols
+
     if len(missing_meta_cols) > 0:
-        # print(missing_meta_cols)
-        # now, for each missing column, we need to fill in the values from the original vdjs_ using .at to avoid alignment issues
+        # Collect metadata if lazy for easier manipulation
+        if isinstance(vdj_concat._metadata, pl.LazyFrame):
+            meta_df = vdj_concat._metadata.collect()
+        else:
+            meta_df = vdj_concat._metadata.clone()
+
+        # Add missing columns with nulls
         for col in missing_meta_cols:
-            # create an empty series with None first - sanitisation later will take care of the dtypes
-            vdj_concat._metadata[col] = pd.Series(
-                [None] * vdj_concat._metadata.shape[0],
-                index=vdj_concat._metadata.index,
+            meta_df = meta_df.with_columns(pl.lit(None).alias(col))
+
+        # Fill in values from original dataframes
+        for vdj_ in vdjs_:
+            # Collect if lazy
+            if isinstance(vdj_._metadata, pl.LazyFrame):
+                source_meta = vdj_._metadata.collect()
+            else:
+                source_meta = vdj_._metadata
+
+            for col in missing_meta_cols:
+                source_cols = source_meta.columns
+                if col in source_cols:
+                    # Create a mapping from cell_id to values
+                    mapping = source_meta.select(["cell_id", col])
+
+                    # Join to update values
+                    meta_df = (
+                        meta_df.join(
+                            mapping.rename({col: f"_temp_{col}"}),
+                            on="cell_id",
+                            how="left",
+                        )
+                        .with_columns(
+                            pl.coalesce(
+                                pl.col(f"_temp_{col}"), pl.col(col)
+                            ).alias(col)
+                        )
+                        .drop(f"_temp_{col}")
+                    )
+
+        vdj_concat._metadata = meta_df
+
+    # Reorder metadata according to original order
+    if isinstance(vdj_concat._metadata, pl.LazyFrame):
+        concat_meta = vdj_concat._metadata.collect()
+    else:
+        concat_meta = vdj_concat._metadata
+
+    # Filter and reorder to match metadata_index_order
+    reordered_meta = (
+        concat_meta.filter(pl.col("cell_id").is_in(metadata_index_order))
+        .with_columns(
+            pl.col("cell_id")
+            .replace_strict(
+                metadata_index_order, list(range(len(metadata_index_order)))
             )
-            for vdj_ in vdjs_:
-                for idx in vdj_._metadata.index:
-                    if idx in vdj_concat._metadata.index:
-                        if col in vdj_._metadata.columns:
-                            vdj_concat._metadata.at[idx, col] = (
-                                vdj_._metadata.at[idx, col]
-                            )
-    # now check the dtype of each of the vdj_concat._metadata columns. if it's object, change pd.null to ""
-    for col in vdj_concat._metadata:
-        if vdj_concat._metadata[col].dtype == object:
-            vdj_concat._metadata[col] = sanitize_column(
-                vdj_concat._metadata[col], "string"
-            )
-    # finally, reorder the metadata and data according to the original order
-    vdj_concat._metadata = vdj_concat._metadata.loc[metadata_index_order]
+            .alias("_order")
+        )
+        .sort("_order")
+        .drop("_order")
+    )
+
+    vdj_concat._metadata = (
+        reordered_meta.lazy() if vdj_concat.lazy else reordered_meta
+    )
 
     return vdj_concat
