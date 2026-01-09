@@ -108,6 +108,12 @@ def find_clones(
     else:
         dat_ = load_polars(vdj_data)
 
+    # Collect lazy frame if necessary, then convert to pandas
+    if isinstance(dat_, pl.LazyFrame):
+        dat_ = dat_.collect()
+    if isinstance(dat_, pl.DataFrame):
+        dat_ = dat_.to_pandas()
+
     clone_key = key_added if key_added is not None else "clone_id"
     dat_[clone_key] = ""
 
@@ -238,7 +244,10 @@ def find_clones(
     if verbose:
         logg.info("Initialising Dandelion object")
     if isinstance(vdj_data, DandelionPolars):
-        vdj_data._data[str(clone_key)] = dat_[str(clone_key)]
+        # Convert back to polars if we converted to pandas
+        if isinstance(dat_, pd.DataFrame):
+            dat_ = pl.from_pandas(dat_)
+        vdj_data._data = dat_
         vdj_data.update_metadata(clone_key=str(clone_key))
         logg.info(
             " finished",
@@ -249,6 +258,7 @@ def find_clones(
                 "   'metadata', cell-indexed observations table\n"
             ),
         )
+        return vdj_data
     else:
         out = DandelionPolars(
             data=dat_,
@@ -1473,7 +1483,10 @@ def group_sequences(
     J = [",".join(list(set(j.split(",")))) for j in J]
     seq = dict(zip(input_vdj.index, input_vdj[junction_key]))
     if recalculate_length:
-        seq_length = [len(str(l)) for l in input_vdj[junction_key]]
+        # Set length to 0 for null/NaN values, otherwise calculate from sequence
+        seq_length = [
+            len(str(l)) if pd.notnull(l) else 0 for l in input_vdj[junction_key]
+        ]
     else:
         try:
             seq_length = [l for l in input_vdj[junction_key + "_length"]]
@@ -2581,7 +2594,7 @@ def _clustering_polars(
     """
     Cluster sequences based on pairwise hamming distance.
 
-    Polars-compatible implementation of clustering algorithm.
+    Reimplementation of pandas clustering algorithm to ensure exact parity.
 
     Parameters
     ----------
@@ -2599,41 +2612,61 @@ def _clustering_polars(
     """
     out_dict = {}
 
-    # Find unique indices
-    all_indices = []
-    for k in distance_dict.keys():
-        all_indices.extend([k[0], k[1]])
-    i_unique = sorted(list(set(all_indices)))
+    # Find unique indices (same as pandas flatten logic)
+    i_unique = list(set(flatten(distance_dict)))
 
-    # Build compatibility matrix
-    i_pair_d = {}
-    for i1, i2 in product(i_unique, repeat=2):
-        is_match = False
-        if (i1, i2) in distance_dict:
-            is_match = distance_dict[(i1, i2)] <= threshold
-        elif (i2, i1) in distance_dict:
-            is_match = distance_dict[(i2, i1)] <= threshold
-        i_pair_d[(i1, i2)] = is_match
+    # Build i_pair_d matrix (which pairs are compatible)
+    # This checks both (i1, i2) and (i2, i1) directions
+    i_pair_d = {
+        (i1, i2): (
+            distance_dict[(i1, i2)] <= threshold
+            if (i1, i2) in distance_dict
+            else False
+        )
+        for i1, i2 in product(i_unique, repeat=2)
+    }
+    i_pair_d.update(
+        {
+            (i2, i1): (
+                distance_dict[(i2, i1)] <= threshold
+                if (i2, i1) in distance_dict
+                else False
+            )
+            for i1, i2 in product(i_unique, repeat=2)
+        }
+    )
 
-    # Find groups that can be together
+    # Find which pairs can group together
     canbetogether = defaultdict(list)
     for ii1, ii2 in product(i_unique, repeat=2):
-        if i_pair_d.get((ii1, ii2), False):
-            if ii2 not in canbetogether[ii1]:
-                canbetogether[ii1].append(ii2)
+        if i_pair_d[(ii1, ii2)] or i_pair_d[(ii2, ii1)]:
+            if (ii1, ii2) in distance_dict:
+                canbetogether[ii1].append((ii1, ii2))
+                canbetogether[ii2].append((ii1, ii2))
+            elif (ii2, ii1) in distance_dict:
+                canbetogether[ii2].append((ii2, ii1))
+                canbetogether[ii1].append((ii2, ii1))
+        else:
+            if (ii1, ii2) or (ii2, ii1) in distance_dict:
+                canbetogether[ii1].append(())
+                canbetogether[ii2].append(())
 
-    # Collapse groups
+    # Remove empty tuples and deduplicate
     for x in canbetogether:
-        canbetogether[x] = sorted(list(set(canbetogether[x])))
+        canbetogether[x] = list({y for y in canbetogether[x] if len(y) > 0})
 
     # Convert indices to sequences
     for x in canbetogether:
-        if x < len(sequences):
-            grp = tuple(
-                [sequences[i] for i in canbetogether[x] if i < len(sequences)]
+        if len(canbetogether[x]) > 0:
+            # Flatten all paired indices and convert to sequences
+            paired_indices = list(flatten(canbetogether[x]))
+            out_dict[sequences[x]] = tuple(
+                sorted(
+                    set([sequences[y] for y in paired_indices] + [sequences[x]])
+                )
             )
-            for seq in grp:
-                out_dict[seq] = grp
+        else:
+            out_dict[sequences[x]] = tuple([sequences[x]])
 
     return out_dict
 
@@ -2700,8 +2733,12 @@ def group_sequences_polars(
 
     # Calculate or use existing junction length
     if recalculate_length:
+        # Set length to 0 for null values, otherwise calculate from sequence
         df_aug = df_aug.with_columns(
-            pl.col(junction_key).str.len_bytes().alias("_junction_length")
+            pl.when(pl.col(junction_key).is_null())
+            .then(pl.lit(0))
+            .otherwise(pl.col(junction_key).cast(pl.String).str.len_bytes())
+            .alias("_junction_length")
         )
     else:
         length_col = junction_key + "_length"
@@ -2715,8 +2752,16 @@ def group_sequences_polars(
             pl.col(length_col).alias("_junction_length")
         )
 
+    # Filter out rows with null V/J genes or null junction (these can't be properly grouped)
+    # This prevents None values from being used as dictionary keys
+    df_aug = df_aug.filter(
+        pl.col("_v_gene").is_not_null()
+        & pl.col("_j_gene").is_not_null()
+        & pl.col(junction_key).is_not_null()
+    )
+
     # Build trees by iterating through rows
-    # This matches the pandas version exactly
+    # This matches the pandas version exactly (including handling of None values)
     vj_len_grp = Tree()
     seq_grp = Tree()
 
@@ -2955,19 +3000,49 @@ def refine_clone_assignment_polars(
         if len(suffix) > 0:
             for cl in cellclonetree[c]:
                 if present(cl):
+                    # Check if cl is already a VJ-only clone that's in suffix
+                    # In that case, don't combine it with itself
+                    if cl in suffix:
+                        fintree[c].append(cl)
+                        continue
+
+                    # Check if any suffix matches celltype - if so, use combined ID only
+                    matched = False
                     for s in suffix:
                         if check_same_celltype(cl, s):
                             fintree[c].append(
                                 cl + "_" + "".join(s.split("_", 1)[1])
                             )
-                        else:
+                            matched = True
+                            break  # Only add once per VDJ clone
+                    if not matched:
+                        # No matching suffix, add combinations
+                        for s in suffix:
                             fintree[c].append(cl + "|" + s)
         else:
             for cl in cellclonetree[c]:
                 if present(cl):
                     fintree[c].append(cl)
 
-        fintree[c] = "|".join(fintree[c])
+        # Deduplicate and pick best representative
+        # Prefer combined VDJ_VJ clones over separate VDJ or VJ clones
+        # If multiple options, pick the first VDJ-containing one
+        if fintree[c]:
+            clone_options = list(set(fintree[c]))
+
+            # Sort to prefer VDJ versions
+            vdj_clones = [c for c in clone_options if "VDJ" in c]
+            vj_only_clones = [c for c in clone_options if "VDJ" not in c]
+
+            if vdj_clones:
+                # Pick the first VDJ clone (they're all from the same cell anyway)
+                fintree[c] = sorted(vdj_clones)[0]
+            elif vj_only_clones:
+                fintree[c] = sorted(vj_only_clones)[0]
+            else:
+                fintree[c] = sorted(clone_options)[0]
+        else:
+            fintree[c] = ""
 
     # Create mapping from cell_id to refined clone
     cell_clone_map = {c: fintree[c] for c in fintree}
@@ -3222,12 +3297,373 @@ def find_clones_polars(
     # Update DandelionPolars with cloned dataframe
     vdj_data._data = df if not vdj_data.lazy else df.lazy()
 
-    # Initialize metadata for clone column if needed
-    if key_added not in vdj_data._metadata.collect_schema():
-        meta = vdj_data._metadata
-        if isinstance(meta, pl.LazyFrame):
-            meta = meta.collect()
-        meta = meta.with_columns(pl.lit("").alias(key_added))
-        vdj_data._metadata = meta if not vdj_data.lazy else meta.lazy()
+    # Update metadata with clone information
+    vdj_data.update_metadata(clone_key=key_added)
 
     return vdj_data
+
+
+def clone_size_polars(
+    vdj_data,  # DandelionPolars type
+    groupby: str | None = None,
+    max_size: int | None = None,
+    clone_key: str | None = None,
+    key_added: str | None = None,
+) -> None:
+    """
+    Quantify clone sizes, globally or per group using polars.
+
+    If `groupby` is specified, clone sizes and proportions are calculated
+    within each group separately. Each cell is then annotated with the size,
+    proportion, and frequency category based on sizes similar to scRepertoire.
+    If a cell belongs to multiple clones (e.g., multiple chains assigned
+    to different clones), the largest clone is used for annotation.
+
+    Parameters
+    ----------
+    vdj_data : DandelionPolars
+        VDJ data.
+    groupby : str | None, optional
+        Column in metadata to group by before calculating clone sizes.
+        If None, calculates global clone sizes.
+    max_size : int | None, optional
+        Clip clone size values at this maximum.
+    clone_key : str | None, optional
+        Column specifying clone identifiers. Defaults to 'clone_id'.
+    key_added : str | None, optional
+        Prefix for new metadata column names.
+    """
+    # Get metadata
+    metadata_ = vdj_data._metadata
+    if isinstance(metadata_, pl.LazyFrame):
+        metadata_ = metadata_.collect()
+
+    clone_key = "clone_id" if clone_key is None else clone_key
+    if clone_key not in metadata_.columns:
+        raise KeyError(f"Column '{clone_key}' not found in metadata.")
+
+    # Define empty values
+    empty_vals = ["No_contig", "unassigned", "None", "nan", "", None]
+
+    # Expand multi-clone entries using polars
+    tmp = (
+        metadata_.with_row_count("_row_idx")
+        .select(
+            [
+                pl.col("_row_idx"),
+                pl.col(clone_key).cast(pl.Utf8).alias("_clone_orig"),
+            ]
+        )
+        .with_columns(
+            [pl.col("_clone_orig").str.split("|").alias("_clones_list")]
+        )
+        .explode("_clones_list")
+        .select([pl.col("_row_idx"), pl.col("_clones_list").alias(clone_key)])
+        .filter(
+            ~pl.col(clone_key).is_in(empty_vals)
+            & pl.col(clone_key).is_not_null()
+        )
+    )
+
+    # Compute clone sizes (global or per group)
+    if groupby is None:
+        # Global clone sizes
+        clonesize = (
+            tmp.group_by(clone_key)
+            .agg(pl.count().alias("size"))
+            .sort("size", descending=True)
+        )
+
+        total_cells = metadata_.height
+        clonesize = clonesize.with_columns(
+            (pl.col("size") / total_cells).alias("proportion")
+        )
+    else:
+        # Per-group clone sizes
+        # Add groupby column to tmp
+        groupby_col = metadata_.with_row_count("_row_idx").select(
+            [pl.col("_row_idx"), pl.col(groupby)]
+        )
+
+        tmp = tmp.join(groupby_col, on="_row_idx", how="left")
+
+        # Calculate clone sizes per group
+        clonesize = tmp.group_by([groupby, clone_key]).agg(
+            pl.count().alias("size")
+        )
+
+        # Calculate group totals
+        group_sizes = metadata_.group_by(groupby).agg(
+            pl.count().alias("group_total")
+        )
+
+        # Join and calculate proportions
+        clonesize = clonesize.join(
+            group_sizes, on=groupby, how="left"
+        ).with_columns(
+            (pl.col("size") / pl.col("group_total")).alias("proportion")
+        )
+
+    # Create max_size categories if specified
+    if max_size is not None:
+        clonesize = clonesize.with_columns(
+            [
+                pl.when(pl.col("size") < max_size)
+                .then(pl.col("size").cast(pl.Utf8))
+                .otherwise(pl.lit(f">= {max_size}"))
+                .alias("size_category")
+            ]
+        )
+
+    # Define clone frequency bins
+    bins = [0, 0.0001, 0.001, 0.01, 0.1, 1]
+    labels = ["Rare", "Small", "Medium", "Large", "Hyperexpanded"]
+
+    clonesize = clonesize.with_columns(
+        [
+            pl.when(pl.col("proportion") <= 0.0001)
+            .then(pl.lit("Rare"))
+            .when(pl.col("proportion") <= 0.001)
+            .then(pl.lit("Small"))
+            .when(pl.col("proportion") <= 0.01)
+            .then(pl.lit("Medium"))
+            .when(pl.col("proportion") <= 0.1)
+            .then(pl.lit("Large"))
+            .otherwise(pl.lit("Hyperexpanded"))
+            .alias("frequency_category")
+        ]
+    )
+
+    # Now map back to cells - for each cell, find the largest clone
+    if groupby is None:
+        # Create lookup - just use clone_key
+        size_map = dict(zip(clonesize[clone_key], clonesize["size"]))
+        prop_map = dict(zip(clonesize[clone_key], clonesize["proportion"]))
+        cat_map = dict(
+            zip(clonesize[clone_key], clonesize["frequency_category"])
+        )
+        if max_size is not None:
+            sizecat_map = dict(
+                zip(clonesize[clone_key], clonesize["size_category"])
+            )
+    else:
+        # Create lookup with (group, clone) tuples
+        size_map = {
+            (row[groupby], row[clone_key]): row["size"]
+            for row in clonesize.iter_rows(named=True)
+        }
+        prop_map = {
+            (row[groupby], row[clone_key]): row["proportion"]
+            for row in clonesize.iter_rows(named=True)
+        }
+        cat_map = {
+            (row[groupby], row[clone_key]): row["frequency_category"]
+            for row in clonesize.iter_rows(named=True)
+        }
+        if max_size is not None:
+            sizecat_map = {
+                (row[groupby], row[clone_key]): row["size_category"]
+                for row in clonesize.iter_rows(named=True)
+            }
+
+    # Process each cell to find largest clone
+    cell_sizes = []
+    cell_props = []
+    cell_cats = []
+    cell_size_cats = [] if max_size is not None else None
+
+    for row in metadata_.iter_rows(named=True):
+        clone_ids = (
+            str(row[clone_key]) if row[clone_key] is not None else "None"
+        )
+
+        # Check for empty/invalid entries
+        if clone_ids in empty_vals + ["None"]:
+            cell_sizes.append(None)
+            cell_props.append(None)
+            cell_cats.append(None)
+            if max_size is not None:
+                cell_size_cats.append(None)
+            continue
+
+        clones = clone_ids.split("|")
+
+        if groupby is None:
+            sizes = [size_map.get(c, None) for c in clones]
+            props = [prop_map.get(c, None) for c in clones]
+            cats = [cat_map.get(c, None) for c in clones]
+            if max_size is not None:
+                size_cats = [sizecat_map.get(c, None) for c in clones]
+        else:
+            grp = row[groupby]
+            sizes = [size_map.get((grp, c), None) for c in clones]
+            props = [prop_map.get((grp, c), None) for c in clones]
+            cats = [cat_map.get((grp, c), None) for c in clones]
+            if max_size is not None:
+                size_cats = [sizecat_map.get((grp, c), None) for c in clones]
+
+        # Take the largest clone
+        valid_sizes = [s for s in sizes if s is not None]
+        if len(valid_sizes) == 0:
+            cell_sizes.append(None)
+            cell_props.append(None)
+            cell_cats.append(None)
+            if max_size is not None:
+                cell_size_cats.append(None)
+        else:
+            max_idx = sizes.index(max(valid_sizes))
+            cell_sizes.append(sizes[max_idx])
+            cell_props.append(props[max_idx])
+            cell_cats.append(cats[max_idx])
+            if max_size is not None:
+                cell_size_cats.append(size_cats[max_idx])
+
+    # Add columns to metadata
+    col_key = key_added if key_added is not None else clone_key
+
+    metadata_ = metadata_.with_columns(
+        [
+            pl.Series(f"{col_key}_size", cell_sizes),
+            pl.Series(f"{col_key}_size_prop", cell_props),
+            pl.Series(f"{col_key}_size_category", cell_cats),
+        ]
+    )
+
+    if max_size is not None:
+        metadata_ = metadata_.with_columns(
+            [pl.Series(f"{col_key}_size_max_{max_size}", cell_size_cats)]
+        )
+
+    # Update metadata
+    vdj_data._metadata = metadata_ if not vdj_data.lazy else metadata_.lazy()
+
+
+def clone_overlap_polars(
+    vdj_data,  # DandelionPolars type
+    groupby: str,
+    min_clone_size: int | None = None,
+    weighted_overlap: bool = False,
+    clone_key: str | None = None,
+) -> pl.DataFrame:
+    """
+    Tabulate clonal overlap for circos-style plots using polars.
+
+    Parameters
+    ----------
+    vdj_data : DandelionPolars
+        DandelionPolars object.
+    groupby : str
+        Column name in metadata for collapsing to columns in the clone_id x groupby data frame.
+    min_clone_size : int | None, optional
+        Minimum size of clone for plotting connections. Defaults to 2 if left as None.
+    weighted_overlap : bool, optional
+        If True, instead of collapsing to overlap to binary, overlap will be returned as the number of cells.
+    clone_key : str | None, optional
+        Column name for clones. `None` defaults to 'clone_id'.
+
+    Returns
+    -------
+    pl.DataFrame
+        clone_id x groupby overlap DataFrame.
+
+    Raises
+    ------
+    ValueError
+        If min_clone_size is 0.
+    """
+    # Get metadata
+    metadata_ = vdj_data._metadata
+    if isinstance(metadata_, pl.LazyFrame):
+        metadata_ = metadata_.collect()
+
+    if min_clone_size is None:
+        min_size = 2
+    else:
+        min_size = int(min_clone_size)
+
+    if min_size == 0:
+        raise ValueError("min_size must be greater than 0.")
+
+    clone_ = "clone_id" if clone_key is None else clone_key
+
+    # Get all groups
+    allgroups = metadata_[groupby].unique().to_list()
+
+    # Filter out invalid clones
+    empty_vals = ["nan", "NaN", "No_contig", "unassigned", "None", None]
+    data = metadata_.filter(
+        ~pl.col(clone_).is_in(empty_vals) & pl.col(clone_).is_not_null()
+    )
+
+    # Expand multi-clone entries
+    datc_ = (
+        data.with_row_count("_idx")
+        .select(
+            [
+                pl.col("_idx"),
+                pl.col(clone_).cast(pl.Utf8).alias("_clone_orig"),
+                pl.col(groupby),
+            ]
+        )
+        .with_columns(
+            [pl.col("_clone_orig").str.split("|").alias("_clones_list")]
+        )
+        .explode("_clones_list")
+        .select(
+            [
+                pl.col("_idx"),
+                pl.col("_clones_list").alias(clone_),
+                pl.col(groupby),
+            ]
+        )
+        .filter(
+            ~pl.col(clone_).is_in([""] + empty_vals)
+            & pl.col(clone_).is_not_null()
+        )
+    )
+
+    # Create crosstab: count occurrences of each (clone, group) pair
+    overlap = (
+        datc_.group_by([clone_, groupby])
+        .agg(pl.count().alias("count"))
+        .pivot(
+            values="count",
+            index=clone_,
+            columns=groupby,
+            aggregate_function="sum",
+        )
+        .fill_null(0)
+    )
+
+    # Ensure all groups are present
+    for grp in allgroups:
+        if grp not in overlap.columns:
+            overlap = overlap.with_columns(pl.lit(0).alias(str(grp)))
+
+    # Apply min_size filtering
+    if not weighted_overlap:
+        # Convert to binary based on min_size
+        for col in overlap.columns:
+            if col != clone_:
+                if min_size > 2:
+                    overlap = overlap.with_columns(
+                        [
+                            pl.when(pl.col(col) < min_size)
+                            .then(0)
+                            .when(pl.col(col) >= min_size)
+                            .then(1)
+                            .otherwise(pl.col(col))
+                            .alias(col)
+                        ]
+                    )
+                elif min_size == 2:
+                    overlap = overlap.with_columns(
+                        [
+                            pl.when(pl.col(col) >= min_size)
+                            .then(1)
+                            .otherwise(pl.col(col))
+                            .alias(col)
+                        ]
+                    )
+
+    return overlap
