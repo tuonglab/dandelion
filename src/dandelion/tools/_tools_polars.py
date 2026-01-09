@@ -2568,3 +2568,666 @@ def concat(
     )
 
     return vdj_concat
+
+
+# ============================================================================
+# Polars-native find_clones implementation with vectorized helper functions
+# ============================================================================
+
+
+def _clustering_polars(
+    distance_dict: dict, threshold: float, sequences: list[str]
+) -> dict:
+    """
+    Cluster sequences based on pairwise hamming distance.
+
+    Polars-compatible implementation of clustering algorithm.
+
+    Parameters
+    ----------
+    distance_dict : dict
+        Dictionary mapping (i, j) tuples to hamming distances.
+    threshold : float
+        Distance threshold for clustering.
+    sequences : list[str]
+        List of sequences.
+
+    Returns
+    -------
+    dict
+        Dictionary mapping sequences to cluster groups.
+    """
+    out_dict = {}
+
+    # Find unique indices
+    all_indices = []
+    for k in distance_dict.keys():
+        all_indices.extend([k[0], k[1]])
+    i_unique = sorted(list(set(all_indices)))
+
+    # Build compatibility matrix
+    i_pair_d = {}
+    for i1, i2 in product(i_unique, repeat=2):
+        is_match = False
+        if (i1, i2) in distance_dict:
+            is_match = distance_dict[(i1, i2)] <= threshold
+        elif (i2, i1) in distance_dict:
+            is_match = distance_dict[(i2, i1)] <= threshold
+        i_pair_d[(i1, i2)] = is_match
+
+    # Find groups that can be together
+    canbetogether = defaultdict(list)
+    for ii1, ii2 in product(i_unique, repeat=2):
+        if i_pair_d.get((ii1, ii2), False):
+            if ii2 not in canbetogether[ii1]:
+                canbetogether[ii1].append(ii2)
+
+    # Collapse groups
+    for x in canbetogether:
+        canbetogether[x] = sorted(list(set(canbetogether[x])))
+
+    # Convert indices to sequences
+    for x in canbetogether:
+        if x < len(sequences):
+            grp = tuple(
+                [sequences[i] for i in canbetogether[x] if i < len(sequences)]
+            )
+            for seq in grp:
+                out_dict[seq] = grp
+
+    return out_dict
+
+
+def group_sequences_polars(
+    df: pl.DataFrame | pl.LazyFrame,
+    junction_key: str,
+    recalculate_length: bool = True,
+    by_alleles: bool = False,
+    locus: Literal["ig", "tr-ab", "tr-gd"] = "ig",
+) -> tuple[Tree, Tree]:
+    """
+    Group sequences by V/J genes and junction length using vectorized polars.
+
+    Vectorized polars implementation that groups contigs by (V gene, J gene)
+    pairs and then by junction length. Uses polars string operations for
+    allele stripping and grouping.
+
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Input AIRR dataframe.
+    junction_key : str
+        Column name for junction sequences (e.g., 'junction', 'junction_aa').
+    recalculate_length : bool, optional
+        Whether to recalculate junction length from sequences.
+    by_alleles : bool, optional
+        Whether to group by alleles or genes.
+    locus : Literal["ig", "tr-ab", "tr-gd"], optional
+        Locus type.
+
+    Returns
+    -------
+    tuple[Tree, Tree]
+        (vj_len_grp, seq_grp) - Trees grouping contigs by V/J and length.
+    """
+    locus_log1_dict = {"ig": "IGH", "tr-ab": "TRB", "tr-gd": "TRD"}
+
+    # Collect if lazy
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+
+    v_col = VCALLG if VCALLG in df.columns else VCALL
+
+    # Vectorized V/J gene stripping using polars string operations
+    if not by_alleles:
+        df_aug = df.with_columns(
+            [
+                pl.col(v_col)
+                .str.replace_all(STRIPALLELENUM, "")
+                .alias("_v_gene"),
+                pl.col(JCALL)
+                .str.replace_all(STRIPALLELENUM, "")
+                .alias("_j_gene"),
+            ]
+        )
+    else:
+        df_aug = df.with_columns(
+            [
+                pl.col(v_col).alias("_v_gene"),
+                pl.col(JCALL).alias("_j_gene"),
+            ]
+        )
+
+    # Calculate or use existing junction length
+    if recalculate_length:
+        df_aug = df_aug.with_columns(
+            pl.col(junction_key).str.len_bytes().alias("_junction_length")
+        )
+    else:
+        length_col = junction_key + "_length"
+        if length_col not in df_aug.columns:
+            raise ValueError(
+                "{} not found in {} input table.".format(
+                    length_col, locus_log1_dict[locus]
+                )
+            )
+        df_aug = df_aug.with_columns(
+            pl.col(length_col).alias("_junction_length")
+        )
+
+    # Build trees by iterating through rows
+    # This matches the pandas version exactly
+    vj_len_grp = Tree()
+    seq_grp = Tree()
+
+    for row in df_aug.iter_rows(named=True):
+        v_gene = row["_v_gene"]
+        j_gene = row["_j_gene"]
+        length = row["_junction_length"]
+        seq_id = row["sequence_id"]
+        seq = row[junction_key]
+
+        vj_key = (v_gene, j_gene)
+
+        # Build vj_len_grp: maps (V, J) -> length -> contig_id -> sequence
+        vj_len_grp[vj_key][length][seq_id].value = 1
+        vj_len_grp[vj_key][length][seq_id] = seq
+
+        # Build seq_grp: maps (V, J) -> length -> sequence -> value
+        # This groups identical sequences together
+        seq_grp[vj_key][length][seq].value = 1
+
+    return vj_len_grp, seq_grp
+
+
+def group_pairwise_hamming_distance_polars(
+    clonotype_vj_len_group: Tree,
+    clonotype_sequence_group: Tree,
+    identity: float,
+    locus: str,
+    chain: Literal["VDJ", "VJ"],
+    junction_key: str,
+    verbose: bool = True,
+) -> Tree:
+    """
+    Group clonotypes by pairwise hamming distance using polars-native approach.
+
+    Computes hamming distance matrix for each (V, J, length) group and
+    clusters sequences using a threshold-based algorithm.
+
+    Parameters
+    ----------
+    clonotype_vj_len_group : Tree
+        Tree grouping contigs by V/J and length.
+    clonotype_sequence_group : Tree
+        Tree grouping sequences by V/J and length.
+    identity : float
+        Identity threshold (0-1).
+    locus : str
+        Locus name.
+    chain : Literal["VDJ", "VJ"]
+        Chain type.
+    junction_key : str
+        Junction column name.
+    verbose : bool, optional
+        Show progress bar.
+
+    Returns
+    -------
+    Tree
+        Tree of contigs assigned to clonotypes.
+    """
+    clones = Tree()
+
+    for g in tqdm(
+        clonotype_sequence_group,
+        desc=f"Finding clones based on {locus} cell {chain} chains using {junction_key}",
+        bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        disable=not verbose,
+    ):
+        for l in clonotype_sequence_group[g]:
+            seq_list = list(clonotype_sequence_group[g][l].keys())
+
+            if len(seq_list) == 0:
+                continue
+
+            # Vectorized hamming distance: convert sequences to numpy array
+            seq_array = np.array(seq_list).reshape(-1, 1)
+            d_mat = squareform(
+                pdist(seq_array, lambda x, y: hamming(x[0], y[0]))
+            )
+
+            # Threshold based on identity
+            tr = math.floor(int(l) * (1 - identity))
+
+            # Convert to lower triangle
+            d_mat = np.tril(d_mat)
+            np.fill_diagonal(d_mat, 0)
+
+            # Get distance dict from matrix
+            source, target = d_mat.nonzero()
+            source_target = list(zip(source.tolist(), target.tolist()))
+
+            if len(source_target) == 0:
+                source_target = [(0, 0)]
+
+            dist = {st: d_mat[st] for st in source_target}
+
+            # Cluster
+            if d_mat.shape[0] > 1:
+                seq_tmp_dict = _clustering_polars(dist, tr, seq_list)
+            else:
+                seq_tmp_dict = {seq_list[0]: (seq_list[0],)}
+
+            # Sort by size
+            clones_tmp = sorted(
+                list(set(seq_tmp_dict.values())), key=len, reverse=True
+            )
+
+            for x, clone_group in enumerate(clones_tmp, 1):
+                clones[g][l][x] = clone_group
+
+    # Map contigs to clonotypes
+    cid = Tree()
+    for g in clones:
+        for l in clones[g]:
+            for c in clones[g][l]:
+                grp_seq = clones[g][l][c]
+                for key, value in clonotype_vj_len_group[g][l].items():
+                    if value in grp_seq:
+                        cid[g][l][c][key] = value
+
+    return cid
+
+
+def rename_clonotype_ids_polars(
+    clonotype_groups: Tree,
+    prefix: str = "",
+) -> dict[str, str]:
+    """
+    Rename clonotype IDs using vectorized polars-compatible approach.
+
+    Maps contigs to hierarchical clone IDs of format:
+    {prefix}{g}_{l}_{c} where g, l, c are sequential indices.
+
+    Parameters
+    ----------
+    clonotype_groups : Tree
+        Tree of clonotype groups.
+    prefix : str, optional
+        Prefix for clone IDs.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping from contig ID to clone ID.
+    """
+    clone_dict = {}
+
+    # Get unique keys at each level
+    first_keys = sorted(list(set(clonotype_groups.keys())))
+    first_key_dict = {k: i for i, k in enumerate(first_keys, 1)}
+
+    for g in clonotype_groups:
+        second_keys = sorted(list(set(clonotype_groups[g].keys())))
+        second_key_dict = {k: i for i, k in enumerate(second_keys, 1)}
+
+        for l in clonotype_groups[g]:
+            third_keys = sorted(list(set(clonotype_groups[g][l].keys())))
+            third_key_dict = {k: i for i, k in enumerate(third_keys, 1)}
+
+            for key, value in dict(clonotype_groups[g][l]).items():
+                for v in value:
+                    if not isinstance(v, int):
+                        clone_dict[v] = (
+                            f"{prefix}"
+                            f"{first_key_dict[g]}_"
+                            f"{second_key_dict[l]}_"
+                            f"{third_key_dict[key]}"
+                        )
+
+    return clone_dict
+
+
+def refine_clone_assignment_polars(
+    df: pl.DataFrame | pl.LazyFrame,
+    clone_key: str,
+    clone_dict_vj: dict,
+    verbose: bool = True,
+) -> pl.DataFrame:
+    """
+    Refine clone assignment based on VJ chain pairing (polars-native).
+
+    For each cell, integrates VDJ and VJ clone assignments by pairing
+    chains based on cell-level logic.
+
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Input AIRR dataframe with VDJ clones assigned.
+    clone_key : str
+        Column name for clone IDs.
+    clone_dict_vj : dict
+        Mapping from sequence ID to VJ clone ID.
+    verbose : bool, optional
+        Show progress.
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with refined clone assignments.
+    """
+    # Collect if lazy
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+
+    # Build cell->clone tree and seq->cell tree
+    cellclonetree = Tree()
+    seqcellclonetree = Tree()
+
+    for row in df.iter_rows(named=True):
+        cell_id = row["cell_id"]
+        seq_id = row["sequence_id"]
+        clone_id = row[clone_key]
+
+        seqcellclonetree[cell_id][seq_id] = seq_id
+        if clone_id and clone_id != "" and clone_id is not None:
+            if clone_id not in cellclonetree[cell_id]:
+                cellclonetree[cell_id][clone_id] = clone_id
+
+    # Convert to lists
+    for c in cellclonetree:
+        cellclonetree[c] = list(cellclonetree[c])
+
+    # Refine assignments
+    fintree = Tree()
+    for c in tqdm(
+        cellclonetree,
+        desc="Refining clone assignment based on VJ chain pairing ",
+        bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        disable=not verbose,
+    ):
+        suffix = [
+            clone_dict_vj[x] for x in seqcellclonetree[c] if x in clone_dict_vj
+        ]
+        fintree[c] = []
+
+        if len(suffix) > 0:
+            for cl in cellclonetree[c]:
+                if present(cl):
+                    for s in suffix:
+                        if check_same_celltype(cl, s):
+                            fintree[c].append(
+                                cl + "_" + "".join(s.split("_", 1)[1])
+                            )
+                        else:
+                            fintree[c].append(cl + "|" + s)
+        else:
+            for cl in cellclonetree[c]:
+                if present(cl):
+                    fintree[c].append(cl)
+
+        fintree[c] = "|".join(fintree[c])
+
+    # Create mapping from cell_id to refined clone
+    cell_clone_map = {c: fintree[c] for c in fintree}
+
+    # Update dataframe with refined clones using map_elements
+    df = df.with_columns(
+        pl.col("cell_id")
+        .map_elements(lambda x: cell_clone_map.get(x, ""), return_dtype=pl.Utf8)
+        .alias(clone_key)
+    )
+
+    return df
+
+
+def check_chains_polars(
+    df: pl.DataFrame | pl.LazyFrame,
+    locus_dict1: list[str],
+    locus_dict2: list[str],
+) -> tuple[bool, bool]:
+    """
+    Check if VDJ and VJ chains exist for a locus using polars.
+
+    Vectorized check using polars filtering operations.
+
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Input AIRR dataframe.
+    locus_dict1 : list[str]
+        VDJ loci (e.g., ['IGH'], ['TRB']).
+    locus_dict2 : list[str]
+        VJ loci (e.g., ['IGK', 'IGL'], ['TRA']).
+
+    Returns
+    -------
+    tuple[bool, bool]
+        (has_vdj, has_vj) indicating presence of chains.
+    """
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+
+    # Vectorized check for VDJ chains
+    has_vdj = df.filter(pl.col("locus").is_in(locus_dict1)).shape[0] > 0
+
+    # Vectorized check for VJ chains
+    has_vj = df.filter(pl.col("locus").is_in(locus_dict2)).shape[0] > 0
+
+    return has_vdj, has_vj
+
+
+def find_clones_polars(
+    vdj_data: DandelionPolars,
+    identity: float | dict = 0.85,
+    key: str | dict | None = None,
+    by_alleles: bool = False,
+    key_added: str | None = None,
+    recalculate_length: bool = True,
+    verbose: bool = True,
+    locus_dict: dict | None = None,
+) -> DandelionPolars:
+    """
+    Find clones from AIRR data using polars-native vectorized implementation.
+
+    Identifies B/T cell clones based on hamming distance of junction sequences
+    within (V, J) gene pairs. Uses vectorized polars operations for grouping
+    and filtering, with hamming distance computed via scipy.
+
+    Parameters
+    ----------
+    vdj_data : DandelionPolars
+        Input DandelionPolars object.
+    identity : float | dict, optional
+        Identity threshold for hamming distance (0-1). Default 0.85. If provided as a dictionary, please use the following
+        keys: 'ig', 'tr-ab', 'tr-gd'.
+    key : str | dict | None, optional
+        Column name for performing clone clustering. `None` defaults to a dictionary where:
+            {'ig': 'junction_aa', 'tr-ab': 'junction', 'tr-gd': 'junction'}
+        If provided as a string, this key will be used for all loci.
+    by_alleles : bool, optional
+        Whether or not to collapse alleles to genes. Default is False.
+    key_added : str | None, optional
+        If specified, this will be the column name for clones. `None` defaults to 'clone_id'.
+    recalculate_length : bool, optional
+        Whether or not to re-calculate junction length, rather than rely on parsed assignment (which occasionally is
+        wrong). Default is True.
+    verbose : bool, optional
+        Whether or not to print progress.
+    locus_dict : dict | None, optional
+        Dictionary mapping loci to (vdj_loci, vj_loci) tuples. Used internally.
+
+    Returns
+    -------
+    DandelionPolars
+        DandelionPolars with clone column added.
+    """
+    # Get dataframe
+    df = vdj_data._data
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+
+    # Default locus dictionary
+    if locus_dict is None:
+        locus_dict = {
+            "ig": (["IGH"], ["IGK", "IGL"]),
+            "tr-ab": (["TRB"], ["TRA"]),
+            "tr-gd": (["TRD"], ["TRG"]),
+        }
+
+    # Default identity
+    if isinstance(identity, dict):
+        default_identity = {"ig": 0.85, "tr-ab": 1.0, "tr-gd": 1.0}
+        default_identity.update(identity)
+        identity = default_identity
+    elif not isinstance(identity, dict):
+        # Single float value - use for all loci
+        identity = {"ig": identity, "tr-ab": identity, "tr-gd": identity}
+
+    # Default key (junction column)
+    if key is None:
+        default_key = {
+            "ig": "junction_aa",
+            "tr-ab": "junction",
+            "tr-gd": "junction",
+        }
+        key = default_key
+    elif isinstance(key, str):
+        # Single string - use for all loci
+        key = {"ig": key, "tr-ab": key, "tr-gd": key}
+
+    # Default key_added
+    if key_added is None:
+        key_added = "clone_id"
+
+    # Initialize clone column
+    df = df.with_columns(pl.lit("").alias(key_added))
+
+    # Process each locus
+    clone_dict_all = {}
+
+    for locus, (vdj_loci, vj_loci) in locus_dict.items():
+        # Filter to this locus
+        df_locus = df.filter(pl.col("locus").is_in(vdj_loci + vj_loci))
+
+        if df_locus.shape[0] == 0:
+            continue
+
+        # Get locus-specific identity and key
+        locus_identity = identity[locus]
+        locus_key = key[locus]
+
+        # Check for VDJ and VJ chains
+        has_vdj, has_vj = check_chains_polars(df_locus, vdj_loci, vj_loci)
+
+        clone_dict_vj_all = {}
+
+        # Process VDJ chains
+        if has_vdj:
+            df_vdj = df_locus.filter(pl.col("locus").is_in(vdj_loci))
+
+            # Group sequences
+            vj_len_grp, seq_grp = group_sequences_polars(
+                df_vdj,
+                locus_key,
+                recalculate_length=recalculate_length,
+                by_alleles=by_alleles,
+                locus=locus,
+            )
+
+            # Find clones
+            cid_vdj = group_pairwise_hamming_distance_polars(
+                vj_len_grp,
+                seq_grp,
+                identity=locus_identity,
+                locus=locus,
+                chain="VDJ",
+                junction_key=locus_key,
+                verbose=verbose,
+            )
+
+            # Rename clone IDs
+            clone_dict_vdj = rename_clonotype_ids_polars(
+                cid_vdj, prefix=f"B_VDJ_"
+            )
+            clone_dict_all.update(clone_dict_vdj)
+
+        # Process VJ chains
+        if has_vj:
+            df_vj = df_locus.filter(pl.col("locus").is_in(vj_loci))
+
+            # Group sequences
+            vj_len_grp, seq_grp = group_sequences_polars(
+                df_vj,
+                locus_key,
+                recalculate_length=True,
+                by_alleles=by_alleles,
+                locus=locus,
+            )
+
+            # Find clones
+            cid_vj = group_pairwise_hamming_distance_polars(
+                vj_len_grp,
+                seq_grp,
+                identity=locus_identity,
+                locus=locus,
+                chain="VJ",
+                junction_key=locus_key,
+                verbose=verbose,
+            )
+
+            # Rename clone IDs
+            clone_dict_vj = rename_clonotype_ids_polars(cid_vj, prefix=f"B_VJ_")
+            clone_dict_vj_all.update(clone_dict_vj)
+            clone_dict_all.update(clone_dict_vj)
+
+            # Refine VDJ assignments based on VJ at cell level
+            if has_vdj:
+                # First, add initial VDJ and VJ assignments to df for refinement
+                # This includes both VDJ and VJ sequences with their initial clone IDs
+                df_for_refine = df_locus.with_columns(
+                    pl.col("sequence_id")
+                    .map_elements(
+                        lambda x: clone_dict_all.get(x, ""),
+                        return_dtype=pl.Utf8,
+                    )
+                    .alias(key_added)
+                )
+
+                # Refine assignments based on VJ pairing at cell level
+                # This combines VDJ and VJ clone IDs for contigs in the same cell
+                df_refined = refine_clone_assignment_polars(
+                    df_for_refine,
+                    key_added,
+                    clone_dict_vj_all,
+                    verbose=verbose,
+                )
+
+                # Extract refined assignments for ALL sequences (both VDJ and VJ)
+                # This ensures that all contigs in a cell get the same combined clone ID
+                for row in df_refined.iter_rows(named=True):
+                    seq_id = row["sequence_id"]
+                    clone_id = row[key_added]
+                    if clone_id and clone_id != "":
+                        clone_dict_all[seq_id] = clone_id
+
+    # Map sequence IDs to clone IDs in dataframe
+    df = df.with_columns(
+        pl.col("sequence_id")
+        .map_elements(lambda x: clone_dict_all.get(x, ""), return_dtype=pl.Utf8)
+        .alias(key_added)
+    )
+
+    # Update DandelionPolars with cloned dataframe
+    vdj_data._data = df if not vdj_data.lazy else df.lazy()
+
+    # Initialize metadata for clone column if needed
+    if key_added not in vdj_data._metadata.collect_schema():
+        meta = vdj_data._metadata
+        if isinstance(meta, pl.LazyFrame):
+            meta = meta.collect()
+        meta = meta.with_columns(pl.lit("").alias(key_added))
+        vdj_data._metadata = meta if not vdj_data.lazy else meta.lazy()
+
+    return vdj_data

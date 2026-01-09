@@ -12,6 +12,10 @@ from dandelion.tools._tools import (
     vdj_sample,
     vj_usage_pca,
 )
+from dandelion.tools._tools_polars import (
+    concat as concat_polars,
+    find_clones_polars,
+)
 from dandelion.external.immcantation.changeo import define_clones
 from dandelion.tools._network import (
     clone_centrality,
@@ -37,9 +41,11 @@ __all__ = [
     "clone_size",
     "clone_view",
     "concat",
+    "concat_polars",
     "define_clones",
     "extract_edge_weights",
     "find_clones",
+    "find_clones_polars",
     "from_scirpy",
     "generate_network",
     "productive_ratio",
