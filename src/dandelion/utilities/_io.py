@@ -501,7 +501,7 @@ def read_10x_airr(
 
 
 def read_10x_vdj(
-    path: Path | str,
+    data: Path | str | pd.DataFrame,
     filename_prefix: str | None = None,
     prefix: str | None = None,
     suffix: str | None = None,
@@ -511,20 +511,23 @@ def read_10x_vdj(
     verbose: bool = False,
 ) -> Dandelion:
     """
-    A parser to read .csv and .json files directly from folder containing 10x cellranger-outputs.
+    A parser to read .csv and .json files directly from folder containing 10x cellranger-outputs,
+    or parse an existing pandas DataFrame.
 
     This function parses the 10x output files into an AIRR compatible format.
 
-    Minimum requirement is one of either {filename_prefix}_contig_annotations.csv or all_contig_annotations.json.
+    Minimum requirement is one of either {filename_prefix}_contig_annotations.csv or all_contig_annotations.json
+    when reading from file path.
 
     If .fasta, .json files are found in the same folder, additional info will be appended to the final table.
 
     Parameters
     ----------
-    path : Path | str
-        path to folder containing `.csv` and/or `.json` files, or path to files directly.
+    data : Path | str | pandas.DataFrame
+        path to folder containing `.csv` and/or `.json` files, path to files directly, or a pandas
+        DataFrame containing the contig annotations data.
     filename_prefix : str | None, optional
-        prefix of file name preceding '_contig'. None defaults to 'all'.
+        prefix of file name preceding '_contig'. None defaults to 'all'. Only used when data is a file/folder.
     prefix : str | None, optional
         Prefix to append to sequence_id and cell_id.
     suffix : str | None, optional
@@ -546,132 +549,148 @@ def read_10x_vdj(
     ------
     IOError
         if contig_annotations.csv and all_contig_annotations.json file(s) not found in the input folder.
+    TypeError
+        if data is not a valid type (Path, str, or pandas.DataFrame).
 
     """
     filename_pre = (
         DEFAULT_PREFIX if filename_prefix is None else filename_prefix
     )
 
-    if os.path.isdir(str(path)):
-        files = os.listdir(path)
-        filelist = []
-        for fx in files:
-            if re.search(filename_pre + "_contig", fx):
-                if fx.endswith(".fasta") or fx.endswith(".csv"):
-                    filelist.append(fx)
-            if re.search(
-                f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
-                fx,
-            ):
-                if fx.endswith(".json"):
-                    filelist.append(fx)
-        csv_idx = [i for i, j in enumerate(filelist) if j.endswith(".csv")]
-        json_idx = [i for i, j in enumerate(filelist) if j.endswith(".json")]
-        if len(csv_idx) == 1:
-            file = str(path) + "/" + str(filelist[csv_idx[0]])
-            logg.info("Reading {}".format(str(file)))
-            raw = pd.read_csv(str(file))
-            raw.set_index("contig_id", drop=False, inplace=True)
-            fasta_file = str(file).split("_annotations.csv")[0] + ".fasta"
-            json_file = re.sub(
-                filename_pre + "_contig_annotations",
-                f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
-                str(file).split(".csv")[0] + ".json",
-            )
-            if os.path.exists(json_file):
-                logg.info(
-                    "Found {} file. Extracting extra information.".format(
-                        str(json_file)
-                    )
+    # Handle DataFrame input (pandas)
+    if isinstance(data, pd.DataFrame):
+        logg.info("Parsing pandas DataFrame")
+        raw = data.copy()
+        raw.set_index("contig_id", drop=False, inplace=True)
+        out = parse_annotation(raw)
+    elif isinstance(data, (str, Path)):
+        # Handle file path inputs
+        if os.path.isdir(str(data)):
+            files = os.listdir(data)
+            filelist = []
+            for fx in files:
+                if re.search(filename_pre + "_contig", fx):
+                    if fx.endswith(".fasta") or fx.endswith(".csv"):
+                        filelist.append(fx)
+                if re.search(
+                    f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
+                    fx,
+                ):
+                    if fx.endswith(".json"):
+                        filelist.append(fx)
+            csv_idx = [i for i, j in enumerate(filelist) if j.endswith(".csv")]
+            json_idx = [
+                i for i, j in enumerate(filelist) if j.endswith(".json")
+            ]
+            if len(csv_idx) == 1:
+                file = str(data) + "/" + str(filelist[csv_idx[0]])
+                logg.info("Reading {}".format(str(file)))
+                raw = pd.read_csv(str(file))
+                raw.set_index("contig_id", drop=False, inplace=True)
+                fasta_file = str(file).split("_annotations.csv")[0] + ".fasta"
+                json_file = re.sub(
+                    filename_pre + "_contig_annotations",
+                    f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
+                    str(file).split(".csv")[0] + ".json",
                 )
-                out = parse_annotation(raw)
-                with open(json_file) as f:
-                    raw_json = json.load(f)
-                out_json = parse_json(raw_json)
-                out.update(out_json)
-            elif os.path.exists(fasta_file):
-                logg.info(
-                    "Found {} file. Extracting extra information.".format(
-                        str(fasta_file)
-                    )
-                )
-                seqs = {}
-                fh = open(fasta_file)
-                for header, sequence in fasta_iterator(fh):
-                    seqs[header] = sequence
-                raw["sequence"] = pd.Series(seqs)
-                out = parse_annotation(raw)
-            else:
-                out = parse_annotation(raw)
-        elif len(csv_idx) < 1:
-            if len(json_idx) == 1:
-                json_file = str(path) + "/" + str(filelist[json_idx[0]])
-                logg.info("Reading {}".format(json_file))
                 if os.path.exists(json_file):
+                    logg.info(
+                        "Found {} file. Extracting extra information.".format(
+                            str(json_file)
+                        )
+                    )
+                    out = parse_annotation(raw)
                     with open(json_file) as f:
+                        raw_json = json.load(f)
+                    out_json = parse_json(raw_json)
+                    out.update(out_json)
+                elif os.path.exists(fasta_file):
+                    logg.info(
+                        "Found {} file. Extracting extra information.".format(
+                            str(fasta_file)
+                        )
+                    )
+                    seqs = {}
+                    fh = open(fasta_file)
+                    for header, sequence in fasta_iterator(fh):
+                        seqs[header] = sequence
+                    raw["sequence"] = pd.Series(seqs)
+                    out = parse_annotation(raw)
+                else:
+                    out = parse_annotation(raw)
+            elif len(csv_idx) < 1:
+                if len(json_idx) == 1:
+                    json_file = str(data) + "/" + str(filelist[json_idx[0]])
+                    logg.info("Reading {}".format(json_file))
+                    if os.path.exists(json_file):
+                        with open(json_file) as f:
+                            raw = json.load(f)
+                        out = parse_json(raw)
+                else:
+                    raise OSError(
+                        "{}_contig_annotations.csv and {}_contig_annotations.json file(s) not found in {} folder.".format(
+                            str(filename_pre),
+                            filename_pre.replace("filtered", "all"),
+                            str(data),
+                        )
+                    )
+            elif len(csv_idx) > 1:
+                raise OSError(
+                    "There are multiple input .csv files with the same filename prefix {} in {} folder.".format(
+                        str(filename_pre), str(data)
+                    )
+                )
+        elif os.path.isfile(str(data)):
+            file = data
+            if str(file).endswith(".csv"):
+                logg.info("Reading {}.".format(str(file)))
+                raw = pd.read_csv(str(file))
+                raw.set_index("contig_id", drop=False, inplace=True)
+                fasta_file = str(file).split("_annotations.csv")[0] + ".fasta"
+                json_file = re.sub(
+                    filename_pre + "_contig_annotations",
+                    f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
+                    str(file).split(".csv")[0] + ".json",
+                )
+                if os.path.exists(json_file):
+                    logg.info(
+                        "Found {} file. Extracting extra information.".format(
+                            str(json_file)
+                        )
+                    )
+                    out = parse_annotation(raw)
+                    with open(json_file) as f:
+                        raw_json = json.load(f)
+                    out_json = parse_json(raw_json)
+                    out.update(out_json)
+                elif os.path.exists(fasta_file):
+                    logg.info(
+                        "Found {} file. Extracting extra information.".format(
+                            str(fasta_file)
+                        )
+                    )
+                    seqs = {}
+                    fh = open(fasta_file)
+                    for header, sequence in fasta_iterator(fh):
+                        seqs[header] = sequence
+                    raw["sequence"] = pd.Series(seqs)
+                    out = parse_annotation(raw)
+                else:
+                    out = parse_annotation(raw)
+            elif str(file).endswith(".json"):
+                if os.path.exists(file):
+                    logg.info("Reading {}".format(file))
+                    with open(file) as f:
                         raw = json.load(f)
                     out = parse_json(raw)
-            else:
-                raise OSError(
-                    "{}_contig_annotations.csv and {}_contig_annotations.json file(s) not found in {} folder.".format(
-                        str(filename_pre),
-                        filename_pre.replace("filtered", "all"),
-                        str(path),
-                    )
-                )
-        elif len(csv_idx) > 1:
-            raise OSError(
-                "There are multiple input .csv files with the same filename prefix {} in {} folder.".format(
-                    str(filename_pre), str(path)
-                )
-            )
-    elif os.path.isfile(str(path)):
-        file = path
-        if str(file).endswith(".csv"):
-            logg.info("Reading {}.".format(str(file)))
-            raw = pd.read_csv(str(file))
-            raw.set_index("contig_id", drop=False, inplace=True)
-            fasta_file = str(file).split("_annotations.csv")[0] + ".fasta"
-            json_file = re.sub(
-                filename_pre + "_contig_annotations",
-                f"{filename_pre.replace('filtered', 'all')}_contig_annotations",
-                str(file).split(".csv")[0] + ".json",
-            )
-            if os.path.exists(json_file):
-                logg.info(
-                    "Found {} file. Extracting extra information.".format(
-                        str(json_file)
-                    )
-                )
-                out = parse_annotation(raw)
-                with open(json_file) as f:
-                    raw_json = json.load(f)
-                out_json = parse_json(raw_json)
-                out.update(out_json)
-            elif os.path.exists(fasta_file):
-                logg.info(
-                    "Found {} file. Extracting extra information.".format(
-                        str(fasta_file)
-                    )
-                )
-                seqs = {}
-                fh = open(fasta_file)
-                for header, sequence in fasta_iterator(fh):
-                    seqs[header] = sequence
-                raw["sequence"] = pd.Series(seqs)
-                out = parse_annotation(raw)
-            else:
-                out = parse_annotation(raw)
-        elif str(file).endswith(".json"):
-            if os.path.exists(file):
-                logg.info("Reading {}".format(file))
-                with open(file) as f:
-                    raw = json.load(f)
-                out = parse_json(raw)
-            else:
-                raise OSError("{} not found.".format(file))
+                else:
+                    raise OSError("{} not found.".format(file))
+        else:
+            raise OSError("{} not found.".format(data))
     else:
-        raise OSError("{} not found.".format(path))
+        raise TypeError(
+            f"data must be a Path, str, or pandas.DataFrame, got {type(data)}"
+        )
     res = pd.DataFrame.from_dict(out, orient="index")
     # quick check if locus is malformed
     if remove_malformed:
