@@ -243,6 +243,7 @@ def find_clones(
                 "   'metadata', cell-indexed observations table\n"
             ),
         )
+        return vdj_data
     else:
         out = Dandelion(
             data=dat_,
@@ -1460,7 +1461,10 @@ def group_sequences(
     J = [",".join(list(set(j.split(",")))) for j in J]
     seq = dict(zip(input_vdj.index, input_vdj[junction_key]))
     if recalculate_length:
-        seq_length = [len(str(l)) for l in input_vdj[junction_key]]
+        # Set length to 0 for null/NaN values, otherwise calculate from sequence
+        seq_length = [
+            len(str(l)) if pd.notnull(l) else 0 for l in input_vdj[junction_key]
+        ]
     else:
         try:
             seq_length = [l for l in input_vdj[junction_key + "_length"]]
