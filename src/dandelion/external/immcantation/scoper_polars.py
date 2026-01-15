@@ -8,7 +8,7 @@ from dandelion.utilities._polars import DandelionPolars, _sanitize_data_polars
 
 
 def identical_clones(
-    vdj_data: DandelionPolars,
+    vdj: DandelionPolars,
     method: Literal["nt", "aa"] = "nt",
     junction: str = "junction",
     v_call: str = "v_call",
@@ -39,7 +39,7 @@ def identical_clones(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars
+    vdj : DandelionPolars
         a DandelionPolars object containing the airr data.
     method : Literal["nt", "aa"], optional
         one of the "nt" for nucleotide based clustering or "aa" for amino acid based clustering.
@@ -100,9 +100,9 @@ def identical_clones(
 
     # Convert to pandas for R interop, then back to polars
     db = (
-        vdj_data._data.collect()
-        if isinstance(vdj_data._data, pl.LazyFrame)
-        else vdj_data._data
+        vdj._data.collect()
+        if isinstance(vdj._data, pl.LazyFrame)
+        else vdj._data
     )
     db = _sanitize_data_polars(db)
     db_pandas = db.to_pandas()
@@ -157,18 +157,18 @@ def identical_clones(
 
     # Convert back to polars
     df_polars = pl.from_pandas(df)
-    vdj_data._data = df_polars
+    vdj._data = df_polars
 
-    vdj_data.update_metadata(
+    vdj.update_metadata(
         clone_key=clone_key,
         retrieve=clone_key,
     )
 
-    return vdj_data
+    return vdj
 
 
 def hierarchical_clones(
-    vdj_data: DandelionPolars,
+    vdj: DandelionPolars,
     threshold: float,
     method: Literal["nt", "aa"] = "nt",
     linkage: Literal["single", "average", "complete"] = "single",
@@ -202,7 +202,7 @@ def hierarchical_clones(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars
+    vdj : DandelionPolars
         a DandelionPolars object containing the airr data.
     threshold : float
         numeric scalar where the tree should be cut (the distance threshold for clonal grouping).
@@ -269,9 +269,9 @@ def hierarchical_clones(
 
     # Convert to pandas for R interop, then back to polars
     db = (
-        vdj_data._data.collect()
-        if isinstance(vdj_data._data, pl.LazyFrame)
-        else vdj_data._data
+        vdj._data.collect()
+        if isinstance(vdj._data, pl.LazyFrame)
+        else vdj._data
     )
     db_pandas = _sanitize_data_polars(db)
     db_pandas = db.to_pandas()
@@ -328,18 +328,18 @@ def hierarchical_clones(
 
     # Convert back to polars
     df_polars = pl.from_pandas(df)
-    vdj_data._data = df_polars
+    vdj._data = df_polars
 
-    vdj_data.update_metadata(
+    vdj.update_metadata(
         clone_key=clone_id,
         retrieve=clone_id,
     )
 
-    return vdj_data
+    return vdj
 
 
 def spectral_clones(
-    vdj_data: DandelionPolars,
+    vdj: DandelionPolars,
     method: Literal["novj", "vj"] = "novj",
     germline: str = "germline_alignment",
     sequence: str = "sequence_alignment",
@@ -376,7 +376,7 @@ def spectral_clones(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars
+    vdj : DandelionPolars
         a DandelionPolars object containing the airr data.
     method : Literal["novj", "vj"], optional
         one of the "novj" or "vj".
@@ -449,9 +449,9 @@ def spectral_clones(
 
     # Convert to pandas for R interop, then back to polars
     db = (
-        vdj_data._data.collect()
-        if isinstance(vdj_data._data, pl.LazyFrame)
-        else vdj_data._data
+        vdj._data.collect()
+        if isinstance(vdj._data, pl.LazyFrame)
+        else vdj._data
     )
     db = _sanitize_data_polars(db)
     db_pandas = db.to_pandas()
@@ -514,11 +514,11 @@ def spectral_clones(
 
     # Convert back to polars
     df_polars = pl.from_pandas(df)
-    vdj_data._data = df_polars
+    vdj._data = df_polars
 
-    vdj_data.update_metadata(
+    vdj.update_metadata(
         clone_key=clone_id,
         retrieve=clone_id,
     )
 
-    return vdj_data
+    return vdj

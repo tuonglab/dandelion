@@ -340,7 +340,7 @@ def creategermlines(
 
 
 def define_clones(
-    vdj_data: Dandelion | pd.DataFrame | str,
+    vdj: Dandelion | pd.DataFrame | str,
     dist: float,
     action: Literal["first", "set"] = "set",
     model: Literal[
@@ -369,7 +369,7 @@ def define_clones(
 
     Parameters
     ----------
-    vdj_data : Dandelion | pd.DataFrame | str
+    vdj : Dandelion | pd.DataFrame | str
         Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr file after
         clones have been determined.
     dist : float
@@ -419,10 +419,10 @@ def define_clones(
 
     clone_key = key_added if key_added is not None else "clone_id"
 
-    if isinstance(vdj_data, Dandelion):
-        dat_ = load_data(vdj_data._data)
+    if isinstance(vdj, Dandelion):
+        dat_ = load_data(vdj._data)
     else:
-        dat_ = load_data(vdj_data)
+        dat_ = load_data(vdj)
     if "ambiguous" in dat_:
         dat = dat_[dat_["ambiguous"] == "F"].copy()
     else:
@@ -430,8 +430,8 @@ def define_clones(
     dat_h = dat[dat["locus"] == "IGH"]
     dat_l = dat[dat["locus"].isin(["IGK", "IGL"])]
 
-    if os.path.isfile(str(vdj_data)):
-        vdj_path = Path(vdj_data)
+    if os.path.isfile(str(vdj)):
+        vdj_path = Path(vdj)
         tmpFolder = vdj_path.parent / "tmp"
         outFolder = vdj_path.parent
     elif out_dir is not None:
@@ -713,9 +713,9 @@ def define_clones(
     # transfer the new clone_id to the heavy + light file
     dat_[str(clone_key)] = pd.Series(cloned_["clone_id"])
     dat_[str(clone_key)] = dat_[str(clone_key)].fillna("")
-    if isinstance(vdj_data, Dandelion):
-        vdj_data._data[str(clone_key)] = dat_[str(clone_key)]
-        vdj_data.update_metadata(clone_key=str(clone_key))
+    if isinstance(vdj, Dandelion):
+        vdj._data[str(clone_key)] = dat_[str(clone_key)]
+        vdj.update_metadata(clone_key=str(clone_key))
     else:
         out = Dandelion(
             data=dat_,
@@ -735,7 +735,7 @@ def define_clones(
 
 
 def create_germlines(
-    vdj_data: Dandelion | pd.DataFrame | str,
+    vdj: Dandelion | pd.DataFrame | str,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
     db: Literal["imgt", "ogrdb"] = "imgt",
@@ -775,7 +775,7 @@ def create_germlines(
 
     Parameters
     ----------
-    vdj_data : Dandelion | pd.DataFrame | str
+    vdj : Dandelion | pd.DataFrame | str
         Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr
         file after clones have been determined.
     germline : str | None, optional
@@ -800,14 +800,14 @@ def create_germlines(
         Dandelion object with `.germlines` slot populated.
     """
     start = logg.info("Reconstructing germline sequences")
-    if not isinstance(vdj_data, Dandelion):
+    if not isinstance(vdj, Dandelion):
         tmpfile = (
-            Path(vdj_data)
-            if os.path.isfile(vdj_data)
+            Path(vdj)
+            if os.path.isfile(vdj)
             else Path(tempfile.TemporaryDirectory().name) / "tmp.tsv"
         )
-        if isinstance(vdj_data, pd.DataFrame):
-            write_airr(data=vdj_data.germline, save=tmpfile)
+        if isinstance(vdj, pd.DataFrame):
+            write_airr(data=vdj.germline, save=tmpfile)
         creategermlines(
             airr_file=tmpfile,
             germline=germline,
@@ -821,10 +821,10 @@ def create_germlines(
         tmppath = Path(tempfile.TemporaryDirectory().name)
         tmppath.mkdir(parents=True, exist_ok=True)
         tmpfile = tmppath / "tmp.tsv"
-        vdj_data.write_airr(filename=tmpfile)
-        if len(vdj_data.germline) > 0:
+        vdj.write_airr(filename=tmpfile)
+        if len(vdj.germline) > 0:
             tmpgmlfile = tmppath / "germ.fasta"
-            write_fasta(fasta_dict=vdj_data.germline, out_fasta=tmpgmlfile)
+            write_fasta(fasta_dict=vdj.germline, out_fasta=tmpgmlfile)
             creategermlines(
                 airr_file=tmpfile,
                 germline=tmpgmlfile,
@@ -845,16 +845,16 @@ def create_germlines(
             )
     # return as Dandelion object
     germpass_outfile = tmpfile.parent / (tmpfile.stem + "_germ-pass.tsv")
-    if isinstance(vdj_data, Dandelion):
-        vdj_data.__init__(
+    if isinstance(vdj, Dandelion):
+        vdj.__init__(
             data=germpass_outfile,
-            metadata=vdj_data._metadata,
-            germline=vdj_data.germline,
-            layout=vdj_data.layout,
-            graph=vdj_data.graph,
+            metadata=vdj._metadata,
+            germline=vdj.germline,
+            layout=vdj.layout,
+            graph=vdj.graph,
             verbose=False,
         )
-        out_vdj = vdj_data.copy()
+        out_vdj = vdj.copy()
     else:
         out_vdj = Dandelion(germpass_outfile, verbose=False)
     out_vdj.store_germline_reference(

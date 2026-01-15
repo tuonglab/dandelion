@@ -37,7 +37,7 @@ from dandelion.utilities._utilities import flatten
 
 
 def clone_rarefaction(
-    vdj_data: Dandelion | AnnData,
+    data: Dandelion | AnnData,
     groupby: str,
     clone_key: str | None = None,
     palette: list[str] | None = None,
@@ -67,7 +67,7 @@ def clone_rarefaction(
 
     Parameters
     ----------
-    vdj_data : AnnData or Dandelion
+    data : AnnData or Dandelion
         Object containing V(D)J metadata. Clone IDs must be stored in
         `.obs` (AnnData) or `.metadata` (Dandelion).
     groupby : str
@@ -78,7 +78,7 @@ def clone_rarefaction(
         not provided.
     palette : list of str, optional
         List of colors to use for plotting. If `None`, the function tries
-        to use `vdj_data.uns[f"{groupby}_colors"]` when available.
+        to use `data.uns[f"{groupby}_colors"]` when available.
     figsize : tuple of float, optional
         Width and height of the plot (in inches). Defaults to `(5, 3)`.
     chain_status_include : list of str, optional
@@ -125,12 +125,12 @@ def clone_rarefaction(
     # --------------------------
     # Extract metadata
     # --------------------------
-    if isinstance(vdj_data, AnnData):
-        metadata = vdj_data.obs.copy()
-    elif isinstance(vdj_data, Dandelion):
-        metadata = vdj_data._metadata.copy()
-    elif hasattr(vdj_data, "mod"):
-        metadata = vdj_data.mod["airr"].copy()
+    if isinstance(data, AnnData):
+        metadata = data.obs.copy()
+    elif isinstance(data, Dandelion):
+        metadata = data._metadata.copy()
+    elif hasattr(data, "mod"):
+        metadata = data.mod["airr"].copy()
 
     clonekey = "clone_id" if clone_key is None else clone_key
 
@@ -232,10 +232,10 @@ def clone_rarefaction(
 
     if palette is None:
         if (
-            isinstance(vdj_data, AnnData)
-            and (str(groupby) + "_colors") in vdj_data.uns
+            isinstance(data, AnnData)
+            and (str(groupby) + "_colors") in data.uns
         ):
-            palette = vdj_data.uns[str(groupby) + "_colors"]
+            palette = data.uns[str(groupby) + "_colors"]
 
     p = (
         ggplot(pred, aes(x="cells", y="yhat", color="group", linetype="type"))
@@ -257,7 +257,7 @@ def clone_rarefaction(
 
 
 def clone_diversity(
-    vdj_data: Dandelion | AnnData,
+    data: Dandelion | AnnData,
     groupby: str,
     method: Literal["gini", "chao1", "shannon"] = "gini",
     use_network: bool = True,
@@ -279,7 +279,7 @@ def clone_diversity(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData
+    data : Dandelion | AnnData
         Dandelion or AnnData object.
     groupby : str
         Column name to calculate the gini indices on, for e.g. sample id, patient etc.
@@ -319,10 +319,10 @@ def clone_diversity(
         pandas DataFrame holding summarised diversity estimation and the raw bootstrap results.
     """
     # if AnnData, cannot use network-based gini
-    use_network = False if isinstance(vdj_data, AnnData) else use_network
+    use_network = False if isinstance(data, AnnData) else use_network
     if (method == "gini") and use_network:
         return diversity_gini(
-            vdj_data,
+            data,
             groupby=groupby,
             metric=network_metric,
             clone_key=clone_key,
@@ -336,7 +336,7 @@ def clone_diversity(
         )
     else:
         return diversity_estimates(
-            vdj_data,
+            data,
             method=method,
             groupby=groupby,
             clone_key=clone_key,
@@ -349,7 +349,7 @@ def clone_diversity(
 
 
 def diversity_gini(
-    vdj_data: Dandelion | AnnData,
+    data: Dandelion | AnnData,
     groupby: str,
     metric: str | None = None,
     clone_key: str | None = None,
@@ -366,7 +366,7 @@ def diversity_gini(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData
+    data : Dandelion | AnnData
         Dandelion or AnnData object.
     groupby : str
         Column name to calculate the Gini indices on, for e.g. sample id, patient etc.
@@ -402,7 +402,7 @@ def diversity_gini(
     logg.info("Calculating Gini indices")
 
     cluster_size, vertex_size, cluster_raw, vertex_raw = gini_indices(
-        vdj_data,
+        data,
         groupby=groupby,
         clone_key=clone_key,
         metric=metric,
@@ -425,7 +425,7 @@ def diversity_gini(
 
 
 def diversity_estimates(
-    vdj_data: Dandelion | AnnData,
+    data: Dandelion | AnnData,
     groupby: str,
     method: Literal["chao1", "shannon", "gini"] = "chao1",
     clone_key: str | None = None,
@@ -440,7 +440,7 @@ def diversity_estimates(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData
+    data : Dandelion | AnnData
         Dandelionr AnnData object.
     groupby : str
         Column name to calculate the Chao1 estimates on, for e.g. sample id, patient etc.
@@ -466,7 +466,7 @@ def diversity_estimates(
         Dictionaries of pandas DataFrame holding diversity information and the raw bootstrap results.
     """
     res, res_raw = estimate_diversity(
-        vdj_data,
+        data,
         groupby=groupby,
         clone_key=clone_key,
         metric=method,
@@ -1004,7 +1004,7 @@ def process_clone_network_stats(
 
 
 def clone_networkstats(
-    vdj_data: Dandelion,
+    vdj: Dandelion,
     expanded_only: bool = False,
     network_clustersize: bool = False,
 ) -> tuple[defaultdict, defaultdict, defaultdict]:
@@ -1012,7 +1012,7 @@ def clone_networkstats(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         input object
     expanded_only : bool, optional
         whether or not to calculate only on expanded clones.
@@ -1032,13 +1032,13 @@ def clone_networkstats(
         if graph not found.
     """
     logg.info("Calculating vertex size of nodes after contraction")
-    if vdj_data.graph is None:
+    if vdj.graph is None:
         raise AttributeError("Graph not found. Please run tl.generate_network.")
     else:
         if expanded_only:
-            G = vdj_data.graph[1]
+            G = vdj.graph[1]
         else:
-            G = vdj_data.graph[0]
+            G = vdj.graph[0]
         remove_edges = defaultdict(list)
         vertexsizes = defaultdict(list)
         clustersizes = defaultdict(list)

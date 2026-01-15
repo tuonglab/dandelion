@@ -14,7 +14,7 @@ from dandelion.tools._tools import (
 )
 from dandelion.tools._tools_polars import (
     concat as concat_polars,
-    find_clones_polars,
+    find_clones as find_clones_polars,
 )
 from dandelion.external.immcantation.changeo import define_clones
 from dandelion.tools._network import (

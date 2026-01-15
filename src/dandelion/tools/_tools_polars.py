@@ -1,8 +1,6 @@
 from __future__ import annotations
 import math
-import os
 import re
-import warnings
 
 import networkx as nx
 import numpy as np
@@ -14,22 +12,19 @@ from anndata import AnnData
 from collections import defaultdict, Counter
 from distance import hamming
 from itertools import product
-from pathlib import Path
 from scanpy import logging as logg
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, lil_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import pdist, squareform
+
 from tqdm import tqdm
-from typing import Literal, TYPE_CHECKING
+from typing import Callable, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mudata import MuData
     from awkward import Array
 
-from dandelion.utilities._polars import (
-    DandelionPolars,
-    load_polars,
-    _write_airr,
-)
+from dandelion.utilities._polars import DandelionPolars, TRUES_STR
 from dandelion.utilities._utilities import (
     FALSES,
     VCALL,
@@ -43,42 +38,55 @@ from dandelion.utilities._utilities import (
     present,
     check_same_celltype,
     Tree,
-    sanitize_column,
+)
+from dandelion.utilities._distances import (
+    IdentityMetric,
+    resolve_metric,
 )
 
 
 def find_clones(
-    vdj_data: (
-        DandelionPolars
-        | pl.DataFrame
-        | pl.LazyFrame
-        | pd.DataFrame
-        | Path
-        | str
-    ),
+    vdj: DandelionPolars,
     identity: dict[str, float] | float = 0.85,
+    hard_cutoff: int | float | None = None,
     key: dict[str, str] | str | None = None,
+    dist_func: (
+        Literal["hamming", "levenshtein", "identity"] | Callable | str
+    ) = "hamming",
+    same_vj: bool = True,
+    same_length: bool = True,
     by_alleles: bool = False,
     key_added: str | None = None,
     recalculate_length: bool = True,
     verbose: bool = True,
-    **kwargs,
 ) -> DandelionPolars:
     """
     Find clones based on VDJ chain and VJ chain CDR3 junction hamming distance.
 
     Parameters
     ----------
-    vdj_data : DandelionPolars | polars.DataFrame | polars.LazyFrame | pandas.DataFrame | Path | str
-        Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr file
-        after clones have been determined.
+    vdj : DandelionPolars
+        Dandelion object.
     identity : dict[str, float] | float, optional
-        junction similarity parameter. Default 0.85. If provided as a dictionary, please use the following
-        keys:'ig', 'tr-ab', 'tr-gd'.
+        Similarity parameter. Default 0.85. Distance cutoff is calculated as
+        `threshold = floor(length * (1 - identity))`. If `dist_func` is 'identity', `threshold` is set to 0.
+        If `dist_func` is 'levenshtein' or a substitution matrix, the threshold is calculated based on normalized
+        length internally. If a single float value is provided, this will be used for all loci.
+        If provided as a dictionary, please use the following keys:'ig', 'tr-ab', 'tr-gd'.
+    hard_cutoff : int | float | None, optional
+        Absolute distance cutoff. If supplied, `identity` is ignored. Only for use with specific distance functions
+        such as levenshtein and substitution matrices. Default is `None`.
     key : dict[str, str] | str | None, optional
         column name for performing clone clustering. `None` defaults to a dictionary where:
             {'ig': 'junction_aa', 'tr-ab': 'junction', 'tr-gd': 'junction'}
         If provided as a string, this key will be used for all loci.
+    dist_func : Literal["hamming", "levenshtein", "identity"] | Callable | str, optional
+        Distance function to use. Can be 'hamming', 'levenshtein', 'identity', substitution matrix name, or a custom lambda function.
+        `None` defaults to 'hamming'.
+    same_vj : bool, optional
+        whether or not to require same V and J gene assignments to be in the same clone. Default is True.
+    same_length : bool, optional
+        whether or not to require same junction length to be in the same clone. Default is True.
     by_alleles : bool, optional
         whether or not to collapse alleles to genes. `None` defaults to False.
     key_added : str | None, optional
@@ -88,8 +96,6 @@ def find_clones(
         wrong). Default is True
     verbose : bool, optional
         whether or not to print progress.
-    **kwargs
-        Additional arguments to pass to `Dandelion.update_metadata`.
 
     Returns
     -------
@@ -102,185 +108,698 @@ def find_clones(
         if `key` not found in Dandelion.data.
     """
     start = logg.info("Finding clonotypes")
-    pd.set_option("mode.chained_assignment", None)
-    if isinstance(vdj_data, DandelionPolars):
-        dat_ = load_polars(vdj_data._data)
-    else:
-        dat_ = load_polars(vdj_data)
-
+    df = vdj._data
     # Collect lazy frame if necessary, then convert to pandas
-    if isinstance(dat_, pl.LazyFrame):
-        dat_ = dat_.collect()
-    if isinstance(dat_, pl.DataFrame):
-        dat_ = dat_.to_pandas()
+    if isinstance(df, pl.LazyFrame):
+        # we will load this to memory and clear the backend
+        df = vdj._safe_collect(df)
 
-    clone_key = key_added if key_added is not None else "clone_id"
-    dat_[clone_key] = ""
-
-    dat = dat_.copy()
-    if "ambiguous" in dat_:
-        dat = dat_[dat_["ambiguous"] == "F"].copy()
-
+    # Default locus dictionary
+    locus_dict = {
+        "ig": (["IGH"], ["IGK", "IGL"]),
+        "tr-ab": (["TRB"], ["TRA"]),
+        "tr-gd": (["TRD"], ["TRG"]),
+    }
+    # Locus logging dictionary
     locus_log = {"ig": "B", "tr-ab": "abT", "tr-gd": "gdT"}
-    locus_dict1 = {"ig": ["IGH"], "tr-ab": ["TRB"], "tr-gd": ["TRD"]}
-    locus_dict2 = {"ig": ["IGK", "IGL"], "tr-ab": ["TRA"], "tr-gd": ["TRG"]}
-    DEFAULTIDENTITY = {"ig": 0.85, "tr-ab": 1, "tr-gd": 1}
+    # Default identity
+    default_identity = {"ig": 0.85, "tr-ab": 1.0, "tr-gd": 1.0}
+    default_key = {
+        "ig": "junction_aa",
+        "tr-ab": "junction",
+        "tr-gd": "junction",
+    }
+    metric = resolve_metric(dist_func)
+    # Default identity
+    if identity is None:
+        identity = default_identity
+    elif isinstance(identity, dict):
+        default_identity.update(identity)
+        identity = default_identity
+    elif not isinstance(identity, dict):
+        # Single float value - use for all loci
+        identity = {"ig": identity, "tr-ab": identity, "tr-gd": identity}
+    # Default key (junction column)
+    if key is None:
+        key = default_key
+    elif isinstance(key, str):
+        # Single string - use for all loci
+        key = {"ig": key, "tr-ab": key, "tr-gd": key}
+    # Default key_added
+    key_added = "clone_id" if key_added is None else key_added
+    # Initialize clone column
+    df = df.with_columns(pl.lit("").alias(key_added))
+    # Also initialise the original order column
+    df = df.with_row_index("_original_order")
 
-    locuses = ["ig", "tr-ab", "tr-gd"]
+    # Store results from each locus
+    locus_results = {}
 
-    # create a default key with ig="junction_aa", tr-ab="junction", tr-gd="junction"
-    key_ = (
-        {"ig": "junction_aa", "tr-ab": "junction", "tr-gd": "junction"}
-        if key is None
-        else key
+    # Process each locus
+    for locus, (vdj_loci, vj_loci) in locus_dict.items():
+        # Filter to this locus
+        df_locus = df.filter(pl.col("locus").is_in(vdj_loci + vj_loci))
+        if "ambiguous" in df_locus.collect_schema():
+            df_locus = df_locus.filter(~pl.col("ambiguous").is_in(TRUES_STR))
+
+        # early skip if no rows
+        if df_locus.height == 0:
+            continue
+
+        # Get locus-specific parameters
+        locus_identity = identity[locus]
+        locus_key = key[locus]
+        locus_celltype = locus_log[locus]
+
+        # Add celltype to this locus
+        df_locus = df_locus.with_columns(
+            pl.lit(locus_celltype).alias("_celltype")
+        )
+
+        # Check for VDJ and VJ chains
+        has_vdj, has_vj = _check_chains(df_locus, vdj_loci, vj_loci)
+
+        # Initialize results for this locus
+        df_vdj_result = None
+        df_vj_result = None
+
+        vdj_chain, vj_chain = "VDJ", "VJ"
+
+        # process VDJ chain
+        if has_vdj:
+            df_vdj = df_locus.filter(pl.col("locus").is_in(vdj_loci))
+
+            # Group sequences
+            df_vdj_grp = _group_sequences(
+                df=df_vdj,
+                key=locus_key,
+                same_vj=same_vj,
+                same_length=same_length,
+                recalculate_length=recalculate_length,
+                by_alleles=by_alleles,
+            )
+            # Build aggregation list dynamically
+            agg_cols = [pl.col(locus_key)]
+            if same_length:
+                agg_cols.append(pl.col(f"_{locus_key}_length").first())
+            else:
+                agg_cols.append(pl.col(f"_{locus_key}_length").max())
+            grouped = (
+                df_vdj_grp.group_by("_membership")
+                .agg(agg_cols)
+                .sort("_membership")
+            )
+            clones_vdj = defaultdict(dict)
+            for row in tqdm(
+                grouped.iter_rows(named=True),
+                desc=f"Finding clones based on {locus_celltype} cell {vdj_chain} chains using {locus_key}",
+                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+                total=df_vdj_grp.select("_membership").n_unique(),
+                disable=not verbose,
+            ):
+                seqs = row[locus_key]
+                membership = row["_membership"]
+                length = row[f"_{locus_key}_length"]
+                if isinstance(metric, IdentityMetric):
+                    threshold = 0
+                else:
+                    if hard_cutoff is None:
+                        threshold = math.floor(
+                            int(length) * (1 - locus_identity)
+                        )
+                    else:
+                        threshold = None
+                d_mat = metric.compute_vectorized(seqs)
+
+                if d_mat.shape[0] > 1:
+                    seq_tmp_dict = _clustering_scipy(
+                        d_mat,
+                        threshold=threshold,
+                        sequences=seqs,
+                        hard_threshold=hard_cutoff,
+                    )
+                else:
+                    seq_tmp_dict = {seqs[0]: (seqs[0],)}
+
+                # Sort by size
+                clones_tmp = sorted(
+                    list(set(seq_tmp_dict.values())), key=len, reverse=True
+                )
+                for sub_group, clone_group in enumerate(clones_tmp, 1):
+                    clones_vdj[membership][sub_group] = clone_group
+
+            # Flatten to sequence -> clone mapping
+            seq_to_clone = {}
+            for membership, clone_dict in clones_vdj.items():
+                for clone_id, sequences in clone_dict.items():
+                    for seq in sequences:
+                        seq_to_clone[seq] = f"{membership}_{clone_id}"
+
+            # Apply to dataframe
+            df_vdj_grp = df_vdj_grp.with_columns(
+                pl.col(locus_key)
+                .replace_strict(seq_to_clone, default=None)
+                .alias(f"_{key_added}_{vdj_chain}")
+            )
+
+            # Keep only what we need
+            df_vdj_result = df_vdj_grp.select(
+                [
+                    "_original_order",
+                    f"_{key_added}_VDJ",
+                ]
+            )
+            del df_vdj, df_vdj_grp
+
+        # process VJ chains next
+        if has_vj:
+            df_vj = df_locus.filter(pl.col("locus").is_in(vj_loci))
+
+            # Group sequences
+            df_vj_grp = _group_sequences(
+                df=df_vj,
+                key=locus_key,
+                same_vj=same_vj,
+                same_length=same_length,
+                recalculate_length=recalculate_length,
+                by_alleles=by_alleles,
+            )
+            # Build aggregation list dynamically
+            agg_cols = [pl.col(locus_key)]
+            if same_length:
+                agg_cols.append(pl.col(f"_{locus_key}_length").first())
+            else:
+                agg_cols.append(pl.col(f"_{locus_key}_length").max())
+
+            grouped = (
+                df_vj_grp.group_by("_membership")
+                .agg(agg_cols)
+                .sort("_membership")
+            )
+
+            clones_vj = defaultdict(dict)
+
+            for row in tqdm(
+                grouped.iter_rows(named=True),
+                desc=f"Finding clones based on {locus_celltype} cell {vj_chain} chains using {locus_key}",
+                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+                total=grouped.height,
+                disable=not verbose,
+            ):
+                seqs = row[locus_key]
+                length = row[f"_{locus_key}_length"]
+                membership = row["_membership"]
+                if isinstance(metric, IdentityMetric):
+                    threshold = 0
+                else:
+                    if hard_cutoff is None:
+                        threshold = math.floor(
+                            int(length) * (1 - locus_identity)
+                        )
+                    else:
+                        threshold = None
+                d_mat = metric.compute_vectorized(seqs)
+
+                if d_mat.shape[0] > 1:
+                    seq_tmp_dict = _clustering_scipy(
+                        d_mat,
+                        threshold=threshold,
+                        sequences=seqs,
+                        hard_threshold=hard_cutoff,
+                    )
+                else:
+                    seq_tmp_dict = {seqs[0]: (seqs[0],)}
+
+                # Sort by size
+                clones_tmp = sorted(
+                    list(set(seq_tmp_dict.values())), key=len, reverse=True
+                )
+                for sub_group, clone_group in enumerate(clones_tmp, 1):
+                    clones_vj[membership][sub_group] = clone_group
+
+            # Flatten to sequence -> clone mapping
+            seq_to_clone = {}
+            for membership, clone_dict in clones_vj.items():
+                for clone_id, sequences in clone_dict.items():
+                    for seq in sequences:
+                        seq_to_clone[seq] = f"{membership}_{clone_id}"
+
+            # Apply to dataframe
+            df_vj_grp = df_vj_grp.with_columns(
+                pl.col(locus_key)
+                .replace_strict(seq_to_clone, default=None)
+                .alias(f"_{key_added}_{vj_chain}")
+            )
+            # Keep only what we need
+            df_vj_result = df_vj_grp.select(
+                [
+                    "_original_order",
+                    f"_{key_added}_VJ",
+                ]
+            )
+
+        # Combine VDJ + VJ for this locus
+        if df_vdj_result is not None and df_vj_result is not None:
+            df_locus_chains = df_vdj_result.join(
+                df_vj_result,
+                on="_original_order",
+                how="full",
+                coalesce=True,
+            )
+        elif df_vdj_result is not None:
+            df_locus_chains = df_vdj_result.with_columns(
+                pl.lit(None).alias(f"_{key_added}_VJ")
+            )
+        elif df_vj_result is not None:
+            df_locus_chains = df_vj_result.with_columns(
+                pl.lit(None).alias(f"_{key_added}_VDJ")
+            )
+        else:
+            # No chains found for this locus
+            continue
+
+        # Add celltype back
+        df_locus_chains = df_locus_chains.with_columns(
+            pl.lit(locus_celltype).alias("_celltype")
+        )
+
+        # Join with cell_id from original df
+        df_locus_chains = df_locus_chains.join(
+            df.select(["_original_order", "cell_id"]),
+            on="_original_order",
+            how="left",
+        )
+
+        # Combine VDJ + VJ at the cell level for this locus
+        df_locus_summary = df_locus_chains.group_by("cell_id").agg(
+            [
+                pl.col(f"_{key_added}_VDJ")
+                .drop_nulls()
+                .unique()
+                .alias("_vdj_set"),
+                pl.col(f"_{key_added}_VJ")
+                .drop_nulls()
+                .unique()
+                .alias("_vj_set"),
+            ]
+        )
+
+        # Create locus-specific clone IDs
+        df_locus_summary = df_locus_summary.with_columns(
+            pl.struct(["_vdj_set", "_vj_set"])
+            .map_elements(
+                lambda s: _combine_single_locus(
+                    s["_vdj_set"], s["_vj_set"], locus_celltype
+                ),
+                return_dtype=pl.List(pl.Utf8),
+            )
+            .alias(f"_{key_added}_{locus_celltype}")
+        )
+
+        # Store result for this locus
+        locus_results[locus_celltype] = df_locus_summary.select(
+            ["cell_id", f"_{key_added}_{locus_celltype}"]
+        )
+
+    # Merge all locus results back to main df
+    # Start with cell_id from original df
+    df_final = df.select("cell_id").unique()
+
+    # Join each locus result
+    for locus_celltype, locus_df in locus_results.items():
+        df_final = df_final.join(locus_df, on="cell_id", how="left")
+
+    # Combine all locus clone IDs with '|'
+    locus_columns = [f"_{key_added}_{ct}" for ct in locus_results.keys()]
+
+    if locus_columns:
+        # Each column contains a list of clone IDs for that locus
+        # We need to flatten all lists and join with '|'
+        df_final = df_final.with_columns(
+            pl.struct(locus_columns)
+            .map_elements(
+                lambda row: _flatten_and_join_loci(row, locus_columns),
+                return_dtype=pl.String,
+            )
+            .alias(key_added)
+        ).drop(locus_columns)
+    else:
+        # No loci processed, add empty clone_id column
+        df_final = df_final.with_columns(pl.lit(None).alias(key_added))
+
+    # Join back to original df
+    df = df.join(df_final, on="cell_id", how="left").drop("_original_order")
+
+    # return
+    vdj._data = df
+    vdj.update_metadata(clone_key=str(key_added))
+    # offload memory
+    vdj._cache_data()
+    logg.info(
+        " finished",
+        time=start,
+        deep=(
+            "Updated Dandelion object: \n"
+            "   'data', contig AIRR table\n"
+            "   'metadata', cell observations table\n"
+        ),
     )
 
-    # quick check
-    for locus in locuses:
-        locus_1 = locus_dict1[locus]
-        locus_2 = locus_dict2[locus]
 
-        dat_vj = dat[dat["locus"].isin(locus_2)].copy()
-        dat_vdj = dat[dat["locus"].isin(locus_1)].copy()
+def _check_chains(
+    df: pl.DataFrame | pl.LazyFrame,
+    vdj_loci: list[str],
+    vj_loci: list[str],
+) -> tuple[bool, bool]:
+    """
+    Check if VDJ and VJ chains exist for a locus using polars.
 
-        chain_check = check_chains(dat_vdj=dat_vdj, dat_vj=dat_vj)
-        if all(~chain_check["All VDJ"]) and all(~chain_check["All VJ"]):
-            locuses.remove(locus)
+    Vectorized check using polars filtering operations.
 
-    if len(locuses) > 0:
-        for locusx in locuses:
-            locus_1 = locus_dict1[locusx]
-            locus_2 = locus_dict2[locusx]
-            if isinstance(identity, dict):
-                if locusx not in identity:
-                    identity.update({locusx: DEFAULTIDENTITY[locusx]})
-                    warnings.warn(
-                        UserWarning(
-                            "Identity value for {} chains ".format(locusx)
-                            + "not specified in provided dictionary. "
-                            + "Defaulting to {} for {} chains.".format(
-                                DEFAULTIDENTITY[locusx], locusx
-                            )
-                        )
-                    )
-                identity_ = identity[locusx]
-            else:
-                identity_ = identity
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Input AIRR dataframe.
+    vdj_loci : list[str]
+        VDJ loci (e.g., ['IGH'], ['TRB']).
+    vj_loci : list[str]
+        VJ loci (e.g., ['IGK', 'IGL'], ['TRA']).
 
-            dat_vj = dat[dat["locus"].isin(locus_2)].copy()
-            dat_vdj = dat[dat["locus"].isin(locus_1)].copy()
-            chain_check = check_chains(dat_vdj=dat_vdj, dat_vj=dat_vj)
-            if dat_vdj.shape[0] > 0:
-                vj_len_grp_vdj, seq_grp_vdj = group_sequences(
-                    dat_vdj,
-                    junction_key=(
-                        key_[locusx] if isinstance(key_, dict) else key_
-                    ),
-                    recalculate_length=recalculate_length,
-                    by_alleles=by_alleles,
-                    locus=locusx,
-                )
-                cid_vdj = group_pairwise_hamming_distance(
-                    clonotype_vj_len_group=vj_len_grp_vdj,
-                    clonotype_sequence_group=seq_grp_vdj,
-                    identity=identity_,
-                    locus=locus_log[locusx],
-                    chain="VDJ",
-                    junction_key=(
-                        key_[locusx] if isinstance(key_, dict) else key_
-                    ),
-                    verbose=verbose,
-                )
-                clone_dict_vdj = rename_clonotype_ids(
-                    clonotype_groups=cid_vdj,
-                    prefix=locus_log[locusx] + "_VDJ_",
-                )
-                # add it to the original dataframes
-                dat_vdj[clone_key] = pd.Series(clone_dict_vdj)
-                # dat[clone_key].update(pd.Series(dat_vdj[clone_key]))
-                for i, row in dat_vdj.iterrows():
-                    if i in dat.index:
-                        dat.at[i, clone_key] = row[clone_key]
-            if dat_vj.shape[0] > 0:
-                vj_len_grp_vj, seq_grp_vj = group_sequences(
-                    dat_vj,
-                    junction_key=(
-                        key_[locusx] if isinstance(key_, dict) else key_
-                    ),
-                    recalculate_length=recalculate_length,
-                    by_alleles=by_alleles,
-                    locus=locusx,
-                )
-                cid_vj = group_pairwise_hamming_distance(
-                    clonotype_vj_len_group=vj_len_grp_vj,
-                    clonotype_sequence_group=seq_grp_vj,
-                    identity=identity_,
-                    locus=locus_log[locusx],
-                    chain="VJ",
-                    junction_key=(
-                        key_[locusx] if isinstance(key_, dict) else key_
-                    ),
-                    verbose=verbose,
-                )
-                clone_dict_vj = rename_clonotype_ids(
-                    clonotype_groups=cid_vj,
-                    prefix=locus_log[locusx] + "_VJ_",
-                )
-                refine_clone_assignment(
-                    dat=dat,
-                    clone_key=clone_key,
-                    clone_dict_vj=clone_dict_vj,
-                    verbose=verbose,
-                )
-                # dat_[clone_key].update(pd.Series(dat[clone_key]))
-            for i, row in dat.iterrows():
-                if i in dat_.index:
-                    dat_.at[i, clone_key] = row[clone_key]
+    Returns
+    -------
+    tuple[bool, bool]
+        (has_vdj, has_vj) indicating presence of chains.
+    """
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
 
-    # dat_[clone_key].replace('', 'unassigned')
-    if os.path.isfile(str(vdj_data)):
-        data_path = Path(vdj_data)
-        _write_airr(dat_, data_path.parent / (data_path.stem + "_clone.tsv"))
-    if verbose:
-        logg.info("Initialising Dandelion object")
-    if isinstance(vdj_data, DandelionPolars):
-        # Convert back to polars if we converted to pandas
-        if isinstance(dat_, pd.DataFrame):
-            dat_ = pl.from_pandas(dat_)
-        vdj_data._data = dat_
-        vdj_data.update_metadata(clone_key=str(clone_key))
-        logg.info(
-            " finished",
-            time=start,
-            deep=(
-                "Updated Dandelion object: \n"
-                "   'data', contig-indexed AIRR table\n"
-                "   'metadata', cell-indexed observations table\n"
-            ),
+    # Vectorized check for VDJ chains
+    has_vdj = df.filter(pl.col("locus").is_in(vdj_loci)).shape[0] > 0
+
+    # Vectorized check for VJ chains
+    has_vj = df.filter(pl.col("locus").is_in(vj_loci)).shape[0] > 0
+
+    return has_vdj, has_vj
+
+
+def _group_sequences(
+    df: pl.DataFrame | pl.LazyFrame,
+    key: str,
+    same_vj: bool = True,
+    same_length: bool = True,
+    recalculate_length: bool = True,
+    by_alleles: bool = False,
+):
+    """
+    Group sequences by V/J genes and junction length using vectorized polars.
+
+    Vectorized polars implementation that groups contigs by (V gene, J gene)
+    pairs and then by junction length. Returns numerical group IDs.
+
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Input AIRR dataframe.
+    key : str
+        Column name for junction sequences (e.g., 'junction', 'junction_aa').
+    same_vj : bool, optional
+        Whether to group by same V and J genes.
+    same_length : bool, optional
+        Whether to group by same junction length.
+    recalculate_length : bool, optional
+        Whether to recalculate junction length from sequences.
+    by_alleles : bool, optional
+        Whether to group by alleles or genes.
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with added '_membership' column.
+    """
+    # Ensure LazyFrame for efficiency
+    if isinstance(df, pl.DataFrame):
+        df = df.lazy()
+
+    v_col = VCALLG if VCALLG in df.collect_schema() else VCALL
+
+    # Vectorized V/J gene stripping using polars string operations
+    if same_vj:
+        if not by_alleles:
+            df = df.with_columns(
+                [
+                    pl.col(v_col)
+                    .str.replace_all(STRIPALLELENUM, "")
+                    .alias("_v_gene"),
+                    pl.col(JCALL)
+                    .str.replace_all(STRIPALLELENUM, "")
+                    .alias("_j_gene"),
+                ]
+            )
+        else:
+            df = df.with_columns(
+                [
+                    pl.col(v_col).alias("_v_gene"),
+                    pl.col(JCALL).alias("_j_gene"),
+                ]
+            )
+
+    # Handle length calculation
+    if same_length:
+        length_col = key + "_length"
+        if length_col not in df.collect_schema():
+            recalculate_length = True
+
+        # Calculate or use existing length
+        if recalculate_length:
+            df = df.with_columns(
+                pl.when(pl.col(key).is_null())
+                .then(pl.lit(0))
+                .otherwise(pl.col(key).cast(pl.String).str.len_bytes())
+                .alias(f"_{key}_length")
+            )
+        else:
+            df = df.with_columns(pl.col(length_col).alias(f"_{key}_length"))
+
+    # Filter out rows with null junction
+    filter_conditions = [pl.col(key).is_not_null()]
+
+    if same_vj:
+        filter_conditions.extend(
+            [pl.col("_v_gene").is_not_null(), pl.col("_j_gene").is_not_null()]
         )
-        return vdj_data
+
+    df = df.filter(pl.all_horizontal(filter_conditions))
+
+    # Build grouping columns dynamically
+    grouping_cols = []
+
+    if same_vj:
+        grouping_cols.extend(["_v_gene", "_j_gene"])
+
+    if same_length:
+        grouping_cols.append(f"_{key}_length")
+
+    # Create membership based on selected grouping
+    if grouping_cols:
+        # Create a combined group ID
+        if same_vj and same_length:
+            # Both VJ and length grouping
+            df = df.with_columns(
+                pl.struct(["_v_gene", "_j_gene"])
+                .rank(method="dense")
+                .alias("_vj_group")
+            )
+            df = df.with_columns(
+                pl.col(f"_{key}_length")
+                .rank(method="dense")
+                .over("_vj_group")
+                .alias("_length_group")
+            )
+            df = df.with_columns(
+                pl.concat_str(
+                    [
+                        pl.col("_vj_group").cast(pl.String),
+                        pl.lit("_"),
+                        pl.col("_length_group").cast(pl.String),
+                    ]
+                ).alias("_membership")
+            )
+            df = df.drop(["_v_gene", "_j_gene", "_vj_group", "_length_group"])
+
+        elif same_vj:
+            # Only VJ grouping
+            df = df.with_columns(
+                pl.struct(["_v_gene", "_j_gene"])
+                .rank(method="dense")
+                .cast(pl.String)
+                .alias("_membership")
+            )
+            df = df.drop(["_v_gene", "_j_gene"])
+
+        elif same_length:
+            # Only length grouping
+            df = df.with_columns(
+                pl.col(f"_{key}_length")
+                .rank(method="dense")
+                .cast(pl.String)
+                .alias("_membership")
+            )
     else:
-        out = DandelionPolars(
-            data=dat_,
-            clone_key=clone_key,
-            verbose=False,
-            **kwargs,
+        # No grouping - all sequences in one group
+        df = df.with_columns(pl.lit("1").alias("_membership"))
+
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+
+    return df
+
+
+def _clustering_scipy(
+    d_mat: np.ndarray,
+    threshold: float,
+    sequences: list[str],
+    hard_threshold: int | float | None = None,
+) -> dict:
+    """
+    Cluster sequences using scipy connected components (fastest).
+
+    Parameters
+    ----------
+    d_mat : np.ndarray
+        Distance matrix (n x n).
+    threshold : float
+        Distance threshold for clustering.
+    sequences : list[str]
+        List of sequences.
+    hard_threshold : int | float | None, optional
+        Absolute distance cutoff. If supplied, `threshold` is ignored.
+
+    Returns
+    -------
+    dict
+        Dictionary mapping sequences to cluster groups.
+    """
+    _threshold = threshold if hard_threshold is None else hard_threshold
+    # Create adjacency matrix
+    adjacency = (d_mat <= _threshold).astype(int)
+
+    # Find connected components
+    _, labels = connected_components(
+        csgraph=csr_matrix(adjacency), directed=False
+    )
+
+    # Group sequences by cluster labels
+    clusters = defaultdict(list)
+    for idx, label in enumerate(labels):
+        clusters[label].append(idx)
+
+    # Build output dict
+    out_dict = {}
+    for cluster_indices in clusters.values():
+        cluster_seqs = tuple(
+            sorted([sequences[idx] for idx in cluster_indices])
         )
-        logg.info(
-            " finished",
-            time=start,
-            deep=(
-                "Returning Dandelion object: \n"
-                "   'data', contig-indexed AIRR table\n"
-                "   'metadata', cell-indexed observations table\n"
-            ),
-        )
-        return out
+        for idx in cluster_indices:
+            out_dict[sequences[idx]] = cluster_seqs
+
+    return out_dict
+
+
+def _combine_single_locus(
+    vdj_list: list[str] | None, vj_list: list[str] | None, celltype: str
+) -> list[str]:
+    """Combine VDJ/VJ for a single celltype/locus.
+
+    Args:
+        vdj_list: List of VDJ clone IDs
+        vj_list: List of VJ clone IDs
+        celltype: Cell type identifier (e.g., 'B', 'abT', 'gdT')
+
+    Returns:
+        List of combined clone IDs for this locus
+    """
+    if not vdj_list and not vj_list:
+        return []
+
+    vdj_vals = vdj_list if vdj_list else [None]
+    vj_vals = vj_list if vj_list else [None]
+    combos: list[str] = []
+
+    for vdj in vdj_vals:
+        for vj in vj_vals:
+            parts = [celltype]
+            if vdj is not None:
+                parts.append(f"VDJ_{vdj}")
+            if vj is not None:
+                parts.append(f"VJ_{vj}")
+            combos.append("_".join(parts))
+
+    return combos
+
+
+def _flatten_and_join_loci(row: dict, locus_columns: list[str]) -> str | None:
+    """Flatten clone IDs from all loci and join with '|'.
+
+    Args:
+        row: Dictionary containing clone ID lists for each locus
+        locus_columns: List of column names containing locus-specific clone IDs
+
+    Returns:
+        Pipe-separated string of all clone IDs, or None if no clones found
+    """
+    all_clones: list[str] = []
+    for col_name in locus_columns:
+        locus_clones = row[col_name]
+        if locus_clones is not None:
+            all_clones.extend(locus_clones)
+    return "|".join(all_clones) if all_clones else None
+
+
+def _update_distance_matrix(
+    d_mat: np.ndarray,
+    cell_ids: list,
+    cell_id_to_idx: dict,
+    distance_matrix: lil_matrix,
+) -> None:
+    """
+    Update the global distance matrix with distances from a group.
+
+    Sums distances when multiple sequences from the same cell exist.
+
+    Parameters
+    ----------
+    d_mat : np.ndarray
+        Pairwise distance matrix for sequences in this group
+    cell_ids : list
+        Cell IDs corresponding to each sequence
+    cell_id_to_idx : dict
+        Mapping from cell_id to matrix index
+    distance_matrix : lil_matrix
+        Accumulated distance matrix (modified in-place)
+    """
+    n = len(cell_ids)
+
+    for i in range(n):
+        for j in range(i, n):  # Only upper triangle (symmetric)
+            cell_i = cell_ids[i]
+            cell_j = cell_ids[j]
+
+            idx_i = cell_id_to_idx[cell_i]
+            idx_j = cell_id_to_idx[cell_j]
+
+            dist = d_mat[i, j]
+
+            # Sum distance
+            distance_matrix[idx_i, idx_j] += dist
+
+            # Mirror for symmetry (unless diagonal)
+            if idx_i != idx_j:
+                distance_matrix[idx_j, idx_i] += dist
 
 
 def transfer(
-    gex_data: AnnData | MuData,
-    vdj_data: DandelionPolars,
+    adata: AnnData | MuData,
+    vdj: DandelionPolars,
     expanded: bool = False,
     gex_key: str | None = None,
     vdj_key: str | None = None,
@@ -325,27 +844,27 @@ def transfer(
 
     # if the provide adata is an MuData, we need to transfer to mudata.mod['gex']
     # but we don't want to add mudata as a dependency here, so we do a duck-typing check
-    if hasattr(gex_data, "mod"):
-        if "airr" in gex_data.mod:
-            recipient = gex_data.mod["airr"]
+    if hasattr(adata, "mod"):
+        if "airr" in adata.mod:
+            recipient = adata.mod["airr"]
         else:
             raise ValueError(
                 "Provided AnnData is a MuData object without 'airr' modality."
             )
     # we just associate recipient to adata directly
     else:
-        recipient = gex_data
-    if isinstance(vdj_data, DandelionPolars):
-        if vdj_data._backend == "polars":
-            vdj_data.to_pandas()
+        recipient = adata
+    if isinstance(vdj, DandelionPolars):
+        if vdj._backend == "polars":
+            vdj.to_pandas()
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
-        for x in vdj_data._metadata.columns:
+        for x in vdj._metadata.columns:
             if x not in recipient.obs.columns:
-                recipient.obs[x] = pd.Series(vdj_data._metadata[x])
+                recipient.obs[x] = pd.Series(vdj._metadata[x])
             elif overwrite is True:
-                recipient.obs[x] = pd.Series(vdj_data._metadata[x])
-            if type_check(vdj_data._metadata, x):
+                recipient.obs[x] = pd.Series(vdj._metadata[x])
+            if type_check(vdj._metadata, x):
                 recipient.obs[x] = recipient.obs[x].replace(np.nan, "No_contig")
             if recipient.obs[x].dtype == "bool":
                 recipient.obs[x] = recipient.obs[x].astype(str)
@@ -355,19 +874,19 @@ def transfer(
             if not isinstance(overwrite, list):
                 overwrite = [overwrite]
             for ow in overwrite:
-                recipient.obs[ow] = pd.Series(vdj_data._metadata[ow])
-                if type_check(vdj_data._metadata, ow):
+                recipient.obs[ow] = pd.Series(vdj._metadata[ow])
+                if type_check(vdj._metadata, ow):
                     recipient.obs[ow] = recipient.obs[ow].replace(
                         np.nan, "No_contig"
                     )
 
     # also check that all the cells in dandelion are in recipient
-    common_cells = recipient.obs_names.intersection(vdj_data._metadata.index)
+    common_cells = recipient.obs_names.intersection(vdj._metadata.index)
     # subset to common cells only
-    vdj_data = vdj_data[vdj_data._metadata.index.isin(common_cells)].copy()
+    vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
 
     # If there's no graph, we're done with metadata only
-    if vdj_data.graph is None:
+    if vdj.graph is None:
         logg.info(
             " finished", time=start, deep=("updated `.obs` with `.metadata`\n")
         )
@@ -399,9 +918,9 @@ def transfer(
     # handle graph[0] and graph[1]
     for idx in (0, 1):
         G = None
-        if vdj_data.graph is not None:
+        if vdj.graph is not None:
             try:
-                G = vdj_data.graph[idx]
+                G = vdj.graph[idx]
             except Exception:
                 pass
 
@@ -411,9 +930,9 @@ def transfer(
             )
 
     # handle precomputed distances (sparse or DataFrame)
-    if getattr(vdj_data, "distances", None) is not None:
+    if getattr(vdj, "distances", None) is not None:
         graph_connectivities[2], graph_distances[2] = _graph_to_matrices(
-            None, recipient, vdj_data.distances
+            None, recipient, vdj.distances
         )
 
     # Determine main graph index
@@ -509,14 +1028,14 @@ def transfer(
 
     if obsm:
         # --- 6) Layouts ---
-        if vdj_data.layout is not None:
+        if vdj.layout is not None:
             stored_embeddings = {}
             for idx, obsm_name in (
                 (0, "X_vdj_all"),
                 (1, "X_vdj_expanded"),
             ):
                 try:
-                    layout = vdj_data.layout[idx]
+                    layout = vdj.layout[idx]
                 except Exception:
                     continue
                 if layout is None:
@@ -669,7 +1188,7 @@ def _graph_to_matrices(
 
 
 def clone_view(
-    gex_data: AnnData,
+    adata: AnnData,
     mode: Literal["all", "expanded", "full", "gex"] | None = "expanded",
     connectivities_key: str | None = None,
     distances_key: str | None = None,
@@ -693,21 +1212,19 @@ def clone_view(
     """
     if mode is None:
         # use the other key directly
-        if connectivities_key in gex_data.obsp:
-            gex_data.obsp["connectivities"] = gex_data.obsp[
-                connectivities_key
-            ].copy()
+        if connectivities_key in adata.obsp:
+            adata.obsp["connectivities"] = adata.obsp[connectivities_key].copy()
         else:
             raise KeyError(f"{connectivities_key} not found in adata.obsp")
 
-        if distances_key in gex_data.obsp:
-            gex_data.obsp["distances"] = gex_data.obsp[distances_key].copy()
+        if distances_key in adata.obsp:
+            adata.obsp["distances"] = adata.obsp[distances_key].copy()
         else:
             raise KeyError(f"{distances_key} not found in adata.obsp")
 
         if embedding_key is not None:
-            if embedding_key in gex_data.obsm:
-                gex_data.obsm["X_vdj"] = gex_data.obsm[embedding_key].copy()
+            if embedding_key in adata.obsm:
+                adata.obsm["X_vdj"] = adata.obsm[embedding_key].copy()
             else:
                 raise KeyError(f"{embedding_key} not found in adata.obsm")
     else:
@@ -721,14 +1238,14 @@ def clone_view(
             dist_key = f"vdj_distances_{mode}"
             neighbors_key = None
             emb_key = f"X_vdj_{mode}" if mode != "full" else None
-        gex_data.obsp["connectivities"] = gex_data.obsp[conn_key].copy()
-        gex_data.obsp["distances"] = gex_data.obsp[dist_key].copy()
+        adata.obsp["connectivities"] = adata.obsp[conn_key].copy()
+        adata.obsp["distances"] = adata.obsp[dist_key].copy()
         if emb_key is not None:
-            gex_data.obsm["X_vdj"] = gex_data.obsm[emb_key].copy()
+            adata.obsm["X_vdj"] = adata.obsm[emb_key].copy()
         if neighbors_key is not None:
-            gex_data.uns["neighbors"] = gex_data.uns[neighbors_key].copy()
+            adata.uns["neighbors"] = adata.uns[neighbors_key].copy()
         else:
-            gex_data.uns["neighbors"] = {
+            adata.uns["neighbors"] = {
                 "connectivities_key": "connectivities",
                 "distances_key": "distances",
                 "params": {
@@ -774,7 +1291,7 @@ def tabulate_clone_sizes(
 
 
 def clone_size(
-    vdj_data: DandelionPolars | AnnData | MuData,
+    vdj: DandelionPolars | AnnData | MuData,
     groupby: str | None = None,
     max_size: int | None = None,
     clone_key: str | None = None,
@@ -791,7 +1308,7 @@ def clone_size(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData | MuData
+    vdj : Dandelion | AnnData | MuData
         VDJ data.
     groupby : str | None, optional
         Column in metadata to group by before calculating clone sizes.
@@ -804,14 +1321,14 @@ def clone_size(
         Prefix for new metadata column names.
     """
     # --- Select metadata
-    if hasattr(vdj_data, "mod"):
-        metadata_ = vdj_data.mod["airr"].obs.copy()
-    elif isinstance(vdj_data, AnnData):
-        metadata_ = vdj_data.obs.copy()
-    elif isinstance(vdj_data, DandelionPolars):
-        if vdj_data._backend == "polars":
-            vdj_data.to_pandas()
-        metadata_ = vdj_data._metadata.copy()
+    if hasattr(vdj, "mod"):
+        metadata_ = vdj.mod["airr"].obs.copy()
+    elif isinstance(vdj, AnnData):
+        metadata_ = vdj.obs.copy()
+    elif isinstance(vdj, DandelionPolars):
+        if vdj._backend == "polars":
+            vdj.to_pandas()
+        metadata_ = vdj._metadata.copy()
 
     clone_key = "clone_id" if clone_key is None else clone_key
     if clone_key not in metadata_.columns:
@@ -950,48 +1467,44 @@ def clone_size(
     # --- Write results back to object
     col_key = key_added if key_added is not None else clone_key
 
-    if isinstance(vdj_data, DandelionPolars):
-        vdj_data._metadata[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
-        vdj_data._metadata[f"{col_key}_size_prop"] = metadata_[
+    if isinstance(vdj, DandelionPolars):
+        vdj._metadata[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
+        vdj._metadata[f"{col_key}_size_prop"] = metadata_[
             f"{clone_key}_size_prop"
         ]
-        vdj_data._metadata[f"{col_key}_size_category"] = metadata_[
+        vdj._metadata[f"{col_key}_size_category"] = metadata_[
             f"{clone_key}_size_category"
         ]
         if max_size is not None:
-            vdj_data._metadata[f"{col_key}_size_max_{max_size}"] = metadata_[
+            vdj._metadata[f"{col_key}_size_max_{max_size}"] = metadata_[
                 f"{clone_key}_size_max_{max_size}"
             ]
-    elif isinstance(vdj_data, AnnData):
-        vdj_data.obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
-        vdj_data.obs[f"{col_key}_size_prop"] = metadata_[
-            f"{clone_key}_size_prop"
-        ]
-        vdj_data.obs[f"{col_key}_size_category"] = metadata_[
+    elif isinstance(vdj, AnnData):
+        vdj.obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
+        vdj.obs[f"{col_key}_size_prop"] = metadata_[f"{clone_key}_size_prop"]
+        vdj.obs[f"{col_key}_size_category"] = metadata_[
             f"{clone_key}_size_category"
         ]
         if max_size is not None:
-            vdj_data.obs[f"{col_key}_size_max_{max_size}"] = metadata_[
+            vdj.obs[f"{col_key}_size_max_{max_size}"] = metadata_[
                 f"{clone_key}_size_max_{max_size}"
             ]
-    elif hasattr(vdj_data, "mod"):
-        vdj_data.mod["airr"].obs[f"{col_key}_size"] = metadata_[
-            f"{clone_key}_size"
-        ]
-        vdj_data.mod["airr"].obs[f"{col_key}_size_prop"] = metadata_[
+    elif hasattr(vdj, "mod"):
+        vdj.mod["airr"].obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
+        vdj.mod["airr"].obs[f"{col_key}_size_prop"] = metadata_[
             f"{clone_key}_size_prop"
         ]
-        vdj_data.mod["airr"].obs[f"{col_key}_size_category"] = metadata_[
+        vdj.mod["airr"].obs[f"{col_key}_size_category"] = metadata_[
             f"{clone_key}_size_category"
         ]
         if max_size is not None:
-            vdj_data.mod["airr"].obs[f"{col_key}_size_max_{max_size}"] = (
-                metadata_[f"{clone_key}_size_max_{max_size}"]
-            )
+            vdj.mod["airr"].obs[f"{col_key}_size_max_{max_size}"] = metadata_[
+                f"{clone_key}_size_max_{max_size}"
+            ]
 
 
 def clone_overlap(
-    vdj_data: DandelionPolars | AnnData,
+    vdj: DandelionPolars | AnnData,
     groupby: str,
     min_clone_size: int | None = None,
     weighted_overlap: bool = False,
@@ -1002,7 +1515,7 @@ def clone_overlap(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData
+    vdj : Dandelion | AnnData
         Dandelion or AnnData object.
     groupby : str
         column name in obs/metadata for collapsing to columns in the clone_id x groupby data frame.
@@ -1025,14 +1538,14 @@ def clone_overlap(
         if min_clone_size is 0.
     """
     start = logg.info("Calculating clone overlap")
-    if isinstance(vdj_data, DandelionPolars):
-        if vdj_data._backend == "polars":
-            vdj_data.to_pandas()
-        data = vdj_data._metadata.copy()
-    elif isinstance(vdj_data, AnnData):
-        data = vdj_data.obs.copy()
-    elif isinstance(vdj_data, MuData):
-        data = vdj_data.mod["airr"].obs.copy()
+    if isinstance(vdj, DandelionPolars):
+        if vdj._backend == "polars":
+            vdj.to_pandas()
+        data = vdj._metadata.copy()
+    elif isinstance(vdj, AnnData):
+        data = vdj.obs.copy()
+    elif isinstance(vdj, MuData):
+        data = vdj.mod["airr"].obs.copy()
 
     if min_clone_size is None:
         min_size = 2
@@ -1096,8 +1609,8 @@ def clone_overlap(
     overlap.index.name = None
     overlap.columns.name = None
 
-    if isinstance(vdj_data, AnnData):
-        vdj_data.uns["clone_overlap"] = overlap.copy()
+    if isinstance(vdj, AnnData):
+        vdj.uns["clone_overlap"] = overlap.copy()
         logg.info(
             " finished",
             time=start,
@@ -1170,95 +1683,8 @@ def clustering(
     return out_dict
 
 
-def productive_ratio(
-    gex_data: AnnData,
-    vdj_data: DandelionPolars,
-    groupby: str,
-    groups: list[str] | None = None,
-    locus: Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"] = "TRB",
-):
-    """
-    Compute the cell-level productive/non-productive contig ratio.
-
-    Only the contig with the highest umi count in a cell will be used for this
-    tabulation.
-
-    Returns inplace AnnData with `.uns['productive_ratio']`.
-
-    Parameters
-    ----------
-    adata : AnnData
-        AnnData object holding the cell level metadata (`.obs`).
-    vdj : Dandelion
-        Dandelion object holding the repertoire data (`.data`).
-    groupby : str
-        Name of column in `AnnData.obs` to return the row tabulations.
-    groups : list[str] | None, optional
-        Optional list of categories to return.
-    locus : Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"], optional
-        One of the accepted locuses to perform the tabulation
-    """
-    start = logg.info("Tabulating productive ratio")
-    vdjx = vdj_data[(vdj_data._data.cell_id.isin(gex_data.obs_names))].copy()
-    if "ambiguous" in vdjx._data:
-        tmp = vdjx[
-            (vdjx._data.locus == locus) & (vdjx._data.ambiguous == "F")
-        ].copy()
-    else:
-        tmp = vdjx[(vdjx._data.locus == locus)].copy()
-
-    if groups is None:
-        if is_categorical(gex_data.obs[groupby]):
-            groups = list(gex_data.obs[groupby].cat.categories)
-        else:
-            groups = list(set(gex_data.obs[groupby]))
-    df = tmp._data.drop_duplicates(subset="cell_id")
-    dict_df = dict(zip(df.cell_id, df.productive))
-    res = pd.DataFrame(
-        columns=["productive", "non-productive", "total"],
-        index=groups,
-    )
-
-    gex_data.obs[locus + "_productive"] = pd.Series(dict_df)
-    for i in range(res.shape[0]):
-        cell = res.index[i]
-        res.loc[cell, "total"] = sum(gex_data.obs[groupby] == cell)
-        if res.loc[cell, "total"] > 0:
-            res.loc[cell, "productive"] = (
-                sum(
-                    gex_data.obs.loc[
-                        gex_data.obs[groupby] == cell, locus + "_productive"
-                    ].isin(["T"])
-                )
-                / res.loc[cell, "total"]
-                * 100
-            )
-            res.loc[cell, "non-productive"] = (
-                sum(
-                    gex_data.obs.loc[
-                        gex_data.obs[groupby] == cell, locus + "_productive"
-                    ].isin(
-                        [
-                            "F",
-                        ]
-                    )
-                )
-                / res.loc[cell, "total"]
-                * 100
-            )
-    res[groupby] = res.index
-    res["productive+non-productive"] = res["productive"] + res["non-productive"]
-    out = {"results": res, "locus": locus, "groupby": groupby}
-    gex_data.uns["productive_ratio"] = out
-    logg.info(
-        " finished",
-        time=start,
-        deep=("Updated AnnData: \n" "   'uns', productive_ratio"),
-    )
-
-
 def vj_usage_pca(
-    gex_data: AnnData,
+    adata: AnnData,
     groupby: str,
     min_size: int = 20,
     mode: Literal["B", "abT", "gdT"] = "abT",
@@ -1321,12 +1747,12 @@ def vj_usage_pca(
     start = logg.info("Computing PCA for V/J gene usage")
     # filtering
     if allowed_chain_status is not None:
-        gex_data_ = gex_data[
-            gex_data.obs["chain_status"].isin(allowed_chain_status)
+        adata_ = adata[
+            adata.obs["chain_status"].isin(allowed_chain_status)
         ].copy()
 
     if groups is not None:
-        gex_data_ = gex_data_[gex_data_.obs[groupby].isin(groups)].copy()
+        adata_ = adata_[adata_.obs[groupby].isin(groups)].copy()
     # build config
     gene_config = {
         "vdj_v": dict(
@@ -1354,14 +1780,14 @@ def vj_usage_pca(
         raise ValueError("At least one of the use_vj/vdj_v/j must be True.")
 
     # Determine which groups to keep
-    cell_counts = gex_data_.obs[groupby].value_counts()
+    cell_counts = adata_.obs[groupby].value_counts()
     keep_groups = cell_counts[cell_counts >= min_size].index
 
     # collect gene lists
     gene_lists = {}
     for key, cfg in gene_config.items():
         if cfg["enabled"]:
-            uniq = gex_data_.obs[cfg["main"]].unique().tolist()
+            uniq = adata_.obs[cfg["main"]].unique().tolist()
             gene_lists[key] = [
                 g for g in uniq if g not in ("None", "No_contig")
             ]
@@ -1381,8 +1807,8 @@ def vj_usage_pca(
         desc="Tabulating V/J gene usage",
         disable=not verbose,
     ):
-        group_mask = gex_data_.obs[groupby] == group
-        obs_group = gex_data_.obs.loc[group_mask]
+        group_mask = adata_.obs[groupby] == group
+        obs_group = adata_.obs.loc[group_mask]
 
         for key, cfg in gene_config.items():
             if not cfg["enabled"]:
@@ -1416,7 +1842,7 @@ def vj_usage_pca(
 
     # Transfer old obs columns to new AnnData
     if transfer_mapping is not None:
-        collapsed = gex_data_.obs.drop_duplicates(subset=groupby)
+        collapsed = adata_.obs.drop_duplicates(subset=groupby)
         for to in transfer_mapping:
             mapping = dict(zip(collapsed[groupby], collapsed[to]))
             vdj_adata.obs[to] = vdj_adata.obs.index.map(mapping)
@@ -1786,9 +2212,9 @@ def check_chains(dat_vdj: pd.DataFrame, dat_vj: pd.DataFrame) -> pd.DataFrame:
 
 
 def vdj_sample(
-    vdj_data: DandelionPolars,
+    vdj: DandelionPolars,
     size: int,
-    gex_data: AnnData | MuData | None = None,
+    adata: AnnData | MuData | None = None,
     p: list[float] | np.ndarray[float] | None = None,
     force_replace: bool = False,
     random_state: int | np.random.RandomState | None = None,
@@ -1798,11 +2224,11 @@ def vdj_sample(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         Dandelion object containing VDJ data.
     size : int
         Desired size for resampling.
-    gex_data : AnnData | MuData | None, optional
+    adata : AnnData | MuData | None, optional
         AnnData or MuData object corresponding to the gene expression data.
     p : list[float] | np.ndarray[float] | None, optional
         Drawing probabilities for each cell, must sum to 1. If None, uniform probabilities are used.
@@ -1815,49 +2241,81 @@ def vdj_sample(
     Returns
     -------
     tuple[DandelionPolars, AnnData] | DandelionPolars
-        Resampled Dandelion and AnnData objects if gex_data is provided, otherwise only Dandelion.
+        Resampled Dandelion and AnnData objects if adata is provided, otherwise only Dandelion.
     """
     logg.info("Resampling to {} cells.".format(str(size)))
-    if gex_data is None:
-        replace = True if size > vdj_data._metadata.shape[0] else False
+
+    rng = np.random.default_rng(random_state)
+
+    if adata is None:
+        # Determine if we need replacement
+        # Only collect metadata when needed for numpy indexing
+        if isinstance(vdj._metadata, pl.LazyFrame):
+            metadata = vdj._metadata.collect()
+        else:
+            metadata = vdj._metadata
+
+        n_cells = vdj.n_obs
+        replace = True if size > n_cells else False
         if force_replace:
             replace = True
-        if vdj_data.lazy:
-            vdj_data.to_eager()
-        keep_cells = vdj_data._metadata.sample(
-            size, replace=replace, random_state=random_state, weights=p
+
+        # Use numpy for index-based sampling - more efficient and polars-native
+        if p is not None:
+            p_array = np.asarray(p)
+            p_array = p_array / p_array.sum()  # Ensure probabilities sum to 1
+        else:
+            p_array = None
+
+        # Get sampled indices using numpy
+        sample_indices = rng.choice(
+            n_cells, size=size, replace=replace, p=p_array
         )
-        keep_cells = list(keep_cells.index)
+
+        # Get the cell IDs from metadata at those indices
+        if isinstance(metadata, pl.DataFrame):
+            keep_cells = metadata[sample_indices]["cell_id"].to_list()
+        else:
+            keep_cells = metadata.iloc[sample_indices].index.tolist()
     else:
         # check if MuData and extract the gex modality
-        if hasattr(gex_data, "mod"):
-            adata = gex_data.mod["gex"].copy()
+        if hasattr(adata, "mod"):
+            adata = adata.mod["gex"].copy()
         else:
-            adata = gex_data.copy()
-        # ensure only cells present in both vdj_data and adata are sampled
+            adata = adata.copy()
+        # ensure only cells present in both vdj and adata are sampled
         common_cells = list(
-            set(vdj_data._metadata.index).intersection(set(adata.obs_names))
+            set(vdj._metadata.index).intersection(set(adata.obs_names))
         )
         adata = adata[adata.obs_names.isin(common_cells)].copy()
-        vdj_data = vdj_data[vdj_data._metadata.index.isin(common_cells)].copy()
-        replace = True if size > vdj_data._metadata.shape[0] else False
+        vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
+
+        replace = True if size > vdj._metadata.shape[0] else False
         if force_replace:
             replace = True
         # use scanpy to sample
         sc.pp.sample(adata, n=size, replace=replace, rng=random_state, p=p)
         keep_cells = list(adata.obs_names)
 
-    # get the .data without ambiguous assignments
-    if "ambiguous" in vdj_data._data:
-        vdj_dat = vdj_data._data[
-            vdj_data._data["ambiguous"].isin(FALSES)
-        ].copy()
+    # Get the .data without ambiguous assignments
+    if isinstance(vdj._data, pl.LazyFrame):
+        cols = set(vdj._data.collect_schema().names())
     else:
-        vdj_dat = vdj_data._data.copy()
+        cols = set(vdj._data.columns)
 
-    vdj_dat = vdj_dat[vdj_dat["cell_id"].isin(keep_cells)].copy()
+    if "ambiguous" in cols:
+        vdj_dat = vdj._data.filter(pl.col("ambiguous").is_in(FALSES))
+    else:
+        vdj_dat = vdj._data.clone()
+
+    # Filter to keep only sampled cells
+    vdj_dat = vdj_dat.filter(pl.col("cell_id").is_in(keep_cells))
 
     if replace:
+        # For replacement logic, need to collect if lazy
+        if isinstance(vdj_dat, pl.LazyFrame):
+            vdj_dat = vdj_dat.collect()
+
         # sample with replacement
         cell_counts = Counter(keep_cells)
 
@@ -1868,50 +2326,82 @@ def vdj_sample(
 
         if duplicated_cells:
             # Separate data for duplication
-            vdj_dat_to_duplicate = vdj_dat[
-                vdj_dat["cell_id"].isin(duplicated_cells.keys())
-            ].copy()
-            vdj_dat_to_keep = vdj_dat[
-                ~vdj_dat["cell_id"].isin(duplicated_cells.keys())
-            ].copy()
+            if isinstance(vdj_dat, pl.DataFrame):
+                vdj_dat_to_duplicate = vdj_dat.filter(
+                    pl.col("cell_id").is_in(list(duplicated_cells.keys()))
+                ).clone()
+                vdj_dat_to_keep = vdj_dat.filter(
+                    ~pl.col("cell_id").is_in(list(duplicated_cells.keys()))
+                ).clone()
+            else:
+                vdj_dat_to_duplicate = vdj_dat[
+                    vdj_dat["cell_id"].isin(duplicated_cells.keys())
+                ].copy()
+                vdj_dat_to_keep = vdj_dat[
+                    ~vdj_dat["cell_id"].isin(duplicated_cells.keys())
+                ].copy()
 
             # Create duplicates for both dat and adata in one loop
             all_duplicated_vdj = []
 
             for cell_id, count in duplicated_cells.items():
                 # Duplicate dat rows
-                cell_rows = vdj_dat_to_duplicate[
-                    vdj_dat_to_duplicate["cell_id"] == cell_id
-                ].copy()
+                if isinstance(vdj_dat, pl.DataFrame):
+                    cell_rows = vdj_dat_to_duplicate.filter(
+                        pl.col("cell_id") == cell_id
+                    ).clone()
+                else:
+                    cell_rows = vdj_dat_to_duplicate[
+                        vdj_dat_to_duplicate["cell_id"] == cell_id
+                    ].copy()
 
                 for i in range(count):
                     suffix = f"-{str(i)}" if i > 0 else ""
 
                     # Add dat rows
-                    temp_rows = cell_rows.copy()
+                    temp_rows = (
+                        cell_rows.clone()
+                        if isinstance(cell_rows, pl.DataFrame)
+                        else cell_rows.copy()
+                    )
                     if suffix:
-                        temp_rows["cell_id"] = temp_rows["cell_id"] + suffix
-                        temp_rows["sequence_id"] = (
-                            temp_rows["sequence_id"] + suffix
-                        )
+                        if isinstance(temp_rows, pl.DataFrame):
+                            temp_rows = temp_rows.with_columns(
+                                [
+                                    (pl.col("cell_id") + suffix).alias(
+                                        "cell_id"
+                                    ),
+                                    (pl.col("sequence_id") + suffix).alias(
+                                        "sequence_id"
+                                    ),
+                                ]
+                            )
+                        else:
+                            temp_rows["cell_id"] = temp_rows["cell_id"] + suffix
+                            temp_rows["sequence_id"] = (
+                                temp_rows["sequence_id"] + suffix
+                            )
                     all_duplicated_vdj.append(temp_rows)
 
             # Combine everything back together
-            vdj_dat = pd.concat(
-                [vdj_dat_to_keep] + all_duplicated_vdj, ignore_index=True
-            )
+            if isinstance(vdj_dat, pl.DataFrame):
+                vdj_dat = pl.concat([vdj_dat_to_keep] + all_duplicated_vdj)
+            else:
+                vdj_dat = pd.concat(
+                    [vdj_dat_to_keep] + all_duplicated_vdj, ignore_index=True
+                )
 
     # reinitialise a copy of the sampled dandelion object using vdj_dat
-    vdj_data = DandelionPolars(vdj_dat)
-    if gex_data is not None:
+    vdj = DandelionPolars(vdj_dat)
+    if adata is not None:
         adata.obs_names_make_unique()
-        if hasattr(gex_data, "mod"):
+        if hasattr(adata, "mod"):
             # if MuData, update the gex modality
-            return vdj_data, to_scirpy(vdj_data, gex_adata=adata)
+            return vdj, to_scirpy(vdj, gex_adata=adata)
         else:
-            return vdj_data, adata
+            return vdj, adata
     else:
-        return vdj_data
+        return vdj
 
 
 def to_scirpy(
@@ -2562,18 +3052,19 @@ def concat(
     else:
         concat_meta = vdj_concat._metadata
 
-    # Filter and reorder to match metadata_index_order
+    # Create a mapping dataframe with desired order
+    order_df = pl.DataFrame(
+        {
+            "cell_id": metadata_index_order,
+            "_original_order": range(len(metadata_index_order)),
+        }
+    )
+
+    # Join to add order column, then sort and drop
     reordered_meta = (
-        concat_meta.filter(pl.col("cell_id").is_in(metadata_index_order))
-        .with_columns(
-            pl.col("cell_id")
-            .replace_strict(
-                metadata_index_order, list(range(len(metadata_index_order)))
-            )
-            .alias("_order")
-        )
-        .sort("_order")
-        .drop("_order")
+        concat_meta.join(order_df, on="cell_id", how="inner")
+        .sort("_original_order")
+        .drop("_original_order")
     )
 
     vdj_concat._metadata = (
@@ -2581,208 +3072,6 @@ def concat(
     )
 
     return vdj_concat
-
-
-# ============================================================================
-# Polars-native find_clones implementation with vectorized helper functions
-# ============================================================================
-
-
-def _clustering_polars(
-    distance_dict: dict, threshold: float, sequences: list[str]
-) -> dict:
-    """
-    Cluster sequences based on pairwise hamming distance.
-
-    Reimplementation of pandas clustering algorithm to ensure exact parity.
-
-    Parameters
-    ----------
-    distance_dict : dict
-        Dictionary mapping (i, j) tuples to hamming distances.
-    threshold : float
-        Distance threshold for clustering.
-    sequences : list[str]
-        List of sequences.
-
-    Returns
-    -------
-    dict
-        Dictionary mapping sequences to cluster groups.
-    """
-    out_dict = {}
-
-    # Find unique indices (same as pandas flatten logic)
-    i_unique = list(set(flatten(distance_dict)))
-
-    # Build i_pair_d matrix (which pairs are compatible)
-    # This checks both (i1, i2) and (i2, i1) directions
-    i_pair_d = {
-        (i1, i2): (
-            distance_dict[(i1, i2)] <= threshold
-            if (i1, i2) in distance_dict
-            else False
-        )
-        for i1, i2 in product(i_unique, repeat=2)
-    }
-    i_pair_d.update(
-        {
-            (i2, i1): (
-                distance_dict[(i2, i1)] <= threshold
-                if (i2, i1) in distance_dict
-                else False
-            )
-            for i1, i2 in product(i_unique, repeat=2)
-        }
-    )
-
-    # Find which pairs can group together
-    canbetogether = defaultdict(list)
-    for ii1, ii2 in product(i_unique, repeat=2):
-        if i_pair_d[(ii1, ii2)] or i_pair_d[(ii2, ii1)]:
-            if (ii1, ii2) in distance_dict:
-                canbetogether[ii1].append((ii1, ii2))
-                canbetogether[ii2].append((ii1, ii2))
-            elif (ii2, ii1) in distance_dict:
-                canbetogether[ii2].append((ii2, ii1))
-                canbetogether[ii1].append((ii2, ii1))
-        else:
-            if (ii1, ii2) or (ii2, ii1) in distance_dict:
-                canbetogether[ii1].append(())
-                canbetogether[ii2].append(())
-
-    # Remove empty tuples and deduplicate
-    for x in canbetogether:
-        canbetogether[x] = list({y for y in canbetogether[x] if len(y) > 0})
-
-    # Convert indices to sequences
-    for x in canbetogether:
-        if len(canbetogether[x]) > 0:
-            # Flatten all paired indices and convert to sequences
-            paired_indices = list(flatten(canbetogether[x]))
-            out_dict[sequences[x]] = tuple(
-                sorted(
-                    set([sequences[y] for y in paired_indices] + [sequences[x]])
-                )
-            )
-        else:
-            out_dict[sequences[x]] = tuple([sequences[x]])
-
-    return out_dict
-
-
-def group_sequences_polars(
-    df: pl.DataFrame | pl.LazyFrame,
-    junction_key: str,
-    recalculate_length: bool = True,
-    by_alleles: bool = False,
-    locus: Literal["ig", "tr-ab", "tr-gd"] = "ig",
-) -> tuple[Tree, Tree]:
-    """
-    Group sequences by V/J genes and junction length using vectorized polars.
-
-    Vectorized polars implementation that groups contigs by (V gene, J gene)
-    pairs and then by junction length. Uses polars string operations for
-    allele stripping and grouping.
-
-    Parameters
-    ----------
-    df : pl.DataFrame | pl.LazyFrame
-        Input AIRR dataframe.
-    junction_key : str
-        Column name for junction sequences (e.g., 'junction', 'junction_aa').
-    recalculate_length : bool, optional
-        Whether to recalculate junction length from sequences.
-    by_alleles : bool, optional
-        Whether to group by alleles or genes.
-    locus : Literal["ig", "tr-ab", "tr-gd"], optional
-        Locus type.
-
-    Returns
-    -------
-    tuple[Tree, Tree]
-        (vj_len_grp, seq_grp) - Trees grouping contigs by V/J and length.
-    """
-    locus_log1_dict = {"ig": "IGH", "tr-ab": "TRB", "tr-gd": "TRD"}
-
-    # Collect if lazy
-    if isinstance(df, pl.LazyFrame):
-        df = df.collect()
-
-    v_col = VCALLG if VCALLG in df.columns else VCALL
-
-    # Vectorized V/J gene stripping using polars string operations
-    if not by_alleles:
-        df_aug = df.with_columns(
-            [
-                pl.col(v_col)
-                .str.replace_all(STRIPALLELENUM, "")
-                .alias("_v_gene"),
-                pl.col(JCALL)
-                .str.replace_all(STRIPALLELENUM, "")
-                .alias("_j_gene"),
-            ]
-        )
-    else:
-        df_aug = df.with_columns(
-            [
-                pl.col(v_col).alias("_v_gene"),
-                pl.col(JCALL).alias("_j_gene"),
-            ]
-        )
-
-    # Calculate or use existing junction length
-    if recalculate_length:
-        # Set length to 0 for null values, otherwise calculate from sequence
-        df_aug = df_aug.with_columns(
-            pl.when(pl.col(junction_key).is_null())
-            .then(pl.lit(0))
-            .otherwise(pl.col(junction_key).cast(pl.String).str.len_bytes())
-            .alias("_junction_length")
-        )
-    else:
-        length_col = junction_key + "_length"
-        if length_col not in df_aug.columns:
-            raise ValueError(
-                "{} not found in {} input table.".format(
-                    length_col, locus_log1_dict[locus]
-                )
-            )
-        df_aug = df_aug.with_columns(
-            pl.col(length_col).alias("_junction_length")
-        )
-
-    # Filter out rows with null V/J genes or null junction (these can't be properly grouped)
-    # This prevents None values from being used as dictionary keys
-    df_aug = df_aug.filter(
-        pl.col("_v_gene").is_not_null()
-        & pl.col("_j_gene").is_not_null()
-        & pl.col(junction_key).is_not_null()
-    )
-
-    # Build trees by iterating through rows
-    # This matches the pandas version exactly (including handling of None values)
-    vj_len_grp = Tree()
-    seq_grp = Tree()
-
-    for row in df_aug.iter_rows(named=True):
-        v_gene = row["_v_gene"]
-        j_gene = row["_j_gene"]
-        length = row["_junction_length"]
-        seq_id = row["sequence_id"]
-        seq = row[junction_key]
-
-        vj_key = (v_gene, j_gene)
-
-        # Build vj_len_grp: maps (V, J) -> length -> contig_id -> sequence
-        vj_len_grp[vj_key][length][seq_id].value = 1
-        vj_len_grp[vj_key][length][seq_id] = seq
-
-        # Build seq_grp: maps (V, J) -> length -> sequence -> value
-        # This groups identical sequences together
-        seq_grp[vj_key][length][seq].value = 1
-
-    return vj_len_grp, seq_grp
 
 
 def group_pairwise_hamming_distance_polars(
@@ -2966,6 +3255,9 @@ def refine_clone_assignment_polars(
     if isinstance(df, pl.LazyFrame):
         df = df.collect()
 
+    # Add row index to maintain order
+    df = df.with_row_index("_original_order")
+
     # Build cell->clone tree and seq->cell tree
     cellclonetree = Tree()
     seqcellclonetree = Tree()
@@ -3024,23 +3316,9 @@ def refine_clone_assignment_polars(
                 if present(cl):
                     fintree[c].append(cl)
 
-        # Deduplicate and pick best representative
-        # Prefer combined VDJ_VJ clones over separate VDJ or VJ clones
-        # If multiple options, pick the first VDJ-containing one
+        # Join all alternatives with "|" (same as pandas version)
         if fintree[c]:
-            clone_options = list(set(fintree[c]))
-
-            # Sort to prefer VDJ versions
-            vdj_clones = [c for c in clone_options if "VDJ" in c]
-            vj_only_clones = [c for c in clone_options if "VDJ" not in c]
-
-            if vdj_clones:
-                # Pick the first VDJ clone (they're all from the same cell anyway)
-                fintree[c] = sorted(vdj_clones)[0]
-            elif vj_only_clones:
-                fintree[c] = sorted(vj_only_clones)[0]
-            else:
-                fintree[c] = sorted(clone_options)[0]
+            fintree[c] = "|".join(sorted(fintree[c]))
         else:
             fintree[c] = ""
 
@@ -3050,261 +3328,20 @@ def refine_clone_assignment_polars(
     # Update dataframe with refined clones using map_elements
     df = df.with_columns(
         pl.col("cell_id")
-        .map_elements(lambda x: cell_clone_map.get(x, ""), return_dtype=pl.Utf8)
+        .map_elements(
+            lambda x: cell_clone_map.get(x, ""), return_dtype=pl.String
+        )
         .alias(clone_key)
     )
+
+    # Restore original order and drop the tracking column
+    df = df.sort("_original_order").drop("_original_order")
 
     return df
 
 
-def check_chains_polars(
-    df: pl.DataFrame | pl.LazyFrame,
-    locus_dict1: list[str],
-    locus_dict2: list[str],
-) -> tuple[bool, bool]:
-    """
-    Check if VDJ and VJ chains exist for a locus using polars.
-
-    Vectorized check using polars filtering operations.
-
-    Parameters
-    ----------
-    df : pl.DataFrame | pl.LazyFrame
-        Input AIRR dataframe.
-    locus_dict1 : list[str]
-        VDJ loci (e.g., ['IGH'], ['TRB']).
-    locus_dict2 : list[str]
-        VJ loci (e.g., ['IGK', 'IGL'], ['TRA']).
-
-    Returns
-    -------
-    tuple[bool, bool]
-        (has_vdj, has_vj) indicating presence of chains.
-    """
-    if isinstance(df, pl.LazyFrame):
-        df = df.collect()
-
-    # Vectorized check for VDJ chains
-    has_vdj = df.filter(pl.col("locus").is_in(locus_dict1)).shape[0] > 0
-
-    # Vectorized check for VJ chains
-    has_vj = df.filter(pl.col("locus").is_in(locus_dict2)).shape[0] > 0
-
-    return has_vdj, has_vj
-
-
-def find_clones_polars(
-    vdj_data: DandelionPolars,
-    identity: float | dict = 0.85,
-    key: str | dict | None = None,
-    by_alleles: bool = False,
-    key_added: str | None = None,
-    recalculate_length: bool = True,
-    verbose: bool = True,
-    locus_dict: dict | None = None,
-) -> DandelionPolars:
-    """
-    Find clones from AIRR data using polars-native vectorized implementation.
-
-    Identifies B/T cell clones based on hamming distance of junction sequences
-    within (V, J) gene pairs. Uses vectorized polars operations for grouping
-    and filtering, with hamming distance computed via scipy.
-
-    Parameters
-    ----------
-    vdj_data : DandelionPolars
-        Input DandelionPolars object.
-    identity : float | dict, optional
-        Identity threshold for hamming distance (0-1). Default 0.85. If provided as a dictionary, please use the following
-        keys: 'ig', 'tr-ab', 'tr-gd'.
-    key : str | dict | None, optional
-        Column name for performing clone clustering. `None` defaults to a dictionary where:
-            {'ig': 'junction_aa', 'tr-ab': 'junction', 'tr-gd': 'junction'}
-        If provided as a string, this key will be used for all loci.
-    by_alleles : bool, optional
-        Whether or not to collapse alleles to genes. Default is False.
-    key_added : str | None, optional
-        If specified, this will be the column name for clones. `None` defaults to 'clone_id'.
-    recalculate_length : bool, optional
-        Whether or not to re-calculate junction length, rather than rely on parsed assignment (which occasionally is
-        wrong). Default is True.
-    verbose : bool, optional
-        Whether or not to print progress.
-    locus_dict : dict | None, optional
-        Dictionary mapping loci to (vdj_loci, vj_loci) tuples. Used internally.
-
-    Returns
-    -------
-    DandelionPolars
-        DandelionPolars with clone column added.
-    """
-    # Get dataframe
-    df = vdj_data._data
-    if isinstance(df, pl.LazyFrame):
-        df = df.collect()
-
-    # Default locus dictionary
-    if locus_dict is None:
-        locus_dict = {
-            "ig": (["IGH"], ["IGK", "IGL"]),
-            "tr-ab": (["TRB"], ["TRA"]),
-            "tr-gd": (["TRD"], ["TRG"]),
-        }
-
-    # Default identity
-    if isinstance(identity, dict):
-        default_identity = {"ig": 0.85, "tr-ab": 1.0, "tr-gd": 1.0}
-        default_identity.update(identity)
-        identity = default_identity
-    elif not isinstance(identity, dict):
-        # Single float value - use for all loci
-        identity = {"ig": identity, "tr-ab": identity, "tr-gd": identity}
-
-    # Default key (junction column)
-    if key is None:
-        default_key = {
-            "ig": "junction_aa",
-            "tr-ab": "junction",
-            "tr-gd": "junction",
-        }
-        key = default_key
-    elif isinstance(key, str):
-        # Single string - use for all loci
-        key = {"ig": key, "tr-ab": key, "tr-gd": key}
-
-    # Default key_added
-    if key_added is None:
-        key_added = "clone_id"
-
-    # Initialize clone column
-    df = df.with_columns(pl.lit("").alias(key_added))
-
-    # Process each locus
-    clone_dict_all = {}
-
-    for locus, (vdj_loci, vj_loci) in locus_dict.items():
-        # Filter to this locus
-        df_locus = df.filter(pl.col("locus").is_in(vdj_loci + vj_loci))
-
-        if df_locus.shape[0] == 0:
-            continue
-
-        # Get locus-specific identity and key
-        locus_identity = identity[locus]
-        locus_key = key[locus]
-
-        # Check for VDJ and VJ chains
-        has_vdj, has_vj = check_chains_polars(df_locus, vdj_loci, vj_loci)
-
-        clone_dict_vj_all = {}
-
-        # Process VDJ chains
-        if has_vdj:
-            df_vdj = df_locus.filter(pl.col("locus").is_in(vdj_loci))
-
-            # Group sequences
-            vj_len_grp, seq_grp = group_sequences_polars(
-                df_vdj,
-                locus_key,
-                recalculate_length=recalculate_length,
-                by_alleles=by_alleles,
-                locus=locus,
-            )
-
-            # Find clones
-            cid_vdj = group_pairwise_hamming_distance_polars(
-                vj_len_grp,
-                seq_grp,
-                identity=locus_identity,
-                locus=locus,
-                chain="VDJ",
-                junction_key=locus_key,
-                verbose=verbose,
-            )
-
-            # Rename clone IDs
-            clone_dict_vdj = rename_clonotype_ids_polars(
-                cid_vdj, prefix=f"B_VDJ_"
-            )
-            clone_dict_all.update(clone_dict_vdj)
-
-        # Process VJ chains
-        if has_vj:
-            df_vj = df_locus.filter(pl.col("locus").is_in(vj_loci))
-
-            # Group sequences
-            vj_len_grp, seq_grp = group_sequences_polars(
-                df_vj,
-                locus_key,
-                recalculate_length=True,
-                by_alleles=by_alleles,
-                locus=locus,
-            )
-
-            # Find clones
-            cid_vj = group_pairwise_hamming_distance_polars(
-                vj_len_grp,
-                seq_grp,
-                identity=locus_identity,
-                locus=locus,
-                chain="VJ",
-                junction_key=locus_key,
-                verbose=verbose,
-            )
-
-            # Rename clone IDs
-            clone_dict_vj = rename_clonotype_ids_polars(cid_vj, prefix=f"B_VJ_")
-            clone_dict_vj_all.update(clone_dict_vj)
-            clone_dict_all.update(clone_dict_vj)
-
-            # Refine VDJ assignments based on VJ at cell level
-            if has_vdj:
-                # First, add initial VDJ and VJ assignments to df for refinement
-                # This includes both VDJ and VJ sequences with their initial clone IDs
-                df_for_refine = df_locus.with_columns(
-                    pl.col("sequence_id")
-                    .map_elements(
-                        lambda x: clone_dict_all.get(x, ""),
-                        return_dtype=pl.Utf8,
-                    )
-                    .alias(key_added)
-                )
-
-                # Refine assignments based on VJ pairing at cell level
-                # This combines VDJ and VJ clone IDs for contigs in the same cell
-                df_refined = refine_clone_assignment_polars(
-                    df_for_refine,
-                    key_added,
-                    clone_dict_vj_all,
-                    verbose=verbose,
-                )
-
-                # Extract refined assignments for ALL sequences (both VDJ and VJ)
-                # This ensures that all contigs in a cell get the same combined clone ID
-                for row in df_refined.iter_rows(named=True):
-                    seq_id = row["sequence_id"]
-                    clone_id = row[key_added]
-                    if clone_id and clone_id != "":
-                        clone_dict_all[seq_id] = clone_id
-
-    # Map sequence IDs to clone IDs in dataframe
-    df = df.with_columns(
-        pl.col("sequence_id")
-        .map_elements(lambda x: clone_dict_all.get(x, ""), return_dtype=pl.Utf8)
-        .alias(key_added)
-    )
-
-    # Update DandelionPolars with cloned dataframe
-    vdj_data._data = df if not vdj_data.lazy else df.lazy()
-
-    # Update metadata with clone information
-    vdj_data.update_metadata(clone_key=key_added)
-
-    return vdj_data
-
-
 def clone_size_polars(
-    vdj_data,  # DandelionPolars type
+    vdj,  # DandelionPolars type
     groupby: str | None = None,
     max_size: int | None = None,
     clone_key: str | None = None,
@@ -3321,7 +3358,7 @@ def clone_size_polars(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars
+    vdj : DandelionPolars
         VDJ data.
     groupby : str | None, optional
         Column in metadata to group by before calculating clone sizes.
@@ -3334,7 +3371,7 @@ def clone_size_polars(
         Prefix for new metadata column names.
     """
     # Get metadata
-    metadata_ = vdj_data._metadata
+    metadata_ = vdj._metadata
     if isinstance(metadata_, pl.LazyFrame):
         metadata_ = metadata_.collect()
 
@@ -3351,7 +3388,7 @@ def clone_size_polars(
         .select(
             [
                 pl.col("_row_idx"),
-                pl.col(clone_key).cast(pl.Utf8).alias("_clone_orig"),
+                pl.col(clone_key).cast(pl.String).alias("_clone_orig"),
             ]
         )
         .with_columns(
@@ -3409,7 +3446,7 @@ def clone_size_polars(
         clonesize = clonesize.with_columns(
             [
                 pl.when(pl.col("size") < max_size)
-                .then(pl.col("size").cast(pl.Utf8))
+                .then(pl.col("size").cast(pl.String))
                 .otherwise(pl.lit(f">= {max_size}"))
                 .alias("size_category")
             ]
@@ -3535,11 +3572,11 @@ def clone_size_polars(
         )
 
     # Update metadata
-    vdj_data._metadata = metadata_ if not vdj_data.lazy else metadata_.lazy()
+    vdj._metadata = metadata_ if not vdj.lazy else metadata_.lazy()
 
 
 def clone_overlap_polars(
-    vdj_data,  # DandelionPolars type
+    vdj,  # DandelionPolars type
     groupby: str,
     min_clone_size: int | None = None,
     weighted_overlap: bool = False,
@@ -3550,7 +3587,7 @@ def clone_overlap_polars(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars
+    vdj : DandelionPolars
         DandelionPolars object.
     groupby : str
         Column name in metadata for collapsing to columns in the clone_id x groupby data frame.
@@ -3572,7 +3609,7 @@ def clone_overlap_polars(
         If min_clone_size is 0.
     """
     # Get metadata
-    metadata_ = vdj_data._metadata
+    metadata_ = vdj._metadata
     if isinstance(metadata_, pl.LazyFrame):
         metadata_ = metadata_.collect()
 
@@ -3601,7 +3638,7 @@ def clone_overlap_polars(
         .select(
             [
                 pl.col("_idx"),
-                pl.col(clone_).cast(pl.Utf8).alias("_clone_orig"),
+                pl.col(clone_).cast(pl.String).alias("_clone_orig"),
                 pl.col(groupby),
             ]
         )
@@ -3667,3 +3704,107 @@ def clone_overlap_polars(
                     )
 
     return overlap
+
+
+def productive_ratio(
+    adata: AnnData,
+    vdj: DandelionPolars,
+    groupby: str,
+    groups: list[str] | None = None,
+    locus: Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"] = "TRB",
+):
+    """
+    Compute the cell-level productive/non-productive contig ratio.
+
+    Only the contig with the highest umi count in a cell will be used for this
+    tabulation.
+
+    Returns inplace AnnData with `.uns['productive_ratio']`.
+
+    Parameters
+    ----------
+    adata : AnnData
+        AnnData object holding the cell level metadata (`.obs`).
+    vdj : DandelionPolars
+        DandelionPolars object holding the repertoire data (`.data`).
+    groupby : str
+        Name of column in `AnnData.obs` to return the row tabulations.
+    groups : list[str] | None, optional
+        Optional list of categories to return.
+    locus : Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"], optional
+        One of the accepted locuses to perform the tabulation
+    """
+    start = logg.info("Tabulating productive ratio")
+
+    # Filter to cells present in adata
+    vdjx = vdj[vdj._metadata["cell_id"].is_in(list(adata.obs_names))]
+
+    # Get data, handling lazy frames
+    if isinstance(vdjx._data, pl.LazyFrame):
+        data = vdjx._data.collect()
+    else:
+        data = vdjx._data
+
+    # Filter by locus and ambiguous status
+    if "ambiguous" in data.columns:
+        data_filtered = data.filter(
+            (pl.col("locus") == locus) & (pl.col("ambiguous").is_in(FALSES))
+        )
+    else:
+        data_filtered = data.filter(pl.col("locus") == locus)
+
+    # Drop duplicates on cell_id, keeping first (highest umi due to sorting)
+    df_unique = data_filtered.unique(subset=["cell_id"], keep="first")
+
+    # Create mapping of cell_id to productive status
+    dict_df = dict(zip(df_unique["cell_id"], df_unique["productive"]))
+
+    # Determine groups if not provided
+    if groups is None:
+        if is_categorical(adata.obs[groupby]):
+            groups = list(adata.obs[groupby].cat.categories)
+        else:
+            groups = list(set(adata.obs[groupby]))
+
+    # Initialize results DataFrame
+    res = pd.DataFrame(
+        columns=["productive", "non-productive", "total"],
+        index=groups,
+    )
+
+    # Add productive status to adata
+    adata.obs[locus + "_productive"] = pd.Series(dict_df)
+
+    # Calculate ratios per group
+    for i in range(res.shape[0]):
+        cell = res.index[i]
+        res.loc[cell, "total"] = sum(adata.obs[groupby] == cell)
+        if res.loc[cell, "total"] > 0:
+            res.loc[cell, "productive"] = (
+                sum(
+                    adata.obs.loc[
+                        adata.obs[groupby] == cell, locus + "_productive"
+                    ].isin(["T"])
+                )
+                / res.loc[cell, "total"]
+                * 100
+            )
+            res.loc[cell, "non-productive"] = (
+                sum(
+                    adata.obs.loc[
+                        adata.obs[groupby] == cell, locus + "_productive"
+                    ].isin(["F"])
+                )
+                / res.loc[cell, "total"]
+                * 100
+            )
+
+    res[groupby] = res.index
+    res["productive+non-productive"] = res["productive"] + res["non-productive"]
+    out = {"results": res, "locus": locus, "groupby": groupby}
+    adata.uns["productive_ratio"] = out
+    logg.info(
+        " finished",
+        time=start,
+        deep=("Updated AnnData: \n" "   'uns', productive_ratio"),
+    )

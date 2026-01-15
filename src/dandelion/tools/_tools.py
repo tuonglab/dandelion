@@ -44,7 +44,7 @@ from dandelion.utilities._utilities import (
 
 
 def find_clones(
-    vdj_data: Dandelion | pd.DataFrame,
+    vdj: Dandelion | pd.DataFrame,
     identity: dict[str, float] | float = 0.85,
     key: dict[str, str] | str | None = None,
     by_alleles: bool = False,
@@ -58,7 +58,7 @@ def find_clones(
 
     Parameters
     ----------
-    vdj_data : Dandelion | pd.DataFrame
+    vdj : Dandelion | pd.DataFrame
         Dandelion object, pandas DataFrame in changeo/airr format, or file path to changeo/airr file
         after clones have been determined.
     identity : dict[str, float] | float, optional
@@ -92,10 +92,10 @@ def find_clones(
     """
     start = logg.info("Finding clonotypes")
     pd.set_option("mode.chained_assignment", None)
-    if isinstance(vdj_data, Dandelion):
-        dat_ = load_data(vdj_data._data)
+    if isinstance(vdj, Dandelion):
+        dat_ = load_data(vdj._data)
     else:
-        dat_ = load_data(vdj_data)
+        dat_ = load_data(vdj)
 
     clone_key = key_added if key_added is not None else "clone_id"
     dat_[clone_key] = ""
@@ -226,14 +226,14 @@ def find_clones(
                     dat_.at[i, clone_key] = row[clone_key]
 
     # dat_[clone_key].replace('', 'unassigned')
-    if os.path.isfile(str(vdj_data)):
-        data_path = Path(vdj_data)
+    if os.path.isfile(str(vdj)):
+        data_path = Path(vdj)
         write_airr(dat_, data_path.parent / (data_path.stem + "_clone.tsv"))
     if verbose:
         logg.info("Initialising Dandelion object")
-    if isinstance(vdj_data, Dandelion):
-        vdj_data._data[str(clone_key)] = dat_[str(clone_key)]
-        vdj_data.update_metadata(clone_key=str(clone_key))
+    if isinstance(vdj, Dandelion):
+        vdj._data[str(clone_key)] = dat_[str(clone_key)]
+        vdj.update_metadata(clone_key=str(clone_key))
         logg.info(
             " finished",
             time=start,
@@ -243,7 +243,7 @@ def find_clones(
                 "   'metadata', cell-indexed observations table\n"
             ),
         )
-        return vdj_data
+        return vdj
     else:
         out = Dandelion(
             data=dat_,
@@ -264,8 +264,8 @@ def find_clones(
 
 
 def transfer(
-    gex_data: AnnData | MuData,
-    vdj_data: Dandelion,
+    adata: AnnData | MuData,
+    vdj: Dandelion,
     expanded: bool = False,
     gex_key: str | None = None,
     vdj_key: str | None = None,
@@ -287,9 +287,9 @@ def transfer(
 
     Parameters
     ----------
-    gex_data : AnnData | MuData
+    adata : AnnData | MuData
         AnnData object or `MuData` object.
-    vdj_data : Dandelion
+    vdj : Dandelion
         Dandelion object.
     expanded : bool, optional
         Whether or not to transfer the embedding with all cells with BCR (False) or only for expanded clones (True).
@@ -310,24 +310,24 @@ def transfer(
 
     # if the provide adata is an MuData, we need to transfer to mudata.mod['gex']
     # but we don’t want to add mudata as a dependency here, so we do a duck-typing check
-    if hasattr(gex_data, "mod"):
-        if "airr" in gex_data.mod:
-            recipient = gex_data.mod["airr"]
+    if hasattr(adata, "mod"):
+        if "airr" in adata.mod:
+            recipient = adata.mod["airr"]
         else:
             raise ValueError(
                 "Provided AnnData is a MuData object without 'airr' modality."
             )
-    # we just associate recipient to gex_data directly
+    # we just associate recipient to adata directly
     else:
-        recipient = gex_data
+        recipient = adata
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
-        for x in vdj_data._metadata.columns:
+        for x in vdj._metadata.columns:
             if x not in recipient.obs.columns:
-                recipient.obs[x] = pd.Series(vdj_data._metadata[x])
+                recipient.obs[x] = pd.Series(vdj._metadata[x])
             elif overwrite is True:
-                recipient.obs[x] = pd.Series(vdj_data._metadata[x])
-            if type_check(vdj_data._metadata, x):
+                recipient.obs[x] = pd.Series(vdj._metadata[x])
+            if type_check(vdj._metadata, x):
                 recipient.obs[x] = recipient.obs[x].replace(np.nan, "No_contig")
             if recipient.obs[x].dtype == "bool":
                 recipient.obs[x] = recipient.obs[x].astype(str)
@@ -337,19 +337,19 @@ def transfer(
             if not isinstance(overwrite, list):
                 overwrite = [overwrite]
             for ow in overwrite:
-                recipient.obs[ow] = pd.Series(vdj_data._metadata[ow])
-                if type_check(vdj_data._metadata, ow):
+                recipient.obs[ow] = pd.Series(vdj._metadata[ow])
+                if type_check(vdj._metadata, ow):
                     recipient.obs[ow] = recipient.obs[ow].replace(
                         np.nan, "No_contig"
                     )
 
-    # also check that all the cells in vdj_data are in recipient
-    common_cells = recipient.obs_names.intersection(vdj_data._metadata.index)
+    # also check that all the cells in vdj are in recipient
+    common_cells = recipient.obs_names.intersection(vdj._metadata.index)
     # subset to common cells only
-    vdj_data = vdj_data[vdj_data._metadata.index.isin(common_cells)].copy()
+    vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
 
     # If there's no graph, we're done with metadata only
-    if vdj_data.graph is None:
+    if vdj.graph is None:
         logg.info(
             " finished", time=start, deep=("updated `.obs` with `.metadata`\n")
         )
@@ -381,9 +381,9 @@ def transfer(
     # handle graph[0] and graph[1]
     for idx in (0, 1):
         G = None
-        if vdj_data.graph is not None:
+        if vdj.graph is not None:
             try:
-                G = vdj_data.graph[idx]
+                G = vdj.graph[idx]
             except Exception:
                 pass
 
@@ -393,9 +393,9 @@ def transfer(
             )
 
     # handle precomputed distances (sparse or DataFrame)
-    if getattr(vdj_data, "distances", None) is not None:
+    if getattr(vdj, "distances", None) is not None:
         graph_connectivities[2], graph_distances[2] = _graph_to_matrices(
-            None, recipient, vdj_data.distances
+            None, recipient, vdj.distances
         )
 
     # Determine main graph index
@@ -491,14 +491,14 @@ def transfer(
 
     if obsm:
         # --- 6) Layouts ---
-        if vdj_data.layout is not None:
+        if vdj.layout is not None:
             stored_embeddings = {}
             for idx, obsm_name in (
                 (0, "X_vdj_all"),
                 (1, "X_vdj_expanded"),
             ):
                 try:
-                    layout = vdj_data.layout[idx]
+                    layout = vdj.layout[idx]
                 except Exception:
                     continue
                 if layout is None:
@@ -651,7 +651,7 @@ def _graph_to_matrices(
 
 
 def clone_view(
-    gex_data: AnnData,
+    adata: AnnData,
     mode: Literal["all", "expanded", "full", "gex"] | None = "expanded",
     connectivities_key: str | None = None,
     distances_key: str | None = None,
@@ -662,7 +662,7 @@ def clone_view(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         The AnnData object.
     mode : Literal["all", "expanded", "full", "gex"] | None, optional
         If specified, set the active connectivities/distances/embedding to one of the preset modes.
@@ -675,21 +675,19 @@ def clone_view(
     """
     if mode is None:
         # use the other key directly
-        if connectivities_key in gex_data.obsp:
-            gex_data.obsp["connectivities"] = gex_data.obsp[
-                connectivities_key
-            ].copy()
+        if connectivities_key in adata.obsp:
+            adata.obsp["connectivities"] = adata.obsp[connectivities_key].copy()
         else:
             raise KeyError(f"{connectivities_key} not found in adata.obsp")
 
-        if distances_key in gex_data.obsp:
-            gex_data.obsp["distances"] = gex_data.obsp[distances_key].copy()
+        if distances_key in adata.obsp:
+            adata.obsp["distances"] = adata.obsp[distances_key].copy()
         else:
             raise KeyError(f"{distances_key} not found in adata.obsp")
 
         if embedding_key is not None:
-            if embedding_key in gex_data.obsm:
-                gex_data.obsm["X_vdj"] = gex_data.obsm[embedding_key].copy()
+            if embedding_key in adata.obsm:
+                adata.obsm["X_vdj"] = adata.obsm[embedding_key].copy()
             else:
                 raise KeyError(f"{embedding_key} not found in adata.obsm")
     else:
@@ -703,14 +701,14 @@ def clone_view(
             dist_key = f"vdj_distances_{mode}"
             neighbors_key = None
             emb_key = f"X_vdj_{mode}" if mode != "full" else None
-        gex_data.obsp["connectivities"] = gex_data.obsp[conn_key].copy()
-        gex_data.obsp["distances"] = gex_data.obsp[dist_key].copy()
+        adata.obsp["connectivities"] = adata.obsp[conn_key].copy()
+        adata.obsp["distances"] = adata.obsp[dist_key].copy()
         if emb_key is not None:
-            gex_data.obsm["X_vdj"] = gex_data.obsm[emb_key].copy()
+            adata.obsm["X_vdj"] = adata.obsm[emb_key].copy()
         if neighbors_key is not None:
-            gex_data.uns["neighbors"] = gex_data.uns[neighbors_key].copy()
+            adata.uns["neighbors"] = adata.uns[neighbors_key].copy()
         else:
-            gex_data.uns["neighbors"] = {
+            adata.uns["neighbors"] = {
                 "connectivities_key": "connectivities",
                 "distances_key": "distances",
                 "params": {
@@ -756,7 +754,7 @@ def tabulate_clone_sizes(
 
 
 def clone_size(
-    vdj_data: Dandelion | AnnData | MuData,
+    vdj: Dandelion | AnnData | MuData,
     groupby: str | None = None,
     max_size: int | None = None,
     clone_key: str | None = None,
@@ -773,7 +771,7 @@ def clone_size(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData | MuData
+    vdj : Dandelion | AnnData | MuData
         VDJ data.
     groupby : str | None, optional
         Column in metadata to group by before calculating clone sizes.
@@ -786,12 +784,12 @@ def clone_size(
         Prefix for new metadata column names.
     """
     # --- Select metadata
-    if hasattr(vdj_data, "mod"):
-        metadata_ = vdj_data.mod["airr"].obs.copy()
-    elif isinstance(vdj_data, AnnData):
-        metadata_ = vdj_data.obs.copy()
-    elif isinstance(vdj_data, Dandelion):
-        metadata_ = vdj_data._metadata.copy()
+    if hasattr(vdj, "mod"):
+        metadata_ = vdj.mod["airr"].obs.copy()
+    elif isinstance(vdj, AnnData):
+        metadata_ = vdj.obs.copy()
+    elif isinstance(vdj, Dandelion):
+        metadata_ = vdj._metadata.copy()
 
     clone_key = "clone_id" if clone_key is None else clone_key
     if clone_key not in metadata_.columns:
@@ -930,48 +928,44 @@ def clone_size(
     # --- Write results back to object
     col_key = key_added if key_added is not None else clone_key
 
-    if isinstance(vdj_data, Dandelion):
-        vdj_data._metadata[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
-        vdj_data._metadata[f"{col_key}_size_prop"] = metadata_[
+    if isinstance(vdj, Dandelion):
+        vdj._metadata[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
+        vdj._metadata[f"{col_key}_size_prop"] = metadata_[
             f"{clone_key}_size_prop"
         ]
-        vdj_data._metadata[f"{col_key}_size_category"] = metadata_[
+        vdj._metadata[f"{col_key}_size_category"] = metadata_[
             f"{clone_key}_size_category"
         ]
         if max_size is not None:
-            vdj_data._metadata[f"{col_key}_size_max_{max_size}"] = metadata_[
+            vdj._metadata[f"{col_key}_size_max_{max_size}"] = metadata_[
                 f"{clone_key}_size_max_{max_size}"
             ]
-    elif isinstance(vdj_data, AnnData):
-        vdj_data.obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
-        vdj_data.obs[f"{col_key}_size_prop"] = metadata_[
-            f"{clone_key}_size_prop"
-        ]
-        vdj_data.obs[f"{col_key}_size_category"] = metadata_[
+    elif isinstance(vdj, AnnData):
+        vdj.obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
+        vdj.obs[f"{col_key}_size_prop"] = metadata_[f"{clone_key}_size_prop"]
+        vdj.obs[f"{col_key}_size_category"] = metadata_[
             f"{clone_key}_size_category"
         ]
         if max_size is not None:
-            vdj_data.obs[f"{col_key}_size_max_{max_size}"] = metadata_[
+            vdj.obs[f"{col_key}_size_max_{max_size}"] = metadata_[
                 f"{clone_key}_size_max_{max_size}"
             ]
-    elif hasattr(vdj_data, "mod"):
-        vdj_data.mod["airr"].obs[f"{col_key}_size"] = metadata_[
-            f"{clone_key}_size"
-        ]
-        vdj_data.mod["airr"].obs[f"{col_key}_size_prop"] = metadata_[
+    elif hasattr(vdj, "mod"):
+        vdj.mod["airr"].obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
+        vdj.mod["airr"].obs[f"{col_key}_size_prop"] = metadata_[
             f"{clone_key}_size_prop"
         ]
-        vdj_data.mod["airr"].obs[f"{col_key}_size_category"] = metadata_[
+        vdj.mod["airr"].obs[f"{col_key}_size_category"] = metadata_[
             f"{clone_key}_size_category"
         ]
         if max_size is not None:
-            vdj_data.mod["airr"].obs[f"{col_key}_size_max_{max_size}"] = (
-                metadata_[f"{clone_key}_size_max_{max_size}"]
-            )
+            vdj.mod["airr"].obs[f"{col_key}_size_max_{max_size}"] = metadata_[
+                f"{clone_key}_size_max_{max_size}"
+            ]
 
 
 def clone_overlap(
-    vdj_data: Dandelion | AnnData,
+    vdj: Dandelion | AnnData,
     groupby: str,
     min_clone_size: int | None = None,
     weighted_overlap: bool = False,
@@ -982,7 +976,7 @@ def clone_overlap(
 
     Parameters
     ----------
-    vdj_data : Dandelion | AnnData
+    vdj : Dandelion | AnnData
         Dandelion or AnnData object.
     groupby : str
         column name in obs/metadata for collapsing to columns in the clone_id x groupby data frame.
@@ -1005,12 +999,12 @@ def clone_overlap(
         if min_clone_size is 0.
     """
     start = logg.info("Calculating clone overlap")
-    if isinstance(vdj_data, Dandelion):
-        data = vdj_data._metadata.copy()
-    elif isinstance(vdj_data, AnnData):
-        data = vdj_data.obs.copy()
-    elif isinstance(vdj_data, MuData):
-        data = vdj_data.mod["airr"].obs.copy()
+    if isinstance(vdj, Dandelion):
+        data = vdj._metadata.copy()
+    elif isinstance(vdj, AnnData):
+        data = vdj.obs.copy()
+    elif isinstance(vdj, MuData):
+        data = vdj.mod["airr"].obs.copy()
 
     if min_clone_size is None:
         min_size = 2
@@ -1074,8 +1068,8 @@ def clone_overlap(
     overlap.index.name = None
     overlap.columns.name = None
 
-    if isinstance(vdj_data, AnnData):
-        vdj_data.uns["clone_overlap"] = overlap.copy()
+    if isinstance(vdj, AnnData):
+        vdj.uns["clone_overlap"] = overlap.copy()
         logg.info(
             " finished",
             time=start,
@@ -1149,8 +1143,8 @@ def clustering(
 
 
 def productive_ratio(
-    gex_data: AnnData,
-    vdj_data: Dandelion,
+    adata: AnnData,
+    vdj: Dandelion,
     groupby: str,
     groups: list[str] | None = None,
     locus: Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"] = "TRB",
@@ -1165,7 +1159,7 @@ def productive_ratio(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         AnnData object holding the cell level metadata (`.obs`).
     vdj : Dandelion
         Dandelion object holding the repertoire data (`.data`).
@@ -1177,7 +1171,7 @@ def productive_ratio(
         One of the accepted locuses to perform the tabulation
     """
     start = logg.info("Tabulating productive ratio")
-    vdjx = vdj_data[(vdj_data._data.cell_id.isin(gex_data.obs_names))].copy()
+    vdjx = vdj[(vdj._data.cell_id.isin(adata.obs_names))].copy()
     if "ambiguous" in vdjx._data:
         tmp = vdjx[
             (vdjx._data.locus == locus) & (vdjx._data.ambiguous == "F")
@@ -1186,10 +1180,10 @@ def productive_ratio(
         tmp = vdjx[(vdjx._data.locus == locus)].copy()
 
     if groups is None:
-        if is_categorical(gex_data.obs[groupby]):
-            groups = list(gex_data.obs[groupby].cat.categories)
+        if is_categorical(adata.obs[groupby]):
+            groups = list(adata.obs[groupby].cat.categories)
         else:
-            groups = list(set(gex_data.obs[groupby]))
+            groups = list(set(adata.obs[groupby]))
     df = tmp._data.drop_duplicates(subset="cell_id")
     dict_df = dict(zip(df.cell_id, df.productive))
     res = pd.DataFrame(
@@ -1197,15 +1191,15 @@ def productive_ratio(
         index=groups,
     )
 
-    gex_data.obs[locus + "_productive"] = pd.Series(dict_df)
+    adata.obs[locus + "_productive"] = pd.Series(dict_df)
     for i in range(res.shape[0]):
         cell = res.index[i]
-        res.loc[cell, "total"] = sum(gex_data.obs[groupby] == cell)
+        res.loc[cell, "total"] = sum(adata.obs[groupby] == cell)
         if res.loc[cell, "total"] > 0:
             res.loc[cell, "productive"] = (
                 sum(
-                    gex_data.obs.loc[
-                        gex_data.obs[groupby] == cell, locus + "_productive"
+                    adata.obs.loc[
+                        adata.obs[groupby] == cell, locus + "_productive"
                     ].isin(["T"])
                 )
                 / res.loc[cell, "total"]
@@ -1213,8 +1207,8 @@ def productive_ratio(
             )
             res.loc[cell, "non-productive"] = (
                 sum(
-                    gex_data.obs.loc[
-                        gex_data.obs[groupby] == cell, locus + "_productive"
+                    adata.obs.loc[
+                        adata.obs[groupby] == cell, locus + "_productive"
                     ].isin(
                         [
                             "F",
@@ -1227,7 +1221,7 @@ def productive_ratio(
     res[groupby] = res.index
     res["productive+non-productive"] = res["productive"] + res["non-productive"]
     out = {"results": res, "locus": locus, "groupby": groupby}
-    gex_data.uns["productive_ratio"] = out
+    adata.uns["productive_ratio"] = out
     logg.info(
         " finished",
         time=start,
@@ -1236,7 +1230,7 @@ def productive_ratio(
 
 
 def vj_usage_pca(
-    gex_data: AnnData,
+    adata: AnnData,
     groupby: str,
     min_size: int = 20,
     mode: Literal["B", "abT", "gdT"] = "abT",
@@ -1261,7 +1255,7 @@ def vj_usage_pca(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         AnnData object holding the cell level metadata with Dandelion VDJ info transferred.
     groupby : str
         Column name in `adata.obs` to groupby as observations for PCA.
@@ -1299,12 +1293,12 @@ def vj_usage_pca(
     start = logg.info("Computing PCA for V/J gene usage")
     # filtering
     if allowed_chain_status is not None:
-        gex_data_ = gex_data[
-            gex_data.obs["chain_status"].isin(allowed_chain_status)
+        adata_ = adata[
+            adata.obs["chain_status"].isin(allowed_chain_status)
         ].copy()
 
     if groups is not None:
-        gex_data_ = gex_data_[gex_data_.obs[groupby].isin(groups)].copy()
+        adata_ = adata_[adata_.obs[groupby].isin(groups)].copy()
     # build config
     gene_config = {
         "vdj_v": dict(
@@ -1332,14 +1326,14 @@ def vj_usage_pca(
         raise ValueError("At least one of the use_vj/vdj_v/j must be True.")
 
     # Determine which groups to keep
-    cell_counts = gex_data_.obs[groupby].value_counts()
+    cell_counts = adata_.obs[groupby].value_counts()
     keep_groups = cell_counts[cell_counts >= min_size].index
 
     # collect gene lists
     gene_lists = {}
     for key, cfg in gene_config.items():
         if cfg["enabled"]:
-            uniq = gex_data_.obs[cfg["main"]].unique().tolist()
+            uniq = adata_.obs[cfg["main"]].unique().tolist()
             gene_lists[key] = [
                 g for g in uniq if g not in ("None", "No_contig")
             ]
@@ -1359,8 +1353,8 @@ def vj_usage_pca(
         desc="Tabulating V/J gene usage",
         disable=not verbose,
     ):
-        group_mask = gex_data_.obs[groupby] == group
-        obs_group = gex_data_.obs.loc[group_mask]
+        group_mask = adata_.obs[groupby] == group
+        obs_group = adata_.obs.loc[group_mask]
 
         for key, cfg in gene_config.items():
             if not cfg["enabled"]:
@@ -1394,7 +1388,7 @@ def vj_usage_pca(
 
     # Transfer old obs columns to new AnnData
     if transfer_mapping is not None:
-        collapsed = gex_data_.obs.drop_duplicates(subset=groupby)
+        collapsed = adata_.obs.drop_duplicates(subset=groupby)
         for to in transfer_mapping:
             mapping = dict(zip(collapsed[groupby], collapsed[to]))
             vdj_adata.obs[to] = vdj_adata.obs.index.map(mapping)
@@ -1764,9 +1758,9 @@ def check_chains(dat_vdj: pd.DataFrame, dat_vj: pd.DataFrame) -> pd.DataFrame:
 
 
 def vdj_sample(
-    vdj_data: Dandelion,
+    vdj: Dandelion,
     size: int,
-    gex_data: AnnData | MuData | None = None,
+    adata: AnnData | MuData | None = None,
     p: list[float] | np.ndarray[float] | None = None,
     force_replace: bool = False,
     random_state: int | np.random.RandomState | None = None,
@@ -1776,11 +1770,11 @@ def vdj_sample(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         Dandelion object containing VDJ data.
     size : int
         Desired size for resampling.
-    gex_data : AnnData | MuData | None, optional
+    adata : AnnData | MuData | None, optional
         AnnData or MuData object corresponding to the gene expression data.
     p : list[float] | np.ndarray[float] | None, optional
         Drawing probabilities for each cell, must sum to 1. If None, uniform probabilities are used.
@@ -1793,30 +1787,30 @@ def vdj_sample(
     Returns
     -------
     tuple[Dandelion, AnnData] | Dandelion
-        Resampled Dandelion and AnnData objects if gex_data is provided, otherwise only Dandelion.
+        Resampled Dandelion and AnnData objects if adata is provided, otherwise only Dandelion.
     """
     logg.info("Resampling to {} cells.".format(str(size)))
-    if gex_data is None:
-        replace = True if size > vdj_data._metadata.shape[0] else False
+    if adata is None:
+        replace = True if size > vdj._metadata.shape[0] else False
         if force_replace:
             replace = True
-        keep_cells = vdj_data._metadata.sample(
+        keep_cells = vdj._metadata.sample(
             size, replace=replace, random_state=random_state, weights=p
         )
         keep_cells = list(keep_cells.index)
     else:
         # check if MuData and extract the gex modality
-        if hasattr(gex_data, "mod"):
-            adata = gex_data.mod["gex"].copy()
+        if hasattr(adata, "mod"):
+            adata = adata.mod["gex"].copy()
         else:
-            adata = gex_data.copy()
-        # ensure only cells present in both vdj_data and adata are sampled
+            adata = adata.copy()
+        # ensure only cells present in both vdj and adata are sampled
         common_cells = list(
-            set(vdj_data._metadata.index).intersection(set(adata.obs_names))
+            set(vdj._metadata.index).intersection(set(adata.obs_names))
         )
         adata = adata[adata.obs_names.isin(common_cells)].copy()
-        vdj_data = vdj_data[vdj_data._metadata.index.isin(common_cells)].copy()
-        replace = True if size > vdj_data._metadata.shape[0] else False
+        vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
+        replace = True if size > vdj._metadata.shape[0] else False
         if force_replace:
             replace = True
         # use scanpy to sample
@@ -1824,12 +1818,10 @@ def vdj_sample(
         keep_cells = list(adata.obs_names)
 
     # get the .data without ambiguous assignments
-    if "ambiguous" in vdj_data._data:
-        vdj_dat = vdj_data._data[
-            vdj_data._data["ambiguous"].isin(FALSES)
-        ].copy()
+    if "ambiguous" in vdj._data:
+        vdj_dat = vdj._data[vdj._data["ambiguous"].isin(FALSES)].copy()
     else:
-        vdj_dat = vdj_data._data.copy()
+        vdj_dat = vdj._data.copy()
 
     vdj_dat = vdj_dat[vdj_dat["cell_id"].isin(keep_cells)].copy()
 
@@ -1878,16 +1870,16 @@ def vdj_sample(
             )
 
     # reinitialise a copy of the sampled dandelion object using vdj_dat
-    vdj_data = Dandelion(vdj_dat)
-    if gex_data is not None:
+    vdj = Dandelion(vdj_dat)
+    if adata is not None:
         adata.obs_names_make_unique()
-        if hasattr(gex_data, "mod"):
+        if hasattr(adata, "mod"):
             # if MuData, update the gex modality
-            return vdj_data, to_scirpy(vdj_data, gex_adata=adata)
+            return vdj, to_scirpy(vdj, gex_adata=adata)
         else:
-            return vdj_data, adata
+            return vdj, adata
     else:
-        return vdj_data
+        return vdj
 
 
 def to_scirpy(

@@ -346,7 +346,7 @@ def creategermlines(
 
 
 def define_clones(
-    vdj_data: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
+    vdj: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
     dist: float,
     action: Literal["first", "set"] = "set",
     model: Literal[
@@ -375,7 +375,7 @@ def define_clones(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
+    vdj : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
         DandelionPolars object, Polars DataFrame/LazyFrame in changeo/airr format, or file path to changeo/airr file after
         clones have been determined.
     dist : float
@@ -426,10 +426,10 @@ def define_clones(
     clone_key = key_added if key_added is not None else "clone_id"
 
     # Load data as Polars
-    if isinstance(vdj_data, DandelionPolars):
-        dat_ = load_polars(vdj_data._data)
+    if isinstance(vdj, DandelionPolars):
+        dat_ = load_polars(vdj._data)
     else:
-        dat_ = load_polars(vdj_data)
+        dat_ = load_polars(vdj)
 
     # Ensure we have eager DataFrame for operations
     if isinstance(dat_, pl.LazyFrame):
@@ -446,8 +446,8 @@ def define_clones(
     dat_l = dat.filter(pl.col("locus").is_in(["IGK", "IGL"]))
 
     # Setup output directories
-    if os.path.isfile(str(vdj_data)):
-        vdj_path = Path(vdj_data)
+    if os.path.isfile(str(vdj)):
+        vdj_path = Path(vdj)
         tmpFolder = vdj_path.parent / "tmp"
         outFolder = vdj_path.parent
     elif out_dir is not None:
@@ -788,9 +788,9 @@ def define_clones(
     # Ensure clone_key has empty strings instead of nulls
     dat_ = dat_.with_columns(pl.col(str(clone_key)).fill_null(""))
 
-    if isinstance(vdj_data, DandelionPolars):
-        vdj_data._data = dat_
-        vdj_data.update_metadata(clone_key=str(clone_key))
+    if isinstance(vdj, DandelionPolars):
+        vdj._data = dat_
+        vdj.update_metadata(clone_key=str(clone_key))
         logg.info(
             " finished",
             time=start,
@@ -800,7 +800,7 @@ def define_clones(
                 "   'metadata', cell-indexed observations table\n"
             ),
         )
-        return vdj_data
+        return vdj
     else:
         out = DandelionPolars(
             data=dat_,
@@ -820,7 +820,7 @@ def define_clones(
 
 
 def create_germlines(
-    vdj_data: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
+    vdj: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
     db: Literal["imgt", "ogrdb"] = "imgt",
@@ -860,7 +860,7 @@ def create_germlines(
 
     Parameters
     ----------
-    vdj_data : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
+    vdj : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
         DandelionPolars object, polars DataFrame/LazyFrame in changeo/airr format, or file path to changeo/airr
         file after clones have been determined.
     germline : str | None, optional
@@ -885,14 +885,14 @@ def create_germlines(
         DandelionPolars object with `.germlines` slot populated.
     """
     start = logg.info("Reconstructing germline sequences")
-    if not isinstance(vdj_data, DandelionPolars):
+    if not isinstance(vdj, DandelionPolars):
         tmpfile = (
-            Path(vdj_data)
-            if os.path.isfile(vdj_data)
+            Path(vdj)
+            if os.path.isfile(vdj)
             else Path(tempfile.TemporaryDirectory().name) / "tmp.tsv"
         )
-        if isinstance(vdj_data, (pl.DataFrame, pl.LazyFrame)):
-            _write_airr(data=vdj_data, save=tmpfile)
+        if isinstance(vdj, (pl.DataFrame, pl.LazyFrame)):
+            _write_airr(data=vdj, save=tmpfile)
         creategermlines(
             airr_file=tmpfile,
             germline=germline,
@@ -906,10 +906,10 @@ def create_germlines(
         tmppath = Path(tempfile.TemporaryDirectory().name)
         tmppath.mkdir(parents=True, exist_ok=True)
         tmpfile = tmppath / "tmp.tsv"
-        vdj_data.write_airr(filename=tmpfile)
-        if len(vdj_data.germline) > 0:
+        vdj.write_airr(filename=tmpfile)
+        if len(vdj.germline) > 0:
             tmpgmlfile = tmppath / "germ.fasta"
-            write_fasta(fasta_dict=vdj_data.germline, out_fasta=tmpgmlfile)
+            write_fasta(fasta_dict=vdj.germline, out_fasta=tmpgmlfile)
             creategermlines(
                 airr_file=tmpfile,
                 germline=tmpgmlfile,
@@ -930,16 +930,16 @@ def create_germlines(
             )
     # return as DandelionPolars object
     germpass_outfile = tmpfile.parent / (tmpfile.stem + "_germ-pass.tsv")
-    if isinstance(vdj_data, DandelionPolars):
-        vdj_data.__init__(
+    if isinstance(vdj, DandelionPolars):
+        vdj.__init__(
             data=germpass_outfile,
-            metadata=vdj_data._metadata,
-            germline=vdj_data.germline,
-            layout=vdj_data.layout,
-            graph=vdj_data.graph,
+            metadata=vdj._metadata,
+            germline=vdj.germline,
+            layout=vdj.layout,
+            graph=vdj.graph,
             verbose=False,
         )
-        out_vdj = vdj_data.copy()
+        out_vdj = vdj.copy()
     else:
         out_vdj = DandelionPolars(germpass_outfile, verbose=False)
         out_vdj.store_germline_reference(

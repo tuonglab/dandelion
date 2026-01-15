@@ -510,15 +510,13 @@ def _rescale_layout(pos: np.ndarray, scale: float = 1) -> np.ndarray:
     return pos
 
 
-def extract_edge_weights(
-    vdj_data: Dandelion, expanded_only: bool = False
-) -> list:
+def extract_edge_weights(vdj: Dandelion, expanded_only: bool = False) -> list:
     """
     Retrieve edge weights (BCR levenshtein distance) from graph.
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         Dandelion object after `tl.generate_network` has been run.
     expanded_only : bool, optional
         whether to retrieve the edge weights from the expanded only graph or entire graph.
@@ -531,7 +529,7 @@ def extract_edge_weights(
     if expanded_only:
         try:
             edges, weights = zip(
-                *nx.get_edge_attributes(vdj_data.graph[1], "weight").items()
+                *nx.get_edge_attributes(vdj.graph[1], "weight").items()
             )
         except ValueError as e:
             logg.info(
@@ -542,7 +540,7 @@ def extract_edge_weights(
     else:
         try:
             edges, weights = zip(
-                *nx.get_edge_attributes(vdj_data.graph[0], "weight").items()
+                *nx.get_edge_attributes(vdj.graph[0], "weight").items()
             )
         except ValueError as e:
             logg.info(

@@ -9,6 +9,7 @@ import tempfile
 import unicodedata
 import warnings
 import zarr
+import shutil
 
 import networkx as nx
 import numpy as np
@@ -28,7 +29,6 @@ from scanpy import logging as logg
 from scipy.sparse import csr_matrix
 from textwrap import dedent
 from typing import Literal
-from zarr.codecs import BloscCodec
 
 from dandelion.utilities._io import AIRR, CELLRANGER, fasta_iterator
 from dandelion.utilities._utilities import (
@@ -118,7 +118,7 @@ class DandelionPolars:
         self._backend = "polars"
         self._tmpfiles = {}
 
-        self._data = load_polars(data)
+        self._data = load_polars(data, lazy=self.lazy)
         self._metadata = metadata
         self.layout = layout
         self.graph = graph
@@ -139,7 +139,7 @@ class DandelionPolars:
                 if self.lazy:
                     self._data = (
                         self._data.filter(pl.col("locus").is_in(acceptable))
-                        .collect()
+                        .collect(engine="streaming")
                         .lazy()
                     )
                 else:
@@ -170,7 +170,7 @@ class DandelionPolars:
                     .drop("_cell_order")
                 )
             if self.lazy:
-                self._data = self._data.collect().lazy()
+                self._data = self._data.collect(engine="streaming").lazy()
                 if "data" in self._tmpfiles.keys():
                     self._tmpfiles["data"].close()
                     del self._tmpfiles["data"]
@@ -192,7 +192,7 @@ class DandelionPolars:
                         self._metadata = metadata
                 else:
                     if isinstance(metadata, pl.LazyFrame):
-                        self._metadata = metadata.collect()
+                        self._metadata = metadata.collect(engine="streaming")
                         if "metadata" in self._tmpfiles.keys():
                             self._tmpfiles["metadata"].close()
                             del self._tmpfiles["metadata"]
@@ -201,10 +201,14 @@ class DandelionPolars:
 
         if isinstance(self._data, pl.LazyFrame):
             self._original_sequence_ids = (
-                self._data.select(self._data_name_col).collect().to_series()
+                self._data.select(self._data_name_col)
+                .collect(engine="streaming")
+                .to_series()
             )
             self._original_cell_ids = (
-                self._data.select(self._metadata_name_col).collect().to_series()
+                self._data.select(self._metadata_name_col)
+                .collect(engine="streaming")
+                .to_series()
             )
         elif isinstance(self._data, pl.DataFrame):
             self._original_sequence_ids = self._data[
@@ -216,6 +220,13 @@ class DandelionPolars:
         elif isinstance(self._data, pd.DataFrame):
             self._original_sequence_ids = self._data[self._data_name_col].copy()
             self._original_cell_ids = self._data[self._metadata_name_col].copy()
+
+    @staticmethod
+    def _safe_collect(lf: pl.LazyFrame) -> pl.DataFrame:
+        """Collect LazyFrame and clean up any temp files created by _cache_data."""
+        if hasattr(lf, "_collect"):
+            return lf._collect()
+        return lf.collect(engine="streaming")
 
     def _gen_repr(self, n_obs, n_contigs) -> str:
         """Report."""
@@ -310,28 +321,21 @@ class DandelionPolars:
                 # When a DataFrame/LazyFrame is passed, use it directly as the filtered data
                 _data = filter_expr
             elif isinstance(filter_expr, pl.Series):
-                # Convert Series to expression - need to filter by row position
-                # Create a temporary index column and filter by position
+                # Boolean mask provided
                 if isinstance(data, pl.LazyFrame):
-                    # For lazy frames, we need to be more careful
+                    # LazyFrame cannot directly use an eager boolean Series; fallback to index-based filter
                     _data = (
                         data.with_row_index("__row_idx__")
                         .filter(
-                            pl.col("__row_idx__").is_in(filter_expr.to_list())
-                            if len(filter_expr.to_list()) < _get_length(data)
-                            else filter_expr
+                            pl.col("__row_idx__").is_in(
+                                [i for i, v in enumerate(filter_expr) if v]
+                            )
                         )
                         .drop("__row_idx__")
                     )
                 else:
-                    # For eager frames, create index and filter
-                    data_with_idx = data.with_row_index("__row_idx__")
-                    matching_indices = [
-                        i for i, v in enumerate(filter_expr) if v
-                    ]
-                    _data = data_with_idx.filter(
-                        pl.col("__row_idx__").is_in(matching_indices)
-                    ).drop("__row_idx__")
+                    # Eager DataFrame: filter directly with the boolean Series to avoid large Python lists
+                    _data = data.filter(filter_expr)
             else:
                 # Assume it's an Expression
                 _data = data.filter(filter_expr)
@@ -339,7 +343,10 @@ class DandelionPolars:
             # For metadata sync, extract unique cell_ids from filtered data
             if isinstance(_data, pl.LazyFrame):
                 filtered_cell_ids = (
-                    _data.select("cell_id").collect().to_series().unique()
+                    _data.select("cell_id")
+                    .collect(engine="streaming")
+                    .to_series()
+                    .unique()
                 )
             else:
                 filtered_cell_ids = _data.select("cell_id").to_series().unique()
@@ -358,18 +365,31 @@ class DandelionPolars:
                 else None
             )
 
-        # Collect and convert back to lazy if original was lazy
-        if isinstance(self._data, pl.LazyFrame):
-            _data = _data.collect().lazy()
-        if isinstance(self._metadata, pl.LazyFrame):
-            _metadata = _metadata.collect().lazy()
+        # Keep lazy if original was lazy; avoid eager collect to reduce spikes
+        if isinstance(self._data, pl.LazyFrame) and isinstance(
+            _data, pl.DataFrame
+        ):
+            _data = _data.lazy()
+        if isinstance(self._metadata, pl.LazyFrame) and isinstance(
+            _metadata, pl.DataFrame
+        ):
+            _metadata = _metadata.lazy()
+
+        # If eager, compact memory so the slice does not retain large original buffers
+        if isinstance(_data, pl.DataFrame):
+            _data = _data.rechunk()
+        if isinstance(_metadata, pl.DataFrame):
+            _metadata = _metadata.rechunk()
 
         # ---- Distances matrix sync -----------------------------------
         if self.distances is not None:
             # Get metadata cell_ids for distance matrix indexing
             if isinstance(_metadata, pl.LazyFrame):
                 meta_cells = (
-                    _metadata.select("cell_id").collect().to_series().to_list()
+                    _metadata.select("cell_id")
+                    .collect(engine="streaming")
+                    .to_series()
+                    .to_list()
                 )
             else:
                 meta_cells = _metadata.select("cell_id").to_series().to_list()
@@ -413,6 +433,20 @@ class DandelionPolars:
             distances=_distances,
             verbose=False,
         )
+        # Preserve lazy distance embedding flags if present
+        try:
+            setattr(
+                sliced,
+                "_distance_zarr_path",
+                getattr(self, "_distance_zarr_path", None),
+            )
+            setattr(
+                sliced,
+                "_distance_embed_pending",
+                getattr(self, "_distance_embed_pending", False),
+            )
+        except Exception:
+            pass
         if original_backend == "pandas":
             sliced.to_pandas()
         return sliced
@@ -423,7 +457,9 @@ class DandelionPolars:
         if self._metadata is None:
             return 0
         if isinstance(self._metadata, pl.LazyFrame):
-            return self._metadata.select(pl.count()).collect()[0, 0]
+            return self._metadata.select(pl.count()).collect(
+                engine="streaming"
+            )[0, 0]
         if isinstance(self._metadata, pl.DataFrame):
             return self._metadata.height
         if isinstance(self._metadata, pd.DataFrame):
@@ -435,7 +471,9 @@ class DandelionPolars:
         if self._data is None:
             return 0
         if isinstance(self._data, pl.LazyFrame):
-            return self._data.select(pl.count()).collect()[0, 0]
+            return self._data.select(pl.count()).collect(engine="streaming")[
+                0, 0
+            ]
         if isinstance(self._data, pl.DataFrame):
             return self._data.height
         if isinstance(self._data, pd.DataFrame):
@@ -470,9 +508,9 @@ class DandelionPolars:
             return SeriesAccessor(self._data[self._data_name_col])
         if isinstance(self._data, pl.LazyFrame):
             # Lazy Polars: materialize first to get a Series
-            series = self._data.select(self._data_name_col).collect()[
-                self._data_name_col
-            ]
+            series = self._data.select(self._data_name_col).collect(
+                engine="streaming"
+            )[self._data_name_col]
             return SeriesAccessor(series)
 
     @data_names.setter
@@ -524,9 +562,9 @@ class DandelionPolars:
             return SeriesAccessor(self._metadata[self._metadata_name_col])
         if isinstance(self._metadata, pl.LazyFrame):
             # Lazy Polars: materialize first to get a Series
-            series = self._metadata.select(self._metadata_name_col).collect()[
-                self._metadata_name_col
-            ]
+            series = self._metadata.select(self._metadata_name_col).collect(
+                engine="streaming"
+            )[self._metadata_name_col]
             return SeriesAccessor(series)
 
     @metadata_names.setter
@@ -549,10 +587,7 @@ class DandelionPolars:
                 logg.info(
                     "The AIRR data needs to undergo sanitization, apologies for any delays..."
                 )
-            if isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
                 self._data = _sanitize_data_polars(self._data)
-            elif isinstance(self._data, pd.DataFrame):
-                self._data = sanitize_data(self._data)
 
     def _is_sanitized(self):
         """Check if the data is sanitized (pandas or polars)."""
@@ -622,6 +657,65 @@ class DandelionPolars:
         for v in getattr(self, f"{attr}m").values():
             if isinstance(v, pd.DataFrame):
                 v.index = value
+
+    def _cache_data(self) -> None:
+        """Trick to cache _data and _metadata in temporary files."""
+        if not hasattr(self._data, "_collect"):
+            # --- TEMPORARY CACHE ---
+            # Use delete=True for auto-cleanup, but keep handle alive for manual control
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix=".parquet", delete=True
+            )
+            if isinstance(self._data, pl.LazyFrame):
+                self._data = self._data.collect(engine="streaming")
+            self._data.write_parquet(temp_file.name)
+            temp_file.flush()  # Ensure data is written
+            lazy_ref = pl.scan_parquet(temp_file.name)
+            self._data = lazy_ref
+            self._data._temp_file_path = temp_file.name
+            self._data._temp_file_handle = temp_file  # Keep handle alive
+
+            state = {"closed": False}
+
+            def _collect(lazy=lazy_ref, handle=temp_file, state=state):
+                result = lazy.collect(engine="streaming")
+                if not state["closed"]:
+                    try:
+                        handle.close()
+                    except Exception:
+                        pass
+                    state["closed"] = True
+                return result
+
+            self._data._collect = _collect
+        if not hasattr(self._metadata, "_collect"):
+            # --- TEMPORARY CACHE ---
+            # Use delete=True for auto-cleanup, but keep handle alive for manual control
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix=".parquet", delete=True
+            )
+            if isinstance(self._metadata, pl.LazyFrame):
+                self._metadata = self._metadata.collect(engine="streaming")
+            self._metadata.write_parquet(temp_file.name)
+            temp_file.flush()  # Ensure data is written
+            lazy_ref = pl.scan_parquet(temp_file.name)
+            self._metadata = lazy_ref
+            self._metadata._temp_file_path = temp_file.name
+            self._metadata._temp_file_handle = temp_file  # Keep handle alive
+
+            state = {"closed": False}
+
+            def _collect(lazy=lazy_ref, handle=temp_file, state=state):
+                result = lazy.collect(engine="streaming")
+                if not state["closed"]:
+                    try:
+                        handle.close()
+                    except Exception:
+                        pass
+                    state["closed"] = True
+                return result
+
+            self._metadata._collect = _collect
 
     def _update_ids(
         self,
@@ -926,14 +1020,19 @@ class DandelionPolars:
                 pl.Series(self._data_name_col, self._original_sequence_ids)
             )
             if isinstance(self._data, pl.LazyFrame):
-                self._data = self._data.collect().lazy()
+                self._data = self.self._data.collect(engine="streaming").lazy()
         if self._metadata is not None:
             if isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
                 self._metadata = self._metadata.with_columns(
                     pl.Series(self._metadata_name_col, self._original_cell_ids)
                 )
                 if isinstance(self._metadata, pl.LazyFrame):
-                    self._metadata = self._metadata.collect().lazy()
+                    self._metadata = self._metadata.collect(
+                        engine="streaming"
+                    ).lazy()
+        # Ensure data is backed after potentially removing backing with .lazy()
+        if self.lazy and isinstance(self._data, pl.LazyFrame):
+            self._cache_data()
 
     def simplify(self, **kwargs) -> None:
         """Disambiguate VDJ and C gene calls when there's multiple calls separated by commas and strip the alleles."""
@@ -998,7 +1097,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         return result
 
@@ -1024,7 +1123,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         return result
 
@@ -1050,7 +1149,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         return result
 
@@ -1076,7 +1175,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         return result
 
@@ -1084,6 +1183,7 @@ class DandelionPolars:
         self,
         cols: list[str] | str,
         join: bool = True,
+        explode: bool = False,
         unique: bool = False,
         key_added: list[str] | str | None = None,
         data: pl.DataFrame | pl.LazyFrame | None = None,
@@ -1092,7 +1192,92 @@ class DandelionPolars:
         cols = [cols] if isinstance(cols, str) else cols
         key_added = [key_added] if isinstance(key_added, str) else key_added
         agg_exprs = [pl.col("_original_order").min().alias("_original_order")]
-        if join:
+
+        if explode:
+            # Create separate numbered columns for each contig (like retrieve_mode="split")
+            # First group by cell_id and get lists of values
+            data = self._data if data is None else data
+            temp_result = (
+                data.lazy()
+                .with_row_index("_original_order")
+                .with_columns(
+                    [
+                        pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
+                        .then(pl.lit("VDJ"))
+                        .otherwise(pl.lit("VJ"))
+                        .alias("locus_group")
+                    ]
+                )
+                .group_by("cell_id")
+                .agg(
+                    [pl.col("_original_order").min().alias("_original_order")]
+                    + [
+                        expr
+                        for col in cols
+                        for expr in [
+                            pl.col(col)
+                            .filter(
+                                (pl.col("locus_group") == "VDJ")
+                                & (pl.col(col).is_not_null())
+                                & (pl.col(col) != "")
+                            )
+                            .alias(f"_{col}_VDJ_list"),
+                            (
+                                pl.col(col)
+                                .filter(
+                                    (pl.col("locus_group") == "VJ")
+                                    & (pl.col(col).is_not_null())
+                                    & (pl.col(col) != "")
+                                )
+                                .alias(f"_{col}_VJ_list")
+                                if col != "d_call"
+                                else None
+                            ),
+                        ]
+                    ]
+                )
+                .sort("_original_order")
+                .drop("_original_order")
+                .collect(engine="streaming")
+            )
+
+            # Now explode into numbered columns using a more efficient approach
+            result_cols = {"cell_id": temp_result["cell_id"]}
+
+            for col, key in zip(cols, key_added):
+                # Handle VDJ
+                vdj_col = f"_{col}_VDJ_list"
+                if vdj_col in temp_result.columns:
+                    vdj_series = temp_result[vdj_col]
+                    max_vdj = max(
+                        [len(x) if x is not None else 0 for x in vdj_series]
+                    )
+                    if max_vdj > 0:
+                        for i in range(max_vdj):
+                            col_name = f"{key}_VDJ_{i+1}"
+                            result_cols[col_name] = vdj_series.list.get(
+                                i, null_on_oob=True
+                            )
+
+                # Handle VJ (skip for d_call)
+                if col != "d_call":
+                    vj_col = f"_{col}_VJ_list"
+                    if vj_col in temp_result.columns:
+                        vj_series = temp_result[vj_col]
+                        max_vj = max(
+                            [len(x) if x is not None else 0 for x in vj_series]
+                        )
+                        if max_vj > 0:
+                            for i in range(max_vj):
+                                col_name = f"{key}_VJ_{i+1}"
+                                result_cols[col_name] = vj_series.list.get(
+                                    i, null_on_oob=True
+                                )
+
+            result = pl.DataFrame(result_cols)
+            return result
+
+        elif join:
             agg_exprs += [
                 expr
                 for col, key in zip(cols, key_added)
@@ -1174,7 +1359,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         # drop literal column
         if "literal" in result.collect_schema().names():
@@ -1225,7 +1410,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         # drop literal column
         if "literal" in result.collect_schema().names():
@@ -1274,7 +1459,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         return result
 
@@ -1320,7 +1505,7 @@ class DandelionPolars:
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
-            .collect()
+            .collect(engine="streaming")
         )
         return result
 
@@ -1369,7 +1554,7 @@ class DandelionPolars:
                 pl.col("productive")
                 .cast(pl.String)
                 .str.to_uppercase()
-                .is_in(TRUES_STR)
+                .is_in(TRUES_STR + EMPTIES_STR)
             )
         if strip_alleles:
             for col in ["v_call", "d_call", "j_call", "c_call"]:
@@ -1380,7 +1565,7 @@ class DandelionPolars:
         unique_cells = _data.select("cell_id").unique()
         if isinstance(unique_cells, pl.LazyFrame):
             # materialize if lazy
-            unique_cells = unique_cells.collect()
+            unique_cells = unique_cells.collect(engine="streaming")
         if len(init_cols) == 0:
             self._metadata = pl.DataFrame(
                 {"cell_id": unique_cells["cell_id"].to_list()}
@@ -1493,7 +1678,7 @@ class DandelionPolars:
                         .alias("isotype")
                     )
                     .select(["cell_id", "isotype"])
-                    .collect()
+                    .collect(engine="streaming")
                 )  # Keep only cell_id and isotype for joining
                 if not isotype_df.select(
                     pl.col("isotype").is_null().all()
@@ -1539,7 +1724,7 @@ class DandelionPolars:
                     self._metadata = self._metadata.lazy().join(
                         isotype_status.lazy(), on="cell_id", how="left"
                     )
-                    self._metadata = self._metadata.collect()
+                    self._metadata = self._metadata.collect(engine="streaming")
                 self._metadata = self._metadata.with_columns(
                     _classify_locus_pair().alias("locus_status")
                 )
@@ -1591,12 +1776,17 @@ class DandelionPolars:
                 )
             # always lazy
             if self.lazy:
-                self._metadata = self._metadata.collect().lazy()
+                self._metadata = self._metadata.collect(
+                    engine="streaming"
+                ).lazy()
             else:
-                self._metadata = self._metadata.collect()
+                self._metadata = self._metadata.collect(engine="streaming")
             if "metadata" in self._tmpfiles.keys():
                 self._tmpfiles["metadata"].close()
                 del self._tmpfiles["metadata"]
+            if self.lazy:
+                # back to tmpfile on disk if lazy
+                self._cache_data()
 
     def _update_rearrangement_status(self, v_call_key: str) -> None:
         """Check rearrangement status."""
@@ -1633,7 +1823,7 @@ class DandelionPolars:
         if self._backend == "pandas":
             return
         if isinstance(self._data, pl.LazyFrame):
-            self._data = self._data.collect().to_pandas()
+            self._data = self._safe_collect(self._data).to_pandas()
         if isinstance(self._data, pl.DataFrame):
             self._data = self._data.to_pandas()
         self._data.index = self._data[self._data_name_col]
@@ -1644,7 +1834,9 @@ class DandelionPolars:
             ):
                 # if not isinstance(self._metadata, pd.DataFrame):
                 if isinstance(self._metadata, pl.LazyFrame):
-                    self._metadata = self._metadata.collect().to_pandas()
+                    self._metadata = self._metadata.collect(
+                        engine="streaming"
+                    ).to_pandas()
                 if isinstance(self._metadata, pl.DataFrame):
                     self._metadata = self._metadata.to_pandas()
                 self._metadata.set_index(self._metadata_name_col, inplace=True)
@@ -1677,12 +1869,14 @@ class DandelionPolars:
                         if self.lazy:
                             self._metadata = self._metadata.lazy()
             self._backend = "polars"
+        if self.lazy:
+            self._cache_data()
 
     def to_anndata(self) -> AnnData:
         """Convert DandelionPolars.metadata to AnnData"""
         if self._metadata is not None:
             if isinstance(self._metadata, pl.LazyFrame):
-                meta_df = self._metadata.collect().to_pandas()
+                meta_df = self._metadata.collect(engine="streaming").to_pandas()
                 meta_df.set_index(self._metadata_name_col, inplace=True)
             elif isinstance(self._metadata, pl.DataFrame):
                 meta_df = self._metadata.to_pandas()
@@ -1700,12 +1894,14 @@ class DandelionPolars:
         """Convert lazy slots to eager slots."""
         if self._backend == "polars":
             if isinstance(self._data, pl.LazyFrame):
-                self._data = self._data.collect()
+                self._data = self._safe_collect(self._data)
             if self._metadata is not None:
                 if isinstance(self._metadata, pl.LazyFrame):
-                    self._metadata = self._metadata.collect()
+                    self._metadata = self._safe_collect(self._metadata)
             # distances: eager types are np.ndarray or csr_matrix
-        if not isinstance(self.distances, (np.ndarray, csr_matrix)):
+        if self.distances is not None and not isinstance(
+            self.distances, (np.ndarray, csr_matrix)
+        ):
             # assume anything else is lazy and computable
             computed = self.distances.compute()
             if isinstance(computed, csr_matrix):
@@ -1739,6 +1935,7 @@ class DandelionPolars:
                 asarray=False,
             )
         self.lazy = True
+        self._cache_data()
 
     def copy(self) -> DandelionPolars:
         """
@@ -1789,7 +1986,9 @@ class DandelionPolars:
                 )
         # If lazy, collect and re-lazify once at the end
         if is_polars_lazy:
-            self._data = self._data.collect().lazy()
+            self._data = self._data.collect(engine="streaming").lazy()
+            # Ensure data is backed after removing backing with .lazy()
+            self._cache_data()
 
     def store_germline_reference(
         self,
@@ -2044,7 +2243,9 @@ class DandelionPolars:
                     self._metadata = self._metadata.select(new_order).lazy()
                 else:
                     self._metadata = (
-                        self._metadata.select(new_order).collect().lazy()
+                        self._metadata.select(new_order)
+                        .collect(engine="streaming")
+                        .lazy()
                     )
                     if "metadata" in self._tmpfiles.keys():
                         self._tmpfiles["metadata"].close()
@@ -2065,10 +2266,10 @@ class DandelionPolars:
                     pl.col("productive")
                     .cast(pl.String)
                     .str.to_uppercase()
-                    .is_in(TRUES_STR)
+                    .is_in(TRUES_STR + EMPTIES_STR)
                 )
                 if productive_only
-                else None
+                else self._data
             )
             # check the dtypes of the retrieve columns
             string_cols = []
@@ -2155,13 +2356,15 @@ class DandelionPolars:
                     meta.lazy(), on="cell_id", how="left"
                 )
                 self._metadata = (
-                    self._metadata.collect().lazy()
+                    self._metadata.collect(engine="streaming").lazy()
                     if self.lazy
-                    else self._metadata.collect()
+                    else self._metadata.collect(engine="streaming")
                 )
                 if "metadata" in self._tmpfiles.keys():
                     self._tmpfiles["metadata"].close()
                     del self._tmpfiles["metadata"]
+            # clean up self._data
+            self._cache_data()
         if as_pandas:
             self.to_pandas()
 
@@ -2201,7 +2404,7 @@ class DandelionPolars:
         store = zarr.storage.ZipStore(filename, mode="w")
         root = zarr.group(store=store, overwrite=True)
         comp = (
-            BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
+            zarr.codecs.BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
             if compress
             else None
         )
@@ -2212,6 +2415,8 @@ class DandelionPolars:
                 # convert to Polars first
                 self.to_polars(lazy=False)
             self._data = _sanitize_data_polars(self._data)
+            # Collect and clean temp file before writing
+            self._data = self._safe_collect(self._data)
             _write_parquet_blob(
                 tables_grp,
                 "data.parquet",
@@ -2222,6 +2427,8 @@ class DandelionPolars:
             if isinstance(self._metadata, pd.DataFrame):
                 # convert to Polars first
                 self.to_polars(lazy=False)
+            if isinstance(self._metadata, pl.LazyFrame):
+                self._metadata = self._safe_collect(self._metadata)
             _write_parquet_blob(
                 tables_grp,
                 "metadata.parquet",
@@ -2232,7 +2439,50 @@ class DandelionPolars:
         if getattr(self, "distances", None) is not None:
             arrays_grp = root.create_group("arrays", overwrite=True)
             arr = self.distances
-            if isinstance(arr, csr_matrix):
+            # If pending embed from a temporary zarr, stream-copy into ZipStore
+            try:
+                pending = getattr(self, "_distance_embed_pending", False)
+                zarr_src = getattr(self, "_distance_zarr_path", None)
+            except Exception:
+                pending, zarr_src = False, None
+            if pending and zarr_src is not None:
+                # Open source zarr and target dataset inside ZipStore
+                try:
+                    src_root = zarr.open_group(
+                        zarr.storage.LocalStore(
+                            str(zarr_src) + "/distance_matrix.zarr"
+                        ),
+                        mode="r",
+                    )
+                    src_arr = src_root["distance_matrix"]
+                except Exception:
+                    # Fallback to direct array path
+                    src_arr = zarr.open_array(
+                        zarr.storage.LocalStore(str(zarr_src)), mode="r"
+                    )
+
+                # Create destination dataset and copy
+                dst = arrays_grp.create_dataset(
+                    "distances",
+                    shape=src_arr.shape,
+                    dtype=src_arr.dtype,
+                    chunks=src_arr.chunks,
+                    overwrite=True,
+                    compressors=[comp] if compress else None,
+                )
+                dst[:] = src_arr[:]
+
+                # Clear pending flag and clean up temporary zarr
+                try:
+                    setattr(self, "_distance_embed_pending", False)
+                except Exception:
+                    pass
+                try:
+                    if os.path.isdir(str(zarr_src)):
+                        shutil.rmtree(str(zarr_src), ignore_errors=True)
+                except Exception:
+                    pass
+            elif isinstance(arr, csr_matrix):
                 # Save CSR matrix as separate arrays
                 arrays_grp.create_dataset(
                     name="distances_data",
@@ -2269,15 +2519,26 @@ class DandelionPolars:
                     overwrite=True,
                 )
             else:
-                arrays_grp.create_dataset(
-                    "distances",
-                    shape=arr.shape,
-                    dtype=arr.dtype,
-                    chunks=arr.shape,
-                    data=arr,
-                    overwrite=True,
-                    compressors=[comp] if compress else None,
-                )
+                # Only embed eager arrays; skip lazy external dask unless pending embed
+                try:
+                    import dask.array as da
+
+                    is_dask = isinstance(arr, da.Array)
+                except Exception:
+                    is_dask = False
+                if is_dask:
+                    # Skip writing for external zarr mode
+                    pass
+                else:
+                    arrays_grp.create_dataset(
+                        "distances",
+                        shape=arr.shape,
+                        dtype=arr.dtype,
+                        chunks=arr.shape,
+                        data=arr,
+                        overwrite=True,
+                        compressors=[comp] if compress else None,
+                    )
         # .graph, . layout, .germline as HDF5 files
         if getattr(self, "graph", None) is not None:
             graph_grp = root.create_group("graph", overwrite=True)
@@ -2641,6 +2902,7 @@ class DandelionPolars:
 
 def load_polars(
     obj: pl.LazyFrame | pl.DataFrame | pd.DataFrame | Path | str | None,
+    lazy: bool = True,
     as_pandas: bool = False,
 ) -> pl.LazyFrame:
     """
@@ -2650,6 +2912,8 @@ def load_polars(
     ----------
     obj : pl.LazyFrame | pl.DataFrame | pd.DataFrame | Path | str | None
         airr rearrangement file path or pandas/polars DataFrame.
+    lazy : bool, optional
+        whether to read in as polars LazyFrame. Default is True.
     as_pandas : bool, optional
         whether to return as pandas DataFrame. Default is False.
 
@@ -2697,13 +2961,15 @@ def load_polars(
 
         if "duplicate_count" in df.collect_schema():
             if "umi_count" not in df.collect_schema():
-                df = df.rename({"duplicate_count": "umi_count"}).collect()
+                df = df.rename({"duplicate_count": "umi_count"}).collect(
+                    engine="streaming"
+                )
 
         if as_pandas:
-            df = df.collect().to_pandas()
+            df = df.collect(engine="streaming").to_pandas()
             df.set_index("sequence_id", inplace=True, drop=False)
         # Collect to execute operations, then convert back to lazy or pandas
-        return df
+        return df if lazy else df.collect(engine="streaming")
 
     return None  # Handle obj is None case
 
@@ -2756,9 +3022,8 @@ class DataFrameAccessor:
         # For LazyFrame, check if it's a column using cached schema
         if isinstance(df, pl.LazyFrame):
             if schema is not None and name in schema.names():
-                # Return collected series for this column wrapped in SeriesAccessor
-                series = df.select(name).collect().to_series()
-                return SeriesAccessor(series)
+                # Return a lazy expression for the column to avoid materialization
+                return pl.col(name)
             # Not a column, try to get actual attribute
             try:
                 return object.__getattribute__(df, name)
@@ -2782,8 +3047,8 @@ class DataFrameAccessor:
         # Handle column name string
         if isinstance(key, str):
             if isinstance(df, pl.LazyFrame):
-                series = df.select(key).collect().to_series()
-                return SeriesAccessor(series)
+                # Return an expression for lazy frames to keep pipeline lazy
+                return pl.col(key)
             else:
                 return SeriesAccessor(df[key])
 
@@ -2831,7 +3096,7 @@ class DataFrameAccessor:
             # Scalar value - create a Series filled with that value
             # Get length from df
             if isinstance(df, pl.LazyFrame):
-                length = df.select(pl.len()).collect().item()
+                length = df.select(pl.len()).collect(engine="streaming").item()
             else:
                 length = len(df)
             new_col = pl.Series(key, [value] * length)
@@ -2874,7 +3139,7 @@ class DataFrameAccessor:
     def __len__(self):
         df = object.__getattribute__(self, "_df")
         if isinstance(df, pl.LazyFrame):
-            return df.select(pl.len()).collect().item()
+            return df.select(pl.len()).collect(engine="streaming").item()
         return len(df)
 
     @property
@@ -2984,6 +3249,7 @@ def read_zipddl(
     # ---------------------------
     # Distances: Zarr arrays
     # ---------------------------
+    embedded_distances_loaded = False
     if "arrays" in root:
         arr_grp = root["arrays"]
         if "distances_data" in arr_grp:
@@ -2996,12 +3262,24 @@ def read_zipddl(
                 shape=tuple(arr_grp["distances_shape"][:]),
             )
             constructor["distances"] = distances
+            embedded_distances_loaded = True
         elif "distances" in arr_grp:
-            constructor["distances"] = arr_grp["distances"]
+            # Wrap zarr array in dask for lazy access
+            import dask.array as da
+
+            zarr_arr = arr_grp["distances"]
+            constructor["distances"] = da.from_zarr(zarr_arr)
+            embedded_distances_loaded = True
 
     if distance_zarr is not None:
         import dask.array as da
 
+        if embedded_distances_loaded:
+            logg.warning(
+                f"Embedded distances found (in {filename}) and external Zarr "
+                f"path (distance_zarr={distance_zarr}) provided. "
+                f"Using external Zarr path to override embedded distances."
+            )
         constructor["distances"] = da.from_zarr(
             str(distance_zarr) + "/distance_matrix"
         )
@@ -3062,7 +3340,7 @@ def read_zipddl(
 def _get_length(df: pl.DataFrame | pl.LazyFrame) -> int:
     """Get number of rows in Polars DataFrame or LazyFrame."""
     if isinstance(df, pl.LazyFrame):
-        return df.collect().height
+        return df.collect(engine="streaming").height
     elif isinstance(df, pl.DataFrame):
         return df.height
     return len(df)
@@ -3073,7 +3351,12 @@ def _filter_and_select(
 ) -> pl.Series:
     """Filter DataFrame/LazyFrame by condition and select 'cell_id' column as Series."""
     if isinstance(df, pl.LazyFrame):
-        return df.filter(condition).select("cell_id").collect().to_series()
+        return (
+            df.filter(condition)
+            .select("cell_id")
+            .collect(engine="streaming")
+            .to_series()
+        )
     else:
         return df.filter(condition).select("cell_id").to_series()
 
@@ -3090,7 +3373,7 @@ def _write_parquet_blob(
     """
     # Materialize if lazy
     if isinstance(df, pl.LazyFrame):
-        df = df.collect()
+        df = df.collect(engine="streaming")
 
     with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
         df.write_parquet(tmp.name)
@@ -3217,7 +3500,11 @@ def _write_airr(
     """Save as airr formatted file."""
     data = _sanitize_data_polars(data)
     if isinstance(data, pl.LazyFrame):
-        data = data.collect()
+        # Use _collect if available for temp file cleanup, otherwise regular collect
+        if hasattr(data, "_collect"):
+            data = data._collect()
+        else:
+            data = data.collect(engine="streaming")
     data.write_csv(save, separator="\t", **kwargs)
 
 
@@ -3465,7 +3752,7 @@ def _check_travdv_polars(
             .alias("locus")
         ]
     )
-    return data if lazy else data.collect()
+    return data if lazy else data.collect(engine="streaming")
 
 
 def _same_call_vectorized(
@@ -3671,7 +3958,9 @@ def _add_clone_info(
 
     # Step 2: Flatten and count (requires collection for lazy)
     if is_lazy:
-        clone_counts = _flatten_and_count(df.collect(), clonekey)
+        clone_counts = _flatten_and_count(
+            df.collect(engine="streaming"), clonekey
+        )
     else:
         clone_counts = _flatten_and_count(df, clonekey)
 
@@ -3804,7 +4093,7 @@ def _sanitize_data_polars(
         data = pl.from_pandas(data.reset_index(drop=True))
 
     lazy = isinstance(data, pl.LazyFrame)
-    df = data.collect() if lazy else data
+    df = data.collect(engine="streaming") if lazy else data
     exprs: list[pl.Expr] = []
 
     for d in df.collect_schema().names():
@@ -3812,7 +4101,7 @@ def _sanitize_data_polars(
         col = pl.col(d)
 
         # --- BOOLEAN-LIKE COLUMNS ---
-        if d in BOOLEAN_LIKE_COLUMNS:
+        if (d in BOOLEAN_LIKE_COLUMNS) or (_is_polars_boolean_dtype(df, d)):
             exprs.append(_sanitize_boolean_expr(d).alias(d))
             continue
 
@@ -3904,12 +4193,19 @@ def _is_polars_string_dtype(
     return schema.get(colname) == pl.String
 
 
+def _is_polars_boolean_dtype(
+    df: pl.DataFrame | pl.LazyFrame, colname: str
+) -> bool:
+    schema = df.collect_schema() if isinstance(df, pl.LazyFrame) else df.schema
+    return schema.get(colname) == pl.Boolean
+
+
 def _validate_airr_polars(data: pl.DataFrame | pl.LazyFrame) -> None:
     """Validate dtypes in airr table (Polars)."""
     # identify integer-like columns
     int_columns = []
     if isinstance(data, pl.LazyFrame):
-        data = data.collect()
+        data = data.collect(engine="streaming")
     for d in data.collect_schema().names():
         try:
             data.select(pl.col(d).cast(pl.Int64, strict=False))
@@ -4418,8 +4714,8 @@ def mark_ambiguous_contigs(
 
 
 def check_contigs(
-    vdj_data: DandelionPolars | pl.DataFrame | str,
-    gex_data: AnnData | None = None,
+    vdj: DandelionPolars | pl.DataFrame | str,
+    adata: AnnData | None = None,
     productive_only: bool = True,
     library_type: Literal["ig", "tr-ab", "tr-gd"] | None = None,
     umi_foldchange_cutoff: float = 2.0,
@@ -4533,21 +4829,21 @@ def check_contigs(
         print("Filtering contigs...")
 
     # Load data
-    if isinstance(vdj_data, DandelionPolars):
-        dat_ = vdj_data.data
+    if isinstance(vdj, DandelionPolars):
+        dat_ = vdj.data
         # Keep as LazyFrame if possible
         if isinstance(dat_, pl.DataFrame):
             dat_ = dat_.lazy()
-        lib_type_from_obj = vdj_data.library_type
-    elif isinstance(vdj_data, pl.DataFrame):
-        dat_ = vdj_data.lazy()
+        lib_type_from_obj = vdj.library_type
+    elif isinstance(vdj, pl.DataFrame):
+        dat_ = vdj.lazy()
         lib_type_from_obj = None
-    elif isinstance(vdj_data, pl.LazyFrame):
-        dat_ = vdj_data
+    elif isinstance(vdj, pl.LazyFrame):
+        dat_ = vdj
         lib_type_from_obj = None
     else:
         # File path
-        dat_ = load_polars(vdj_data, as_pandas=False)
+        dat_ = load_polars(vdj, as_pandas=False)
         if isinstance(dat_, pl.DataFrame):
             dat_ = dat_.lazy()
         lib_type_from_obj = None
@@ -4578,7 +4874,12 @@ def check_contigs(
 
     # Filter by productive status (lazy)
     if productive_only:
-        dat = dat_.filter(pl.col("productive").is_in(TRUES_STR))
+        dat = dat_.filter(
+            pl.col("productive")
+            .cast(pl.String)
+            .str.to_uppercase()
+            .is_in(TRUES_STR + EMPTIES_STR)
+        )
     else:
         dat = dat_
 
@@ -4587,12 +4888,18 @@ def check_contigs(
         dat = dat.filter(pl.col("locus").is_in(acceptable))
 
     # Get unique cell barcodes - only collect what we need
-    barcode = dat.select("cell_id").unique().collect().to_series().to_list()
+    barcode = (
+        dat.select("cell_id")
+        .unique()
+        .collect(engine="streaming")
+        .to_series()
+        .to_list()
+    )
 
     # Handle AnnData integration
-    if gex_data is not None:
+    if adata is not None:
         adata_provided = True
-        adata_ = gex_data.copy()
+        adata_ = adata.copy()
 
         # Mark cells with contigs
         contig_check = pd.DataFrame(index=adata_.obs_names)
@@ -4622,7 +4929,7 @@ def check_contigs(
 
     # Collect here because mark_ambiguous_contigs_vec needs DataFrame
     # This is the main computation - everything before this was just query planning
-    dat = dat.collect()
+    dat = dat.collect(engine="streaming")
 
     dat = mark_ambiguous_contigs_vec(
         dat,
@@ -4636,7 +4943,7 @@ def check_contigs(
     if productive_only:
         # Collect dat_ if lazy for joining
         if isinstance(dat_, pl.LazyFrame):
-            dat_ = dat_.collect()
+            dat_ = dat_.collect(engine="streaming")
 
         # Merge flags back to original data
         flag_cols = ["extra", "ambiguous"]
@@ -4669,8 +4976,8 @@ def check_contigs(
             raise ValueError(
                 f"{save} not suitable. Please provide filename ending with .tsv"
             )
-    elif isinstance(vdj_data, str) and os.path.isfile(vdj_data):
-        data_path = Path(vdj_data)
+    elif isinstance(vdj, str) and os.path.isfile(vdj):
+        data_path = Path(vdj)
         _write_airr(
             dat, str(data_path.parent / f"{data_path.stem}_checked.tsv")
         )
@@ -4684,14 +4991,16 @@ def check_contigs(
     if verbose:
         print("Initializing DandelionPolars object...")
 
+    # sanitize dat
+    dat = _sanitize_data_polars(dat)
     # Create output object
     out_dat = DandelionPolars(data=dat, verbose=False, **kwargs)
 
     # Copy germline if from DandelionPolars input
-    if isinstance(vdj_data, DandelionPolars):
-        out_dat.germline = vdj_data.germline
+    if isinstance(vdj, DandelionPolars):
+        out_dat.germline = vdj.germline
 
-    if gex_data is not None:
+    if adata is not None:
         # Import transfer function from tools
         from dandelion.tools import transfer
 
@@ -4940,7 +5249,7 @@ def read_10x_vdj_polars(
         res = parse_annotation_polars(res)
     elif isinstance(data, pl.LazyFrame):
         logg.info("Converting polars LazyFrame to polars DataFrame")
-        res = data.collect()
+        res = data.collect(engine="streaming")
         res = parse_annotation_polars(res)
     elif isinstance(data, pl.DataFrame):
         logg.info("Parsing polars DataFrame")

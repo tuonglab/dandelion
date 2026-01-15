@@ -62,7 +62,7 @@ def clone_network(
 
 
 def barplot(
-    vdj_data: AnnData | Dandelion,
+    data: AnnData | Dandelion,
     color: str,
     palette: str = "Set1",
     figsize: tuple[float, float] = (8, 3),
@@ -80,7 +80,7 @@ def barplot(
 
     Parameters
     ----------
-    vdj_data : AnnData | Dandelion
+    data : AnnData | Dandelion
         Dandelion or AnnData object.
     color : str
         column name in metadata for plotting in bar plot.
@@ -116,10 +116,10 @@ def barplot(
         bar plot.
 
     """
-    if isinstance(vdj_data, Dandelion):
-        data = vdj_data._metadata.copy()
-    elif isinstance(vdj_data, AnnData):
-        data = vdj_data.obs.copy()
+    if isinstance(data, Dandelion):
+        data = data._metadata.copy()
+    elif isinstance(data, AnnData):
+        data = data.obs.copy()
 
     min_size = min_clone_size
 
@@ -170,7 +170,7 @@ def barplot(
 
 
 def stackedbarplot(
-    vdj_data: AnnData | Dandelion,
+    data: AnnData | Dandelion,
     color: str,
     groupby: str | None,
     figsize: tuple[float, float] = (8, 3),
@@ -195,7 +195,7 @@ def stackedbarplot(
 
     Parameters
     ----------
-    vdj_data : AnnData | Dandelion
+    data : AnnData | Dandelion
         Dandelion or AnnData object.
     color : str
         column name in metadata for plotting in bar plot.
@@ -231,10 +231,10 @@ def stackedbarplot(
     tuple[Figure, Axes]
         stacked barplot.
     """
-    if isinstance(vdj_data, Dandelion):
-        data = vdj_data._metadata.copy()
-    elif isinstance(vdj_data, AnnData):
-        data = vdj_data.obs.copy()
+    if isinstance(data, Dandelion):
+        data = data._metadata.copy()
+    elif isinstance(data, AnnData):
+        data = data.obs.copy()
     # quick fix to prevent dropping of nan
     data[groupby] = [str(l) for l in data[groupby]]
 
@@ -406,7 +406,7 @@ def stackedbarplot(
 
 
 def spectratype(
-    vdj_data: Dandelion,
+    vdj: Dandelion,
     color: str,
     groupby: str,
     locus: str,
@@ -429,7 +429,7 @@ def spectratype(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         Dandelion object.
     color : str
         column name in metadata for plotting in bar plot.
@@ -463,7 +463,7 @@ def spectratype(
     tuple[Figure, Axes]
         spectratype plot.
     """
-    data = vdj_data._data.copy()
+    data = vdj._data.copy()
     if "ambiguous" in data:
         data = data[data["ambiguous"] == "F"].copy()
 
@@ -628,7 +628,7 @@ def spectratype(
 
 
 def clone_overlap(
-    gex_data: AnnData,
+    adata: AnnData,
     groupby: str,
     colorby: str | None = None,
     weighted_overlap: bool = False,
@@ -656,7 +656,7 @@ def clone_overlap(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         AnnData object.
     groupby : str
         column name in obs for collapsing to nodes in circos plot.
@@ -708,14 +708,14 @@ def clone_overlap(
     else:
         clone_ = clone_key
 
-    if isinstance(gex_data, AnnData):
-        data = gex_data.obs.copy()
+    if isinstance(adata, AnnData):
+        data = adata.obs.copy()
         # get rid of problematic rows that appear because of category conversion?
-        if "clone_overlap" in gex_data.uns:
-            overlap = gex_data.uns["clone_overlap"].copy()
+        if "clone_overlap" in adata.uns:
+            overlap = adata.uns["clone_overlap"].copy()
         else:
             raise KeyError(
-                "`clone_overlap` not found in `gex_data.uns`. Did you run `tl.clone_overlap`?"
+                "`clone_overlap` not found in `adata.uns`. Did you run `tl.clone_overlap`?"
             )
     else:
         raise ValueError("Please provide a AnnData object.")
@@ -813,26 +813,26 @@ def clone_overlap(
             if pd.api.types.is_categorical_dtype(adata.obs[groupby]):
                 colorby_dict = dict(
                     zip(
-                        list(gex_data.obs[str(colorby)].cat.categories),
-                        gex_data.uns[str(colorby) + "_colors"],
+                        list(adata.obs[str(colorby)].cat.categories),
+                        adata.uns[str(colorby) + "_colors"],
                     )
                 )
             else:
                 colorby_dict = dict(
                     zip(
-                        list(gex_data.obs[str(colorby)].unique()),
-                        gex_data.uns[str(colorby) + "_colors"],
+                        list(adata.obs[str(colorby)].unique()),
+                        adata.uns[str(colorby) + "_colors"],
                     )
                 )
         else:
-            if len(gex_data.obs[str(colorby)].unique()) <= 20:
+            if len(adata.obs[str(colorby)].unique()) <= 20:
                 pal = cycle(palettes.default_20)
-            elif len(gex_data.obs[str(colorby)].unique()) <= 28:
+            elif len(adata.obs[str(colorby)].unique()) <= 28:
                 pal = cycle(palettes.default_28)
             else:
                 pal = cycle(palettes.default_102)
             colorby_dict = dict(
-                zip(list(gex_data.obs[str(colorby)].unique()), pal)
+                zip(list(adata.obs[str(colorby)].unique()), pal)
             )
     else:
         if type(color_mapping) is dict:
@@ -896,7 +896,7 @@ def clone_overlap(
 
 
 def productive_ratio(
-    gex_data: AnnData,
+    adata: AnnData,
     figsize: tuple[float, float] = (8, 4),
     palette: list[str] = ["lightblue", "darkblue"],
     fontsize: int | float = 8,
@@ -911,7 +911,7 @@ def productive_ratio(
 
     Parameters
     ----------
-    gex_data : AnnData
+    adata : AnnData
         AnnData object with `.uns['productive_ratio']` computed from
         `tl.productive_ratio`.
     figsize : tuple[float, float], optional
@@ -925,9 +925,9 @@ def productive_ratio(
     legend_kwargs : dict, optional
         Any additional kwargs to `plt.legend`
     """
-    res = gex_data.uns["productive_ratio"]["results"]
-    locus = gex_data.uns["productive_ratio"]["locus"]
-    groupby = gex_data.uns["productive_ratio"]["groupby"]
+    res = adata.uns["productive_ratio"]["results"]
+    locus = adata.uns["productive_ratio"]["locus"]
+    groupby = adata.uns["productive_ratio"]["groupby"]
 
     plt.figure(figsize=figsize)
     ax = sns.barplot(

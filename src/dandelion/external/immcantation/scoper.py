@@ -12,7 +12,7 @@ from dandelion.utilities._utilities import (
 
 
 def identical_clones(
-    vdj_data: Dandelion,
+    vdj: Dandelion,
     method: Literal["nt", "aa"] = "nt",
     junction: str = "junction",
     v_call: str = "v_call",
@@ -46,7 +46,7 @@ def identical_clones(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         a dandelion object containing the airr data.
     method : Literal["nt", "aa"], optional
         one of the "nt" for nucleotide based clustering or "aa" for amino acid based clustering.
@@ -99,7 +99,7 @@ def identical_clones(
         )
     scp = importr("scoper")
 
-    db = load_data(vdj_data._data)
+    db = load_data(vdj._data)
     warnings.filterwarnings("ignore")
 
     # sanitize before passing to R
@@ -137,8 +137,8 @@ def identical_clones(
     )
     results_dataframe = r["as.data.frame"](results)
     df = safe_rpy2py(results_dataframe)
-    vdj_data._data = df.copy()
-    vdj_data.update_metadata(
+    vdj._data = df.copy()
+    vdj.update_metadata(
         clone_key=clone_key,
         retrieve=clone_key,
         retrieve_mode="merge and unique only",
@@ -146,7 +146,7 @@ def identical_clones(
 
 
 def hierarchical_clones(
-    vdj_data: Dandelion,
+    vdj: Dandelion,
     threshold: float,
     method: Literal["nt", "aa"] = "nt",
     linkage: Literal["single", "average", "complete"] = "single",
@@ -183,7 +183,7 @@ def hierarchical_clones(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         a dandelion object containing the airr data.
     threshold : float
         numeric scalar where the tree should be cut (the distance threshold for clonal grouping).
@@ -242,7 +242,7 @@ def hierarchical_clones(
         )
     scp = importr("scoper")
 
-    db = load_data(vdj_data._data)
+    db = load_data(vdj._data)
     warnings.filterwarnings("ignore")
     db = sanitize_data(db)
     if remove_ambiguous:
@@ -281,8 +281,8 @@ def hierarchical_clones(
     )
     results_dataframe = r["as.data.frame"](results)
     df = safe_rpy2py(results_dataframe)
-    vdj_data._data = df.copy()
-    vdj_data.update_metadata(
+    vdj._data = df.copy()
+    vdj.update_metadata(
         clone_key=clone_id,
         retrieve=clone_id,
         retrieve_mode="merge and unique only",
@@ -290,7 +290,7 @@ def hierarchical_clones(
 
 
 def spectral_clones(
-    vdj_data: Dandelion,
+    vdj: Dandelion,
     method: Literal["novj", "vj"] = "novj",
     germline: str = "germline_alignment",
     sequence: str = "sequence_alignment",
@@ -334,7 +334,7 @@ def spectral_clones(
 
     Parameters
     ----------
-    vdj_data : Dandelion
+    vdj : Dandelion
         a dandelion object containing the airr data.
     threshold : float
         numeric scalar where the tree should be cut (the distance threshold for clonal grouping).
@@ -404,7 +404,7 @@ def spectral_clones(
         )
     scp = importr("scoper")
 
-    db = load_data(vdj_data._data)
+    db = load_data(vdj._data)
     warnings.filterwarnings("ignore")
     db = sanitize_data(db)
     if remove_ambiguous:
@@ -449,8 +449,8 @@ def spectral_clones(
     )
     results_dataframe = r["as.data.frame"](results)
     df = safe_rpy2py(results_dataframe)
-    vdj_data._data = df.copy()
-    vdj_data.update_metadata(
+    vdj._data = df.copy()
+    vdj.update_metadata(
         clone_key=clone_id,
         retrieve=clone_id,
         retrieve_mode="merge and unique only",

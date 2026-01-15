@@ -79,7 +79,7 @@ def test_generate_network(create_testfolder, resample, expected):
     adata = ddl.tl.to_scirpy(vdj, to_mudata=False)
     if resample is not None:
         vdj, adata = ddl.tl.generate_network(
-            vdj, gex_data=adata, sample=resample, layout_method="mod_fr"
+            vdj, adata=adata, sample=resample, layout_method="mod_fr"
         )
         assert vdj.n_obs == expected
         assert vdj.layout is not None
