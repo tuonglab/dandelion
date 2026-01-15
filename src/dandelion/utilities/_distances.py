@@ -240,30 +240,33 @@ class HammingMetric:
         else:  # numpy
             return self._compute_numpy(seqs, n)
 
-    def _compute_cupy(self, seqs, n):
+    def _compute_cupy(self, seqs: list[str], n: int) -> np.ndarray:
         """CuPy implementation."""
+
+        # Convert sequences to integer arrays (ASCII codes)
         try:
-            # Try the fast path assuming fixed length
             seqs_array = self.cp.array(
-                [self.cp.array(list(s), dtype="U1") for s in seqs], dtype="U1"
+                [[ord(c) for c in s] for s in seqs], dtype=self.cp.int16
             )
         except ValueError:
-            # Fall back to padding for variable length sequences
             max_len = max(len(s) for s in seqs)
-            seqs_array = self.cp.zeros((n, max_len), dtype="U1")
-            for i, seq in enumerate(seqs):
-                # The fix: convert list(seq) to a CuPy array before assignment
-                seqs_array[i, : len(seq)] = self.cp.array(list(seq), dtype="U1")
+            seqs_array = self.cp.zeros((n, max_len), dtype=self.cp.int16)
+            for i, s in enumerate(seqs):
+                seqs_array[i, : len(s)] = self.cp.array(
+                    [ord(c) for c in s], dtype=self.cp.int16
+                )
+
         dist_matrix = (
             (seqs_array[:, None, :] != seqs_array[None, :, :])
             .sum(axis=2)
             .astype(self.cp.float32)
         )
+
         return self.cp.asnumpy(dist_matrix)
 
-    def _compute_torch(self, seqs, n):
+    def _compute_torch(self, seqs: list[str], n: int) -> np.ndarray:
         """PyTorch implementation."""
-        seqs_tensor = torch.tensor(
+        seqs_tensor = self.torch.tensor(
             np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(
                 n, -1
             ),
@@ -278,7 +281,7 @@ class HammingMetric:
 
         return dist_matrix.cpu().numpy()
 
-    def _compute_numpy(self, seqs, n):
+    def _compute_numpy(self, seqs: list[str], n: int) -> np.ndarray:
         """NumPy implementation."""
         seqs_array = np.frombuffer("".join(seqs).encode(), dtype="S1").reshape(
             n, -1
@@ -341,19 +344,21 @@ class IdentityMetric:
             print("Using NumPy backend (CPU only) for identity")
 
     @staticmethod
-    def _stable_hash(s: str) -> int:
+    def _stable_hash(s: str) -> np.uint64:
         """Compute a stable 64-bit hash for a string."""
         # blake2b is faster than sha256 and designed for hashing
-        return int.from_bytes(
-            hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest(),
-            byteorder="little",
-            signed=False,
+        return np.uint64(
+            int.from_bytes(
+                hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest(),
+                byteorder="little",
+                signed=False,
+            )
         )
 
     def _hash_sequences(self, seqs: list[str]) -> np.ndarray:
         """Hash all sequences into a NumPy int64 array."""
         # Pre-allocate array for better performance
-        hashes = np.empty(len(seqs), dtype=np.int64)
+        hashes = np.empty(len(seqs), dtype=np.uint64)
         for i, s in enumerate(seqs):
             hashes[i] = self._stable_hash(s)
         return hashes
