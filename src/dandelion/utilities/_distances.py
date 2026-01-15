@@ -244,9 +244,15 @@ class HammingMetric:
 
     def _compute_cupy(self, seqs, n):
         """CuPy implementation."""
-        seqs_array = self.cp.frombuffer(
-            "".join(seqs).encode(), dtype="S1"
-        ).reshape(n, -1)
+        try:
+            # Try the fast path assuming fixed length
+            seqs_array = self.cp.array([list(s) for s in seqs], dtype="U1")
+        except ValueError:
+            # Fall back to padding for variable length sequences
+            max_len = max(len(s) for s in seqs)
+            seqs_array = self.cp.zeros((n, max_len), dtype="U1")
+            for i, seq in enumerate(seqs):
+                seqs_array[i, : len(seq)] = list(seq)
         dist_matrix = (
             (seqs_array[:, None, :] != seqs_array[None, :, :])
             .sum(axis=2)
