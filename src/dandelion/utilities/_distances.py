@@ -244,13 +244,16 @@ class HammingMetric:
         """CuPy implementation."""
         try:
             # Try the fast path assuming fixed length
-            seqs_array = self.cp.array([list(s) for s in seqs], dtype="U1")
+            seqs_array = self.cp.array(
+                [self.cp.array(list(s), dtype="U1") for s in seqs], dtype="U1"
+            )
         except ValueError:
             # Fall back to padding for variable length sequences
             max_len = max(len(s) for s in seqs)
             seqs_array = self.cp.zeros((n, max_len), dtype="U1")
             for i, seq in enumerate(seqs):
-                seqs_array[i, : len(seq)] = list(seq)
+                # The fix: convert list(seq) to a CuPy array before assignment
+                seqs_array[i, : len(seq)] = self.cp.array(list(seq), dtype="U1")
         dist_matrix = (
             (seqs_array[:, None, :] != seqs_array[None, :, :])
             .sum(axis=2)

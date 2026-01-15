@@ -59,6 +59,9 @@ CHECK_COLS = BOOLEAN_LIKE_COLUMNS + [
 ]
 TRUES_STR = [str(x).upper() for x in TRUES]
 
+# Enable string cache for Polars to optimize repeated string operations
+pl.enable_string_cache()
+
 
 class DandelionPolars:
     """Dandelion class object."""
@@ -414,7 +417,9 @@ class DandelionPolars:
                 # Sync metadata if not already set
                 if _metadata is None:
                     _metadata = (
-                        metadata.filter(pl.col("cell_id").is_in(filtered_cell_ids))
+                        metadata.filter(
+                            pl.col("cell_id").is_in(filtered_cell_ids)
+                        )
                         if metadata is not None
                         else None
                     )
