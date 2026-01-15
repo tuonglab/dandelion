@@ -459,6 +459,8 @@ class SubstitutionMatrixMetric:
         float
             Self-alignment score.
         """
+        if len(seq) < 1 or seq is None:
+            return 0.0
         return self.aligner.score(seq, seq)
 
     def compute(self, s1: str, s2: str) -> float:

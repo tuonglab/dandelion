@@ -4396,16 +4396,21 @@ def identify_duplicates(df: pl.DataFrame) -> pl.DataFrame:
     >>> result["ambiguous_init"].to_list()
     [False, True, False]  # Second contig has lower UMI for SEQ1
     """
-    return (
-        df.with_columns(
-            pl.col("umi_count")
-            .rank(method="ordinal", descending=True)
-            .over("sequence_alignment")
-            .alias("umi_rank_by_seq")
+    if "sequence_alignment" in df.collect_schema():
+        return (
+            df.with_columns(
+                pl.col("umi_count")
+                .rank(method="ordinal", descending=True)
+                .over("sequence_alignment")
+                .alias("umi_rank_by_seq")
+            )
+            .with_columns(
+                (pl.col("umi_rank_by_seq") > 1).alias("ambiguous_init")
+            )
+            .drop("umi_rank_by_seq")
         )
-        .with_columns((pl.col("umi_rank_by_seq") > 1).alias("ambiguous_init"))
-        .drop("umi_rank_by_seq")
-    )
+    else:
+        return df
 
 
 def resolve_duplicates(df: pl.DataFrame) -> pl.DataFrame:
