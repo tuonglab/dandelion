@@ -25,6 +25,7 @@ from collections import defaultdict, OrderedDict
 from functools import cmp_to_key, reduce
 from pandas.api.types import infer_dtype
 from pathlib import Path
+from polars import ColumnNotFoundError
 from scanpy import logging as logg
 from scipy.sparse import csr_matrix
 from textwrap import dedent
@@ -320,6 +321,7 @@ class DandelionPolars:
             if isinstance(filter_expr, (pl.DataFrame, pl.LazyFrame)):
                 # When a DataFrame/LazyFrame is passed, use it directly as the filtered data
                 _data = filter_expr
+                _metadata = None  # Will be synced below
             elif isinstance(filter_expr, pl.Series):
                 # Boolean mask provided
                 if isinstance(data, pl.LazyFrame):
@@ -336,26 +338,87 @@ class DandelionPolars:
                 else:
                     # Eager DataFrame: filter directly with the boolean Series to avoid large Python lists
                     _data = data.filter(filter_expr)
+                _metadata = None  # Will be synced below
             else:
                 # Assume it's an Expression
+                # For now, create the filter and we'll handle metadata-only columns
+                # when we try to collect
                 _data = data.filter(filter_expr)
+                _metadata = None  # Will be synced below
 
             # For metadata sync, extract unique cell_ids from filtered data
-            if isinstance(_data, pl.LazyFrame):
-                filtered_cell_ids = (
-                    _data.select("cell_id")
-                    .collect(engine="streaming")
-                    .to_series()
-                    .unique()
-                )
-            else:
-                filtered_cell_ids = _data.select("cell_id").to_series().unique()
-            _metadata = (
-                metadata.filter(pl.col("cell_id").is_in(filtered_cell_ids))
-                if metadata is not None
-                else None
-            )
-            cell_ids = filtered_cell_ids
+            # (skip if already extracted from metadata above)
+            if cell_ids is None:
+                if isinstance(_data, pl.LazyFrame):
+                    try:
+                        filtered_cell_ids = (
+                            _data.select("cell_id")
+                            .collect(engine="streaming")
+                            .to_series()
+                            .unique()
+                        )
+                    except ColumnNotFoundError:
+                        # The filter expression references metadata-only columns
+                        # Filter metadata instead and extract cell_ids
+                        if metadata is not None:
+                            filtered_metadata = metadata.filter(filter_expr)
+                            if isinstance(filtered_metadata, pl.LazyFrame):
+                                filtered_cell_ids = (
+                                    filtered_metadata.select("cell_id")
+                                    .collect(engine="streaming")
+                                    .to_series()
+                                    .unique()
+                                )
+                            else:
+                                filtered_cell_ids = (
+                                    filtered_metadata.select("cell_id")
+                                    .to_series()
+                                    .unique()
+                                )
+                            # Now filter data by the cell_ids from metadata
+                            _data = data.filter(
+                                pl.col("cell_id").is_in(filtered_cell_ids)
+                            )
+                            _metadata = filtered_metadata
+                        else:
+                            raise
+                else:
+                    try:
+                        filtered_cell_ids = (
+                            _data.select("cell_id").to_series().unique()
+                        )
+                    except ColumnNotFoundError:
+                        # The filter expression references metadata-only columns
+                        if metadata is not None:
+                            filtered_metadata = metadata.filter(filter_expr)
+                            if isinstance(filtered_metadata, pl.DataFrame):
+                                filtered_cell_ids = (
+                                    filtered_metadata.select("cell_id")
+                                    .to_series()
+                                    .unique()
+                                )
+                            else:
+                                filtered_cell_ids = (
+                                    filtered_metadata.select("cell_id")
+                                    .collect(engine="streaming")
+                                    .to_series()
+                                    .unique()
+                                )
+                            # Now filter data by the cell_ids from metadata
+                            _data = data.filter(
+                                pl.col("cell_id").is_in(filtered_cell_ids)
+                            )
+                            _metadata = filtered_metadata
+                        else:
+                            raise
+                # Sync metadata if not already set
+                if _metadata is None:
+                    _metadata = (
+                        metadata.filter(pl.col("cell_id").is_in(filtered_cell_ids))
+                        if metadata is not None
+                        else None
+                    )
+                cell_ids = filtered_cell_ids
         else:
             # Filter by cell_id
             _data = data.filter(pl.col("cell_id").is_in(cell_ids))

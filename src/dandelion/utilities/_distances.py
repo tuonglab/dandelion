@@ -9,8 +9,6 @@ from rapidfuzz.distance import Levenshtein
 from rapidfuzz import process
 from typing import Callable, Protocol, runtime_checkable
 
-import torch
-
 
 def dist_func_long_sep(
     x: list[str],
