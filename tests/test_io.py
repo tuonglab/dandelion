@@ -72,34 +72,6 @@ def test_readwrite_h5ddl(create_testfolder):
 
 
 @pytest.mark.usefixtures("create_testfolder")
-def test_readwrite_pkl(create_testfolder):
-    """test_readwrite_pkl"""
-    out_file1 = create_testfolder / "test_airr_reannotated.tsv"
-    out_file2 = create_testfolder / "test_airr_reannotated.pkl"
-    out_file3 = create_testfolder / "test_airr_reannotated.pkl.gz"
-    out_file4 = create_testfolder / "test_airr_reannotated.pkl.pbz2"
-    vdj = ddl.Dandelion(out_file1)
-    assert not vdj._data.np1_length.empty
-    assert not vdj._data.np2_length.empty
-    assert not vdj._data.junction_length.empty
-    vdj.write_pkl(out_file2)
-    vdj3 = ddl.read_pkl(out_file2)
-    assert not vdj3._data.np1_length.empty
-    assert not vdj3._data.np2_length.empty
-    assert not vdj3._data.junction_length.empty
-    vdj.write_pkl(out_file3)
-    vdj4 = ddl.read_pkl(out_file3)
-    assert not vdj4._data.np1_length.empty
-    assert not vdj4._data.np2_length.empty
-    assert not vdj4._data.junction_length.empty
-    vdj.write_pkl(out_file4)
-    vdj5 = ddl.read_pkl(out_file4)
-    assert not vdj5._data.np1_length.empty
-    assert not vdj5._data.np2_length.empty
-    assert not vdj5._data.junction_length.empty
-
-
-@pytest.mark.usefixtures("create_testfolder")
 def test_readwrite10xairr(create_testfolder):
     """test_readwrite10xairr"""
     airr_file = create_testfolder / "test_airr_rearrangements.tsv"

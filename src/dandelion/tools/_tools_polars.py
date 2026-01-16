@@ -145,6 +145,15 @@ def find_clones(
     elif isinstance(key, str):
         # Single string - use for all loci
         key = {"ig": key, "tr-ab": key, "tr-gd": key}
+    locus_to_col = {
+        "IGH": key["ig"],
+        "IGK": key["ig"],
+        "IGL": key["ig"],
+        "TRB": key["tr-ab"],
+        "TRA": key["tr-ab"],
+        "TRD": key["tr-gd"],
+        "TRG": key["tr-gd"],
+    }
     # Default key_added
     key_added = "clone_id" if key_added is None else key_added
     # Initialize clone column
@@ -199,7 +208,11 @@ def find_clones(
                 by_alleles=by_alleles,
             )
             # Build aggregation list dynamically
-            agg_cols = [pl.col(locus_key)]
+            # Collect both sequences and their original order for proper tracking
+            agg_cols = [
+                pl.col(locus_key),
+                pl.col("_original_order"),
+            ]
             if same_length:
                 agg_cols.append(pl.col(f"_{locus_key}_length").first())
             else:
@@ -210,6 +223,9 @@ def find_clones(
                 .sort("_membership")
             )
             clones_vdj = defaultdict(dict)
+            # Also track which original rows belong to which clone
+            row_to_clone = {}
+
             for row in tqdm(
                 grouped.iter_rows(named=True),
                 desc=f"Finding clones based on {locus_celltype} cell {vdj_chain} chains using {locus_key}",
@@ -218,6 +234,7 @@ def find_clones(
                 disable=not verbose,
             ):
                 seqs = row[locus_key]
+                orig_orders = row["_original_order"]
                 membership = row["_membership"]
                 length = row[f"_{locus_key}_length"]
                 if isinstance(metric, IdentityMetric):
@@ -229,17 +246,29 @@ def find_clones(
                         )
                     else:
                         threshold = None
-                d_mat = metric.compute_vectorized(seqs)
 
-                if d_mat.shape[0] > 1:
-                    seq_tmp_dict = _clustering_scipy(
-                        d_mat,
-                        threshold=threshold,
-                        sequences=seqs,
-                        hard_threshold=hard_cutoff,
-                    )
+                # Filter out empty strings for distance calculation only
+                seqs_non_empty = [s for s in seqs if s]
+                seqs_empty = [s for s in seqs if not s]
+
+                if seqs_non_empty:
+                    d_mat = metric.compute_vectorized(seqs_non_empty)
+
+                    if d_mat.shape[0] > 1:
+                        seq_tmp_dict = _clustering_scipy(
+                            d_mat,
+                            threshold=threshold,
+                            sequences=seqs_non_empty,
+                            hard_threshold=hard_cutoff,
+                        )
+                    else:
+                        seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
                 else:
-                    seq_tmp_dict = {seqs[0]: (seqs[0],)}
+                    # All sequences in this membership are empty - assign them together
+                    if seqs_empty:
+                        seq_tmp_dict = {seqs_empty[0]: tuple(seqs_empty)}
+                    else:
+                        seq_tmp_dict = {}
 
                 # Sort by size
                 clones_tmp = sorted(
@@ -247,18 +276,17 @@ def find_clones(
                 )
                 for sub_group, clone_group in enumerate(clones_tmp, 1):
                     clones_vdj[membership][sub_group] = clone_group
+                    # Map each original row to its clone based on its sequence
+                    for seq_idx, seq_val in enumerate(seqs):
+                        if seq_val and seq_val in clone_group:
+                            row_to_clone[orig_orders[seq_idx]] = (
+                                f"{membership}_{sub_group}"
+                            )
 
-            # Flatten to sequence -> clone mapping
-            seq_to_clone = {}
-            for membership, clone_dict in clones_vdj.items():
-                for clone_id, sequences in clone_dict.items():
-                    for seq in sequences:
-                        seq_to_clone[seq] = f"{membership}_{clone_id}"
-
-            # Apply to dataframe
+            # Apply clone IDs using row mapping instead of sequence mapping
             df_vdj_grp = df_vdj_grp.with_columns(
-                pl.col(locus_key)
-                .replace_strict(seq_to_clone, default=None)
+                pl.col("_original_order")
+                .replace_strict(row_to_clone, default=None)
                 .alias(f"_{key_added}_{vdj_chain}")
             )
 
@@ -285,7 +313,11 @@ def find_clones(
                 by_alleles=by_alleles,
             )
             # Build aggregation list dynamically
-            agg_cols = [pl.col(locus_key)]
+            # Collect both sequences and their original order for proper tracking
+            agg_cols = [
+                pl.col(locus_key),
+                pl.col("_original_order"),
+            ]
             if same_length:
                 agg_cols.append(pl.col(f"_{locus_key}_length").first())
             else:
@@ -298,6 +330,8 @@ def find_clones(
             )
 
             clones_vj = defaultdict(dict)
+            # Also track which original rows belong to which clone
+            row_to_clone = {}
 
             for row in tqdm(
                 grouped.iter_rows(named=True),
@@ -307,6 +341,7 @@ def find_clones(
                 disable=not verbose,
             ):
                 seqs = row[locus_key]
+                orig_orders = row["_original_order"]
                 length = row[f"_{locus_key}_length"]
                 membership = row["_membership"]
                 if isinstance(metric, IdentityMetric):
@@ -318,17 +353,29 @@ def find_clones(
                         )
                     else:
                         threshold = None
-                d_mat = metric.compute_vectorized(seqs)
 
-                if d_mat.shape[0] > 1:
-                    seq_tmp_dict = _clustering_scipy(
-                        d_mat,
-                        threshold=threshold,
-                        sequences=seqs,
-                        hard_threshold=hard_cutoff,
-                    )
+                # Filter out empty strings for distance calculation only
+                seqs_non_empty = [s for s in seqs if s]
+                seqs_empty = [s for s in seqs if not s]
+
+                if seqs_non_empty:
+                    d_mat = metric.compute_vectorized(seqs_non_empty)
+
+                    if d_mat.shape[0] > 1:
+                        seq_tmp_dict = _clustering_scipy(
+                            d_mat,
+                            threshold=threshold,
+                            sequences=seqs_non_empty,
+                            hard_threshold=hard_cutoff,
+                        )
+                    else:
+                        seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
                 else:
-                    seq_tmp_dict = {seqs[0]: (seqs[0],)}
+                    # All sequences in this membership are empty - assign them together
+                    if seqs_empty:
+                        seq_tmp_dict = {seqs_empty[0]: tuple(seqs_empty)}
+                    else:
+                        seq_tmp_dict = {}
 
                 # Sort by size
                 clones_tmp = sorted(
@@ -336,18 +383,17 @@ def find_clones(
                 )
                 for sub_group, clone_group in enumerate(clones_tmp, 1):
                     clones_vj[membership][sub_group] = clone_group
+                    # Map each original row to its clone based on its sequence
+                    for seq_idx, seq_val in enumerate(seqs):
+                        if seq_val and seq_val in clone_group:
+                            row_to_clone[orig_orders[seq_idx]] = (
+                                f"{membership}_{sub_group}"
+                            )
 
-            # Flatten to sequence -> clone mapping
-            seq_to_clone = {}
-            for membership, clone_dict in clones_vj.items():
-                for clone_id, sequences in clone_dict.items():
-                    for seq in sequences:
-                        seq_to_clone[seq] = f"{membership}_{clone_id}"
-
-            # Apply to dataframe
+            # Apply clone IDs using row mapping instead of sequence mapping
             df_vj_grp = df_vj_grp.with_columns(
-                pl.col(locus_key)
-                .replace_strict(seq_to_clone, default=None)
+                pl.col("_original_order")
+                .replace_strict(row_to_clone, default=None)
                 .alias(f"_{key_added}_{vj_chain}")
             )
             # Keep only what we need
@@ -451,7 +497,46 @@ def find_clones(
     if key_added in df.collect_schema():
         df = df.drop(key_added)
     # Join back to original df
-    df = df.join(df_final, on="cell_id", how="left").drop("_original_order")
+    df = df.join(df_final, on="cell_id", how="left")
+
+    # After propagation, clear clone_id for contigs missing required V/J/key fields
+    v_col_common = VCALLG if VCALLG in df.collect_schema() else VCALL
+
+    # Build when/then chain dynamically
+    # Get unique column names from the key dict
+    possible_cols = set(key.values())
+
+    # Build expression to check if the relevant column is null/empty
+    checks = []
+    for col in possible_cols:
+        checks.append(
+            pl.when(pl.col("_key") == col).then(
+                (pl.col(col).is_null()) | (pl.col(col) == "")
+            )
+        )
+
+    # Chain them
+    is_empty_expr = checks[0]
+    for check in checks[1:]:
+        is_empty_expr = is_empty_expr.otherwise(check)
+
+    df = (
+        df.with_columns(pl.col("locus").replace(locus_to_col).alias("_key"))
+        .with_columns(is_empty_expr.alias("_is_key_empty"))
+        .with_columns(
+            pl.when(
+                (~pl.col("_is_key_empty"))
+                & (pl.col(v_col_common).is_not_null())
+                & (pl.col(v_col_common).ne(""))
+                & (pl.col(JCALL).is_not_null())
+                & (pl.col(JCALL).ne(""))
+            )
+            .then(pl.col(key_added))
+            .otherwise(None)
+            .alias(key_added)
+        )
+        .drop(["_original_order", "_key", "_is_key_empty"])
+    )
 
     # return
     vdj._data = df
@@ -583,12 +668,20 @@ def _group_sequences(
         else:
             df = df.with_columns(pl.col(length_col).alias(f"_{key}_length"))
 
-    # Filter out rows with null junction
-    filter_conditions = [pl.col(key).is_not_null()]
+    # Filter out rows with null or empty junction (empty strings can't be clustered by distance)
+    filter_conditions = [
+        pl.col(key).is_not_null(),
+        pl.col(key).ne(""),  # Filter out empty strings as well
+    ]
 
     if same_vj:
         filter_conditions.extend(
-            [pl.col("_v_gene").is_not_null(), pl.col("_j_gene").is_not_null()]
+            [
+                pl.col("_v_gene").is_not_null(),
+                pl.col("_j_gene").is_not_null(),
+                pl.col("_v_gene").ne(""),
+                pl.col("_j_gene").ne(""),
+            ]
         )
 
     df = df.filter(pl.all_horizontal(filter_conditions))

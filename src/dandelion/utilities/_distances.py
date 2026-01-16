@@ -68,6 +68,113 @@ def dist_func_long_sep(
     return metric.compute(s1, s2)
 
 
+def prepare_sequences_with_separator(
+    sequences: list[list[str]],
+    metric: Metric,
+    pad_to_max: bool = False,
+    sep: str = "#",
+) -> list[str]:
+    """
+    Prepare multi-column sequences for vectorized distance computation.
+
+    This function handles:
+    - Concatenation of multiple sequence columns with separators
+    - Global padding (if requested) - all sequences padded to max length
+    - Returns flat list of strings ready for metric.compute_vectorized()
+
+    Parameters
+    ----------
+    sequences : list[list[str]]
+        List of sequence rows, where each row contains multiple sequence columns.
+        Example: [['ACGT', 'CGAT'], ['AAAA', 'TTTT'], ['CCCC', 'AAAA']]
+    metric : Metric
+        Distance metric (used to determine separator strategy)
+    pad_to_max : bool, optional
+        If True, pad all sequences to global maximum length.
+        Note: This is GLOBAL padding, different from the original per-pair padding.
+    sep : str, optional
+        Separator character
+
+    Returns
+    -------
+    list[str]
+        Flat list of concatenated strings, one per sequence row
+
+    Examples
+    --------
+    >>> from dandelion.utilities._distances import LevenshteinMetric
+    >>> metric = LevenshteinMetric()
+    >>> seqs = [['ACGT', 'CGAT'], ['AAAA', 'TTTT'], ['CCCC', 'AAAA']]
+    >>> prepared = prepare_sequences_with_separator(seqs, metric, pad_to_max=False)
+    >>> len(prepared)
+    3
+    >>> prepared[0]  # Concatenated with separator
+    'ACGT#####CGAT'
+
+    Notes
+    -----
+    This function uses GLOBAL padding (all sequences to max length) rather than
+    the original per-pair padding. This enables vectorization and is simpler,
+    but may produce slightly different distance values.
+    """
+    if not sequences:
+        return []
+
+    # Handle single-column case
+    n_cols = len(sequences[0]) if sequences else 0
+    if n_cols == 0:
+        return []
+
+    if n_cols == 1:
+        # Single column - no concatenation needed, just extract
+        if pad_to_max:
+            # Global padding for single column
+            max_len = max(len(row[0]) for row in sequences)
+            return [row[0].ljust(max_len, sep) for row in sequences]
+        else:
+            return [row[0] for row in sequences]
+
+    # Multi-column case
+    if isinstance(metric, SubstitutionMatrixMetric):
+        # No separator for substitution matrices - just concatenate
+        return ["".join(row) for row in sequences]
+
+    if pad_to_max:
+        # Global padding: find max length across all sequences and columns
+        max_lens = []
+        for col_idx in range(n_cols):
+            max_len = max(
+                len(row[col_idx]) for row in sequences if col_idx < len(row)
+            )
+            max_lens.append(max_len)
+
+        # Pad each sequence
+        result = []
+        for row in sequences:
+            parts = []
+            for col_idx, seq in enumerate(row):
+                # Pad this column to its max length
+                padded = seq.ljust(max_lens[col_idx] + 1, sep)
+                parts.append(padded)
+
+                # Add inter-column separator (longer than padded length)
+                if col_idx < len(row) - 1:
+                    col_sep = sep * (max_lens[col_idx] + 2)
+                    parts.append(col_sep)
+
+            result.append("".join(parts))
+        return result
+    else:
+        # Dynamic separator: use length longer than any sequence in dataset
+        max_len = 0
+        for row in sequences:
+            for seq in row:
+                max_len = max(max_len, len(seq))
+
+        long_sep = sep * (max_len + 1)
+        return [long_sep.join(row) for row in sequences]
+
+
 @runtime_checkable
 class Metric(Protocol):
     """

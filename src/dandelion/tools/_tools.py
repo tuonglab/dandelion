@@ -16,6 +16,7 @@ from itertools import product
 from pathlib import Path
 from scanpy import logging as logg
 from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import pdist, squareform
 from tqdm import tqdm
 from typing import Literal, TYPE_CHECKING
@@ -135,6 +136,9 @@ def find_clones(
         if all(~chain_check["All VDJ"]) and all(~chain_check["All VJ"]):
             locuses.remove(locus)
 
+    def _valid_field(val: str) -> bool:
+        return pd.notnull(val) and str(val).strip() not in {"", "nan", "None"}
+
     if len(locuses) > 0:
         for locusx in locuses:
             locus_1 = locus_dict1[locusx]
@@ -157,13 +161,13 @@ def find_clones(
 
             dat_vj = dat[dat["locus"].isin(locus_2)].copy()
             dat_vdj = dat[dat["locus"].isin(locus_1)].copy()
+            junction_col = key_[locusx] if isinstance(key_, dict) else key_
+            v_col_common = VCALLG if VCALLG in dat.columns else VCALL
             chain_check = check_chains(dat_vdj=dat_vdj, dat_vj=dat_vj)
             if dat_vdj.shape[0] > 0:
                 vj_len_grp_vdj, seq_grp_vdj = group_sequences(
                     dat_vdj,
-                    junction_key=(
-                        key_[locusx] if isinstance(key_, dict) else key_
-                    ),
+                    junction_key=junction_col,
                     recalculate_length=recalculate_length,
                     by_alleles=by_alleles,
                     locus=locusx,
@@ -187,14 +191,18 @@ def find_clones(
                 dat_vdj[clone_key] = pd.Series(clone_dict_vdj)
                 # dat[clone_key].update(pd.Series(dat_vdj[clone_key]))
                 for i, row in dat_vdj.iterrows():
-                    if i in dat.index:
+                    if (
+                        i in dat.index
+                        and pd.notnull(row[clone_key])
+                        and _valid_field(row[junction_col])
+                        and _valid_field(row[v_col_common])
+                        and _valid_field(row[JCALL])
+                    ):
                         dat.at[i, clone_key] = row[clone_key]
             if dat_vj.shape[0] > 0:
                 vj_len_grp_vj, seq_grp_vj = group_sequences(
                     dat_vj,
-                    junction_key=(
-                        key_[locusx] if isinstance(key_, dict) else key_
-                    ),
+                    junction_key=junction_col,
                     recalculate_length=recalculate_length,
                     by_alleles=by_alleles,
                     locus=locusx,
@@ -222,7 +230,13 @@ def find_clones(
                 )
                 # dat_[clone_key].update(pd.Series(dat[clone_key]))
             for i, row in dat.iterrows():
-                if i in dat_.index:
+                if (
+                    i in dat_.index
+                    and pd.notnull(row[clone_key])
+                    and _valid_field(row[junction_col])
+                    and _valid_field(row[v_col_common])
+                    and _valid_field(row[JCALL])
+                ):
                     dat_.at[i, clone_key] = row[clone_key]
 
     # dat_[clone_key].replace('', 'unassigned')
@@ -1082,63 +1096,39 @@ def clone_overlap(
 def clustering(
     distance_dict: dict, threshold: float, sequences_dict: dict[str, str]
 ) -> dict:
-    """Clustering the sequences."""
-    out_dict = {}
-    # find out the unique indices in this subset
-    i_unique = list(set(flatten(distance_dict)))
-    # for every pair of i1,i2 is their dictance smaller than the thresholdeshold?
-    i_pair_d = {
-        (i1, i2): (
-            distance_dict[(i1, i2)] <= threshold
-            if (i1, i2) in distance_dict
-            else False
-        )
-        for i1, i2 in product(i_unique, repeat=2)
-    }
-    i_pair_d.update(
-        {
-            (i2, i1): (
-                distance_dict[(i2, i1)] <= threshold
-                if (i2, i1) in distance_dict
-                else False
-            )
-            for i1, i2 in product(i_unique, repeat=2)
-        }
+    """Clustering the sequences using connected components (matches Polars implementation)."""
+    # Build adjacency matrix from distance dictionary
+    n = len(sequences_dict)
+    adjacency = np.zeros((n, n), dtype=int)
+
+    # Map sequence indices to matrix positions
+    idx_to_pos = {idx: pos for pos, idx in enumerate(sequences_dict.keys())}
+
+    # Fill adjacency matrix based on threshold
+    for (i1, i2), dist in distance_dict.items():
+        if dist <= threshold:
+            pos1 = idx_to_pos[i1]
+            pos2 = idx_to_pos[i2]
+            adjacency[pos1, pos2] = 1
+            adjacency[pos2, pos1] = 1
+
+    # Find connected components
+    _, labels = connected_components(
+        csgraph=csr_matrix(adjacency), directed=False
     )
-    # so which indices should not be part of a clone?
-    canbetogether = defaultdict(list)
-    for ii1, ii2 in product(i_unique, repeat=2):
-        if i_pair_d[(ii1, ii2)] or i_pair_d[(ii2, ii1)]:
-            if (ii1, ii2) in distance_dict:
-                canbetogether[ii1].append((ii1, ii2))
-                canbetogether[ii2].append((ii1, ii2))
-            elif (ii2, ii1) in distance_dict:
-                canbetogether[ii2].append((ii2, ii1))
-                canbetogether[ii1].append((ii2, ii1))
-        else:
-            if (ii1, ii2) or (ii2, ii1) in distance_dict:
-                canbetogether[ii1].append(())
-                canbetogether[ii2].append(())
-    for x in canbetogether:
-        canbetogether[x] = list({y for y in canbetogether[x] if len(y) > 0})
-    # convert the indices to sequences
-    for x in canbetogether:
-        if len(canbetogether[x]) > 0:
-            out_dict[sequences_dict[x]] = tuple(
-                sorted(
-                    set(
-                        list(
-                            [
-                                sequences_dict[y]
-                                for y in flatten(canbetogether[x])
-                            ]
-                        )
-                        + [sequences_dict[x]]
-                    )
-                )
-            )
-        else:
-            out_dict[sequences_dict[x]] = tuple([sequences_dict[x]])
+
+    # Group sequences by their cluster label
+    clusters = defaultdict(list)
+    for idx, label in zip(sequences_dict.keys(), labels):
+        clusters[label].append(sequences_dict[idx])
+
+    # Build output dictionary mapping each sequence to its cluster
+    out_dict = {}
+    for cluster_seqs in clusters.values():
+        cluster_tuple = tuple(sorted(cluster_seqs))
+        for seq in cluster_seqs:
+            out_dict[seq] = cluster_tuple
+
     return out_dict
 
 
@@ -1469,8 +1459,16 @@ def group_sequences(
                 )
             )
     seq_length_dict = dict(zip(input_vdj.index, seq_length))
-    # Create a dictionary and group sequence ids with same V and J genes
-    V_J = dict(zip(input_vdj.index, zip(V, J)))
+    # Create a dictionary and group sequence ids with same V and J genes, skip missing/empty V or J
+    V_J = {}
+    for idx, (v_val, j_val) in zip(input_vdj.index, zip(V, J)):
+        if (
+            v_val
+            and j_val
+            and str(v_val).lower() != "nan"
+            and str(j_val).lower() != "nan"
+        ):
+            V_J[idx] = (v_val, j_val)
     vj_grp = defaultdict(list)
     for key, val in sorted(V_J.items()):
         vj_grp[val].append(key)
@@ -1486,6 +1484,9 @@ def group_sequences(
         # then for each unique length, we add the contigs to a new tree if it matches the length
         # and also the actual seq sequences into a another one
         for s in setjlen:
+            # Skip length 0 sequences (null/empty junctions) as they can't be clustered by distance
+            if s == 0:
+                continue
             for contig_id in vj_grp[g]:
                 jlen_ = seq_length_dict[contig_id]
                 if jlen_ == s:
@@ -1543,39 +1544,21 @@ def group_pairwise_hamming_distance(
             d_mat = squareform(pdist(tdarray, lambda x, y: hamming(x[0], y[0])))
             # then calculate what the acceptable threshold is for each length of sequence
             tr = math.floor(int(l) * (1 - identity))
-            # convert diagonal and upper triangle to zeroes
-            d_mat = np.tril(d_mat)
-            np.fill_diagonal(d_mat, 0)
-            # get the coordinates/indices of seqs to match against the threshold later
-            indices_temp = []
-            indices = []
-            indices_temp = [list(x) for x in np.tril_indices_from(d_mat)]
-            indices = list(zip(indices_temp[0], indices_temp[1]))
-            # if there's more than 1 contig, remove the diagonal
-            if len(indices) > 1:
-                for pairs in indices:
-                    # remove diagonals
-                    if pairs[0] == pairs[1]:
-                        indices.remove(pairs)
-            indices_j = []
-            # use the coordinates/indices to retrieve the seq sequences
-            for p in range(0, len(indices)):
-                a1, b1 = indices[p]
-                indices_j.append(seq_[a1])
-                indices_j.append(seq_[b1])
-            # convert the distance matrix to coordinate (source) and distance (target) and create it
-            # as a dictionary
-            source, target = d_mat.nonzero()
-            source_target = list(zip(source.tolist(), target.tolist()))
-            if len(source) == 0 & len(target) == 0:
-                source_target = list([(0, 0)])
-            dist = {}
-            for st in source_target:
-                dist.update({st: d_mat[st]})
+
             if d_mat.shape[0] > 1:
-                seq_tmp_dict = clustering(dist, tr, seq_)
+                # Create distance dict with all pairwise distances (full matrix)
+                dist = {}
+                for i in range(d_mat.shape[0]):
+                    for j in range(d_mat.shape[1]):
+                        if i != j:
+                            dist[(i, j)] = d_mat[i, j]
+
+                # Create sequences dict mapping indices to sequences
+                sequences_dict = {i: seq_[i] for i in range(len(seq_))}
+                seq_tmp_dict = clustering(dist, tr, sequences_dict)
             else:
                 seq_tmp_dict = {seq_[0]: tuple([seq_[0]])}
+
             # sort the list so that clones that are larger have a smaller number
             clones_tmp = sorted(
                 list(set(seq_tmp_dict.values())),

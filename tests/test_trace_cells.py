@@ -45,7 +45,7 @@ def test_trace_missing_cells(annotation_10x_mouse):
                 print(f"    Cell {cell}: MISSING from metadata")
 
     # Run find_clones
-    vdj_pl = find_clones_polars(vdj_pl, verbose=False)
+    find_clones_polars(vdj_pl, verbose=False)
 
     # Check after find_clones
     data_after = (

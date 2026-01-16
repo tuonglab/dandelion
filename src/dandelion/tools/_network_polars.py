@@ -32,6 +32,7 @@ from dandelion.utilities._core import Dandelion
 from dandelion.utilities._distances import (
     Metric,
     dist_func_long_sep,
+    prepare_sequences_with_separator,
     resolve_metric,
 )
 from dandelion.utilities._utilities import (
@@ -280,20 +281,26 @@ def generate_network(
             else:
                 clone_data = dat._metadata[["cell_id", clone_key]]
 
-            clone_data = (
-                clone_data.to_pandas()
-                if isinstance(clone_data, (pl.DataFrame, pl.LazyFrame))
-                else clone_data
-            )
+            # Keep as polars and iterate using polars operations
+            if isinstance(clone_data, pl.LazyFrame):
+                clone_data = clone_data.collect(engine="streaming")
 
             for cell_name, clone_str in zip(
-                clone_data["cell_id"], clone_data[clone_key]
+                clone_data["cell_id"].to_list(), clone_data[clone_key].to_list()
             ):
-                if pd.notna(clone_str) and clone_str != "None":
+                if (
+                    clone_str is not None
+                    and clone_str.lower() != "none"
+                    and clone_str != ""
+                ):
                     clone_ids = str(clone_str).split("|")
                     for clone_id in clone_ids:
                         clone_id = clone_id.strip()
-                        if clone_id and clone_id != "None":
+                        if (
+                            clone_id
+                            and clone_id.lower() != "none"
+                            and clone_id != ""
+                        ):
                             if clone_id not in membership:
                                 membership[clone_id] = []
                             if cell_name not in membership[clone_id]:
@@ -1151,44 +1158,22 @@ def calculate_distance_matrix_original_full(
             .str.replace_all("None", "")
         )
 
-        seqs = seq_series.to_numpy()
-
         # Check if we have any non-empty sequences (matching pandas logic)
         nonnull = seq_series.drop_nulls()
         if nonnull.len() <= 1:
             continue
 
-        if n_cpus > 1:
-            results = pairwise_distances(
-                seqs,
-                metric=lambda x, y: (
-                    dist_func_long_sep(
-                        x,
-                        y,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
-                        sep="" if not pad_to_max else "#",
-                    )
-                ),
-                n_jobs=n_cpus,
-            )
-        else:
-            results = squareform(
-                pdist(
-                    seqs.reshape(-1, 1),
-                    lambda x, y: (
-                        dist_func_long_sep(
-                            x[0],
-                            y[0],
-                            metric=metric,
-                            pad_to_max=pad_to_max,
-                            sep="" if not pad_to_max else "#",
-                        )
-                        if (x[0] is not None and y[0] is not None)
-                        else 0
-                    ),
-                )
-            )
+        # Prepare sequences for single column (reshape to list of single-element lists)
+        seqs_raw = [[s] for s in seq_series.to_numpy()]
+        prepared_seqs = prepare_sequences_with_separator(
+            seqs_raw,
+            metric=metric,
+            pad_to_max=pad_to_max,
+            sep="" if not pad_to_max else "#",
+        )
+
+        # Compute distance matrix using vectorized metric
+        results = metric.compute_vectorized(prepared_seqs)
         total_dist += results
 
     np.fill_diagonal(total_dist, np.nan)
@@ -1261,47 +1246,28 @@ def calculate_distance_matrix_long(
         ]
     )
 
-    # Step 2: initialize distance matrix
+    # Step 2: prepare sequences (concatenate with separators, apply padding)
+    # This happens ONCE upfront, not per-pair
+    seqs_raw = dat_seq_clean.select(seq_cols).to_numpy().tolist()
+    prepared_seqs = prepare_sequences_with_separator(
+        seqs_raw,
+        metric=metric,
+        pad_to_max=pad_to_max,
+        sep="#",
+    )
+
+    # Step 3: initialize distance matrix
     n = dat_seq_clean.height
     cell_id_list = dat_seq_clean["cell_id"].to_list()
     cell_id_to_idx = {cell_id: idx for idx, cell_id in enumerate(cell_id_list)}
     total_dist = np.zeros((n, n))
 
     if membership is None:
-        # Step 3: compute full distance matrix at once
-        # Extract sequence columns as numpy array (excluding cell_id)
-        seqs = dat_seq_clean.select(seq_cols).to_numpy()
-
-        if n_cpus > 1:
-            results = pairwise_distances(
-                seqs,
-                metric=lambda x, y: (
-                    dist_func_long_sep(
-                        x,
-                        y,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
-                        sep="#",  # always pad with some sep
-                    )
-                ),
-                n_jobs=n_cpus,
-            )
-        else:
-            results = squareform(
-                pdist(
-                    seqs,
-                    metric=lambda x, y: dist_func_long_sep(
-                        x,
-                        y,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
-                        sep="#",  # always pad with some sep
-                    ),
-                )
-            )
+        # Step 4: compute full distance matrix at once using vectorized metric
+        results = metric.compute_vectorized(prepared_seqs)
         total_dist += results
     else:
-        # Step 3: iterate over clone memberships
+        # Step 4: iterate over clone memberships
         for clone in tqdm(
             membership,
             disable=not verbose,
@@ -1313,23 +1279,16 @@ def calculate_distance_matrix_long(
                     pl.col("cell_id").is_in(clone_cell_ids)
                 )
                 tmp_cell_ids = tmp["cell_id"].to_list()
-                seqs = tmp.select(seq_cols).to_numpy()
-
-                d_mat_tmp = squareform(
-                    pdist(
-                        seqs,
-                        metric=lambda x, y: dist_func_long_sep(
-                            x,
-                            y,
-                            metric=metric,
-                            pad_to_max=pad_to_max,
-                            sep="#",  # always pad with some sep
-                        ),
-                    )
-                )
 
                 # Map cell_ids to indices
                 indices = [cell_id_to_idx[cid] for cid in tmp_cell_ids]
+
+                # Extract prepared sequences for this clone
+                clone_seqs = [prepared_seqs[i] for i in indices]
+
+                # Compute distance matrix using vectorized metric
+                d_mat_tmp = metric.compute_vectorized(clone_seqs)
+
                 total_dist[np.ix_(indices, indices)] += d_mat_tmp
 
     np.fill_diagonal(total_dist, np.nan)

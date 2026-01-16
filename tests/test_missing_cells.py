@@ -15,8 +15,8 @@ def test_missing_cells_in_metadata(annotation_10x_mouse):
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse)
 
     # Run find_clones
-    vdj_pd = find_clones(vdj_pd, verbose=False)
-    vdj_pl = find_clones_polars(vdj_pl, verbose=False)
+    find_clones(vdj_pd, verbose=False)
+    find_clones_polars(vdj_pl, verbose=False)
 
     print("\n=== MISSING CELLS ANALYSIS ===")
 

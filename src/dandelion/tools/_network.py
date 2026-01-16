@@ -30,6 +30,7 @@ from dandelion.utilities._core import Dandelion, Query
 from dandelion.utilities._distances import (
     Metric,
     dist_func_long_sep,
+    prepare_sequences_with_separator,
     resolve_metric,
 )
 from dandelion.utilities._utilities import (
@@ -1025,39 +1026,18 @@ def calculate_distance_matrix_original_full(
         nonnull = seq_series.dropna()
         if nonnull.shape[0] <= 1:
             continue
-        # seq_indices = list(nonnull.index)
-        seqs = nonnull.to_numpy(dtype=object)
-        if n_cpus > 1:
-            results = pairwise_distances(
-                seqs,
-                metric=lambda x, y: (
-                    dist_func_long_sep(
-                        x,
-                        y,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
-                        sep="" if not pad_to_max else "#",
-                    )
-                ),
-                n_jobs=n_cpus,
-            )
-        else:
-            results = squareform(
-                pdist(
-                    seqs.reshape(-1, 1),
-                    lambda x, y: (
-                        dist_func_long_sep(
-                            x[0],
-                            y[0],
-                            metric=metric,
-                            pad_to_max=pad_to_max,
-                            sep="" if not pad_to_max else "#",
-                        )
-                        if (pd.notnull(x[0]) and pd.notnull(y[0]))
-                        else 0
-                    ),
-                )
-            )
+
+        # Prepare sequences for single column (reshape to list of single-element lists)
+        seqs_raw = [[s] for s in nonnull.to_numpy(dtype=object)]
+        prepared_seqs = prepare_sequences_with_separator(
+            seqs_raw,
+            metric=metric,
+            pad_to_max=pad_to_max,
+            sep="" if not pad_to_max else "#",
+        )
+
+        # Compute distance matrix using vectorized metric
+        results = metric.compute_vectorized(prepared_seqs)
         total_dist += results
 
     np.fill_diagonal(total_dist, np.nan)
@@ -1109,43 +1089,28 @@ def calculate_distance_matrix_long(
     dat_seq_clean = (
         dat_seq.replace("[.]", "", regex=True).fillna("").replace("None", "")
     )
-    # Step 2: initialize distance matrix
+
+    # Step 2: prepare sequences (concatenate with separators, apply padding)
+    # This happens ONCE upfront, not per-pair
+    seqs_raw = dat_seq_clean.values.tolist()
+    prepared_seqs = prepare_sequences_with_separator(
+        seqs_raw,
+        metric=metric,
+        pad_to_max=pad_to_max,
+        sep="#",
+    )
+
+    # Step 3: initialize distance matrix
     n = dat_seq_clean.shape[0]
     index_list = list(dat_seq_clean.index)
     total_dist = np.zeros((n, n))
+
     if membership is None:
-        # Step 3: compute full distance matrix at once
-        seqs = dat_seq_clean.values
-        if n_cpus > 1:
-            results = pairwise_distances(
-                seqs,
-                metric=lambda x, y: (
-                    dist_func_long_sep(
-                        x,
-                        y,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
-                        sep="#",  # always pad with some sep
-                    )
-                ),
-                n_jobs=n_cpus,
-            )
-        else:
-            results = squareform(
-                pdist(
-                    seqs,
-                    metric=lambda x, y: dist_func_long_sep(
-                        x,
-                        y,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
-                        sep="#",  # always pad with some sep
-                    ),
-                )
-            )
+        # Step 4: compute full distance matrix at once using vectorized metric
+        results = metric.compute_vectorized(prepared_seqs)
         total_dist += results
     else:
-        # Step 3: iterate over clone memberships
+        # Step 4: iterate over clone memberships
         for clone in tqdm(
             membership,
             disable=not verbose,
@@ -1153,25 +1118,16 @@ def calculate_distance_matrix_long(
         ):
             tmp = dat_seq_clean.loc[membership[clone]]
             if tmp.shape[0] > 1:
-                seqs = tmp.values
-                d_mat_tmp = squareform(
-                    pdist(
-                        seqs,
-                        metric=lambda x, y: dist_func_long_sep(
-                            x,
-                            y,
-                            metric=metric,
-                            pad_to_max=pad_to_max,
-                            sep="#",  # always pad with some sep
-                        ),
-                    )
-                )
-                total_dist[
-                    np.ix_(
-                        [index_list.index(i) for i in tmp.index],
-                        [index_list.index(j) for j in tmp.index],
-                    )
-                ] += d_mat_tmp
+                # Get indices for this clone
+                tmp_indices = [index_list.index(i) for i in tmp.index]
+
+                # Extract prepared sequences for this clone
+                clone_seqs = [prepared_seqs[i] for i in tmp_indices]
+
+                # Compute distance matrix for this clone using vectorized metric
+                d_mat_tmp = metric.compute_vectorized(clone_seqs)
+
+                total_dist[np.ix_(tmp_indices, tmp_indices)] += d_mat_tmp
 
     np.fill_diagonal(total_dist, np.nan)
     if verbose:

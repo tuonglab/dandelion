@@ -774,7 +774,11 @@ def _compute_distances_polars_native(
     df_with_clone = dat_seq_clean.with_columns(
         pl.col("_original_order")
         .map_elements(
-            lambda x: cell_to_clone.get(idx_to_cell.get(x, ""), None),
+            lambda x: (
+                str(cell_to_clone.get(idx_to_cell.get(x, ""), None))
+                if cell_to_clone.get(idx_to_cell.get(x, ""), None) is not None
+                else None
+            ),
             return_dtype=pl.String,
         )
         .alias("clone_id")
@@ -782,8 +786,6 @@ def _compute_distances_polars_native(
 
     # Filter to only cells with clone assignments
     df_with_clone = df_with_clone.filter(pl.col("clone_id").is_not_null())
-
-    tmp_results = []
 
     # Use map_groups to apply distance computation to each group without explicit iteration
     # This is Polars' vectorized way of handling per-group operations
@@ -797,17 +799,17 @@ def _compute_distances_polars_native(
         sequences = group_df.select(seq_cols).to_numpy(allow_copy=True)
 
         # Vectorized pairwise distance computation using scipy
-        if metric.name == "LEVENSHTEIN":
+        # Check metric type by string comparison since metric object is serialized
+        metric_name = type(metric).__name__
+        if metric_name == "LevenshteinMetric" or "Levenshtein" in metric_name:
             dist_block = _vectorized_distance_levenshtein(sequences, pad_to_max)
         else:
             dist_block = _vectorized_distance_generic(
                 sequences, metric, pad_to_max
             )
 
-        # Write to temporary Zarr
-        tmp_array, tmp_dir = create_tmp_zarr(z_array, compress)
-        tmp_array[np.ix_(array_indices, array_indices)] = dist_block
-        tmp_results.append(tmp_dir)
+        # Write directly to the main Zarr array at the group's indices
+        z_array[np.ix_(array_indices, array_indices)] = dist_block
 
         # Return empty DataFrame (we don't need the result, just side effects)
         return pl.DataFrame()
@@ -816,11 +818,12 @@ def _compute_distances_polars_native(
     _ = (
         df_with_clone.lazy()
         .group_by("clone_id", maintain_order=True)
-        .map_groups(compute_group_distances)
+        .map_groups(compute_group_distances, schema={})
         .collect(engine="streaming")
     )
 
-    return tmp_results
+    # Return empty list since we write directly to z_array
+    return []
 
 
 def _vectorized_distance_levenshtein(
@@ -845,6 +848,7 @@ def _vectorized_distance_levenshtein(
         Pairwise distance matrix
     """
     from polyleven import levenshtein
+    from scipy.spatial.distance import pdist, squareform
 
     n = len(sequences)
 
