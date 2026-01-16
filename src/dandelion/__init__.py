@@ -12,7 +12,6 @@ from dandelion.utilities import (
     read_bd_airr,
     read_h5ddl,
     read_parse_airr,
-    read_pkl,
     write_airr,
     write_blastn,
 )
@@ -40,7 +39,6 @@ __all__ = [
     "read_parse_airr",
     "read_bd_airr",
     "read_h5ddl",
-    "read_pkl",
     "tl",
     "utl",
     "write_airr",

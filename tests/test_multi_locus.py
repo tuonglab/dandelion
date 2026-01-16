@@ -35,7 +35,7 @@ def test_multi_locus_cells(annotation_10x_mouse):
 
     # Check polars
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -47,7 +47,7 @@ def test_multi_locus_cells(annotation_10x_mouse):
             print(f"    locus: {seqs['locus'].to_list()}")
 
     pl_meta = (
-        vdj_pl._metadata.collect()
+        vdj_pl._metadata.collect(engine="streaming")
         if isinstance(vdj_pl._metadata, pl.LazyFrame)
         else vdj_pl._metadata
     )

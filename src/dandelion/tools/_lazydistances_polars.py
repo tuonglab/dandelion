@@ -817,7 +817,7 @@ def _compute_distances_polars_native(
         df_with_clone.lazy()
         .group_by("clone_id", maintain_order=True)
         .map_groups(compute_group_distances)
-        .collect()
+        .collect(engine="streaming")
     )
 
     return tmp_results

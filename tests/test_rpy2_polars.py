@@ -50,7 +50,7 @@ def test_mutation_polars(create_testfolder, airr_reannotated):
     vdj = DandelionPolars(out)
     assert "mu_count" in vdj._data.collect_schema().names()
     # Check that mu_count column has data (collect to check non-empty)
-    mu_count_col = vdj._data.select("mu_count").collect()
+    mu_count_col = vdj._data.select("mu_count").collect(engine="streaming")
     assert len(mu_count_col) > 0
 
     _ = quantify_mutations(str(f), frequency=True)
@@ -63,7 +63,7 @@ def test_mutation_polars(create_testfolder, airr_reannotated):
     vdj2 = DandelionPolars(out2)
     assert "mu_freq" in vdj2._data.collect_schema().names()
     # Check that mu_freq column has data
-    mu_freq_col = vdj2._data.select("mu_freq").collect()
+    mu_freq_col = vdj2._data.select("mu_freq").collect(engine="streaming")
     assert len(mu_freq_col) > 0
 
 
@@ -97,7 +97,9 @@ def test_create_germlines_polars(create_testfolder, database_paths):
     vdj = create_germlines(vdj, germline=database_paths["germline"])
     # Check that germline_alignment_d_mask column exists and has data
     assert "germline_alignment_d_mask" in vdj._data.collect_schema().names()
-    germline_col = vdj._data.select("germline_alignment_d_mask").collect()
+    germline_col = vdj._data.select("germline_alignment_d_mask").collect(
+        engine="streaming"
+    )
     assert len(germline_col) > 0
 
 
@@ -111,7 +113,7 @@ def test_manual_threshold_and_define_clones_polars(create_testfolder):
     # Check that clone_id column exists and has data
     assert "clone_id" in vdj._data.collect_schema().names()
     if isinstance(vdj._data, pl.LazyFrame):
-        clone_col = vdj._data.select("clone_id").collect()
+        clone_col = vdj._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = vdj._data.select("clone_id")
     assert len(clone_col) > 0
@@ -143,7 +145,7 @@ def test_scoper_i_polars(create_testfolder):
     identical_clones(vdj)
     assert "clone_id" in vdj._data.collect_schema().names()
     if isinstance(vdj._data, pl.LazyFrame):
-        clone_col = vdj._data.select("clone_id").collect()
+        clone_col = vdj._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = vdj._data.select("clone_id")
     assert len(clone_col) > 0
@@ -163,7 +165,7 @@ def test_scoper_h_polars(create_testfolder):
     hierarchical_clones(vdj, threshold=0.15)
     assert "clone_id" in vdj._data.collect_schema().names()
     if isinstance(vdj._data, pl.LazyFrame):
-        clone_col = vdj._data.select("clone_id").collect()
+        clone_col = vdj._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = vdj._data.select("clone_id")
     assert len(clone_col) > 0
@@ -181,7 +183,7 @@ def test_scoper_spectral_polars(create_testfolder):
     spectral_clones(vdj, method="novj")
     assert "clone_id" in vdj._data.collect_schema().names()
     if isinstance(vdj._data, pl.LazyFrame):
-        clone_col = vdj._data.select("clone_id").collect()
+        clone_col = vdj._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = vdj._data.select("clone_id")
     assert len(clone_col) > 0
@@ -192,7 +194,7 @@ def test_scoper_spectral_polars(create_testfolder):
     spectral_clones(vdj, method="novj", threshold=0.15)
     assert "clone_id" in vdj._data.collect_schema().names()
     if isinstance(vdj._data, pl.LazyFrame):
-        clone_col = vdj._data.select("clone_id").collect()
+        clone_col = vdj._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = vdj._data.select("clone_id")
     assert len(clone_col) > 0
@@ -203,7 +205,7 @@ def test_scoper_spectral_polars(create_testfolder):
     spectral_clones(vdj, method="vj", threshold=0.15)
     assert "clone_id" in vdj._data.collect_schema().names()
     if isinstance(vdj._data, pl.LazyFrame):
-        clone_col = vdj._data.select("clone_id").collect()
+        clone_col = vdj._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = vdj._data.select("clone_id")
     assert len(clone_col) > 0
@@ -220,7 +222,7 @@ def test_define_clones_polars_dataframe(create_testfolder, airr_reannotated):
 
     # Convert to Polars DataFrame
     if isinstance(out, pl.LazyFrame):
-        df_polars = out.collect()
+        df_polars = out.collect(engine="streaming")
     else:
         df_polars = out
 
@@ -231,7 +233,7 @@ def test_define_clones_polars_dataframe(create_testfolder, airr_reannotated):
     assert isinstance(result, DandelionPolars)
     assert "clone_id" in result._data.collect_schema().names()
     if isinstance(result._data, pl.LazyFrame):
-        clone_col = result._data.select("clone_id").collect()
+        clone_col = result._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = result._data.select("clone_id")
     assert len(clone_col) > 0
@@ -248,7 +250,7 @@ def test_define_clones_pandas_dataframe(create_testfolder, airr_reannotated):
 
     # Convert to Pandas DataFrame
     if isinstance(out, pl.LazyFrame):
-        df_pandas = out.collect().to_pandas()
+        df_pandas = out.collect(engine="streaming").to_pandas()
     else:
         df_pandas = out.to_pandas()
 
@@ -259,7 +261,7 @@ def test_define_clones_pandas_dataframe(create_testfolder, airr_reannotated):
     assert isinstance(result, DandelionPolars)
     assert "clone_id" in result._data.collect_schema().names()
     if isinstance(result._data, pl.LazyFrame):
-        clone_col = result._data.select("clone_id").collect()
+        clone_col = result._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = result._data.select("clone_id")
     assert len(clone_col) > 0
@@ -278,7 +280,7 @@ def test_define_clones_file_path(create_testfolder, airr_reannotated):
     assert isinstance(result, DandelionPolars)
     assert "clone_id" in result._data.collect_schema().names()
     if isinstance(result._data, pl.LazyFrame):
-        clone_col = result._data.select("clone_id").collect()
+        clone_col = result._data.select("clone_id").collect(engine="streaming")
     else:
         clone_col = result._data.select("clone_id")
     assert len(clone_col) > 0

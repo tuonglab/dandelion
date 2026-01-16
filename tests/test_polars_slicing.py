@@ -1,4 +1,5 @@
 """Test slicing/indexing of DandelionPolars objects."""
+
 import pytest
 import polars as pl
 import numpy as np
@@ -14,6 +15,7 @@ def vdj_polars(vdj_small):
 
 
 # Test slicing by cell IDs (list, tuple, set, array)
+
 
 def test_slice_by_list(vdj_polars):
     """Test slicing with list of cell IDs."""
@@ -46,6 +48,7 @@ def test_slice_by_array(vdj_polars):
 
 # Test slicing with polars Expressions (from data columns)
 
+
 def test_slice_by_data_expression(vdj_polars):
     """Test slicing with expression on data column."""
     result = vdj_polars[pl.col("productive") == "T"]
@@ -70,13 +73,14 @@ def test_slice_by_locus_expression(vdj_polars):
 
 # Test slicing with metadata column expressions
 
+
 def test_slice_by_metadata_chain_status(vdj_polars):
     """Test slicing by chain_status metadata column."""
     # Get all unique values first to find one that exists
     if isinstance(vdj_polars._metadata, pl.LazyFrame):
         unique_statuses = (
             vdj_polars._metadata.select("chain_status")
-            .collect()
+            .collect(engine="streaming")
             .to_series()
             .unique()
             .to_list()
@@ -119,13 +123,12 @@ def test_slice_by_metadata_inequality(vdj_polars):
 def test_slice_by_metadata_isin(vdj_polars):
     """Test slicing with is_in operator on metadata."""
     valid_statuses = ["Single pair", "Orphan VDJ"]
-    result = vdj_polars[
-        vdj_polars.metadata.chain_status.is_in(valid_statuses)
-    ]
+    result = vdj_polars[vdj_polars.metadata.chain_status.is_in(valid_statuses)]
     assert result.n_obs >= 0
 
 
 # Test slicing with Series (cell IDs or boolean mask)
+
 
 def test_slice_by_cell_id_series(vdj_polars):
     """Test slicing with Series of cell IDs."""
@@ -144,6 +147,7 @@ def test_slice_by_boolean_series_data(vdj_polars):
 
 # Test slicing with DataFrame/LazyFrame
 
+
 def test_slice_by_filtered_lazyframe(vdj_polars):
     """Test slicing with a filtered LazyFrame."""
     if isinstance(vdj_polars._data, pl.LazyFrame):
@@ -155,6 +159,7 @@ def test_slice_by_filtered_lazyframe(vdj_polars):
 
 
 # Test that slicing maintains data/metadata consistency
+
 
 def test_data_metadata_consistency(vdj_polars):
     """Test that data and metadata remain in sync after slicing."""
@@ -214,6 +219,7 @@ def test_slice_multiple_times(vdj_polars):
 
 # Test edge cases and error handling
 
+
 def test_slice_empty_result(vdj_polars):
     """Test slicing that results in empty data."""
     # Filter for a very unlikely combination
@@ -238,15 +244,14 @@ def test_invalid_index_type(vdj_polars):
 
 # Test slicing behavior with lazy vs eager frames
 
+
 def test_slice_lazy_object(vdj_polars):
     """Test slicing lazy Dandelion object."""
     # Convert to lazy
     if hasattr(vdj_polars, "lazy"):
         original_lazy = vdj_polars.lazy
         vdj_polars.lazy = True
-        result = vdj_polars[
-            vdj_polars.metadata.chain_status == "Single pair"
-        ]
+        result = vdj_polars[vdj_polars.metadata.chain_status == "Single pair"]
         assert isinstance(result._data, (pl.LazyFrame, pl.DataFrame))
         vdj_polars.lazy = original_lazy
 
@@ -257,8 +262,6 @@ def test_slice_eager_object(vdj_polars):
     if hasattr(vdj_polars, "lazy"):
         original_lazy = vdj_polars.lazy
         vdj_polars.lazy = False
-        result = vdj_polars[
-            vdj_polars.metadata.chain_status == "Single pair"
-        ]
+        result = vdj_polars[vdj_polars.metadata.chain_status == "Single pair"]
         assert isinstance(result._data, (pl.LazyFrame, pl.DataFrame))
         vdj_polars.lazy = original_lazy

@@ -100,7 +100,7 @@ def identical_clones(
 
     # Convert to pandas for R interop, then back to polars
     db = (
-        vdj._data.collect()
+        vdj._data.collect(engine="streaming")
         if isinstance(vdj._data, pl.LazyFrame)
         else vdj._data
     )
@@ -269,7 +269,7 @@ def hierarchical_clones(
 
     # Convert to pandas for R interop, then back to polars
     db = (
-        vdj._data.collect()
+        vdj._data.collect(engine="streaming")
         if isinstance(vdj._data, pl.LazyFrame)
         else vdj._data
     )
@@ -449,7 +449,7 @@ def spectral_clones(
 
     # Convert to pandas for R interop, then back to polars
     db = (
-        vdj._data.collect()
+        vdj._data.collect(engine="streaming")
         if isinstance(vdj._data, pl.LazyFrame)
         else vdj._data
     )

@@ -17,7 +17,7 @@ def test_trace_missing_cells(annotation_10x_mouse):
 
     # Check if cells exist in initial data
     data_before = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -33,7 +33,7 @@ def test_trace_missing_cells(annotation_10x_mouse):
     # Check metadata before find_clones
     if vdj_pl._metadata is not None:
         meta_before = (
-            vdj_pl._metadata.collect()
+            vdj_pl._metadata.collect(engine="streaming")
             if isinstance(vdj_pl._metadata, pl.LazyFrame)
             else vdj_pl._metadata
         )
@@ -49,7 +49,7 @@ def test_trace_missing_cells(annotation_10x_mouse):
 
     # Check after find_clones
     data_after = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -64,7 +64,7 @@ def test_trace_missing_cells(annotation_10x_mouse):
 
     # Check metadata after
     meta_after = (
-        vdj_pl._metadata.collect()
+        vdj_pl._metadata.collect(engine="streaming")
         if isinstance(vdj_pl._metadata, pl.LazyFrame)
         else vdj_pl._metadata
     )

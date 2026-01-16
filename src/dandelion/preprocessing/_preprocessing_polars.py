@@ -613,7 +613,7 @@ def assign_isotype(
     )
     # Convert to DataFrame if LazyFrame and deduplicate
     if isinstance(blast_out, pl.LazyFrame):
-        blast_out = blast_out.collect()
+        blast_out = blast_out.collect(engine="streaming")
     blast_out = blast_out.unique(subset=["sequence_id"], keep="first")
 
     _10xfile = check_filepath(
@@ -645,13 +645,13 @@ def assign_isotype(
         out_ex = "_igblast_db-pass_genotyped.tsv"
     dat = load_polars(_processedfile)
     if isinstance(dat, pl.LazyFrame):
-        dat = dat.collect()
+        dat = dat.collect(engine="streaming")
     if _10xfile is not None:
         dat_10x = read_10x_vdj_polars(_10xfile)
         # Extract c_call and sequence_id from 10x data
         # dat_10x._data is now a Polars LazyFrame
         dat_10x_data = (
-            dat_10x._data.collect()
+            dat_10x._data.collect(engine="streaming")
             if isinstance(dat_10x._data, pl.LazyFrame)
             else dat_10x._data
         )
@@ -772,7 +772,7 @@ def assign_isotype(
     # Load airr_output and merge columns
     airr_output = load_polars(_airrfile)
     if isinstance(airr_output, pl.LazyFrame):
-        airr_output = airr_output.collect()
+        airr_output = airr_output.collect(engine="streaming")
 
     cols_to_merge = [
         "junction_aa_length",
@@ -1249,7 +1249,7 @@ def ensure_columns_transferred(
     if db_pass is not None:
         # Ensure it's eager for column access
         if isinstance(db_pass, pl.LazyFrame):
-            db_pass = db_pass.collect()
+            db_pass = db_pass.collect(engine="streaming")
 
         for call in ["d", "j"]:
             for col in addcols:
@@ -1258,7 +1258,7 @@ def ensure_columns_transferred(
                     db_pass = db_pass.with_columns(pl.lit("").alias(add_col))
         if dat_10x is not None:
             dat_10x_data = (
-                dat_10x._data.collect()
+                dat_10x._data.collect(engine="streaming")
                 if isinstance(dat_10x._data, pl.LazyFrame)
                 else dat_10x._data
             )
@@ -1280,11 +1280,11 @@ def ensure_columns_transferred(
                     )
         db_pass = _sanitize_data_polars(db_pass)
         if isinstance(db_pass, pl.LazyFrame):
-            db_pass = db_pass.collect()
+            db_pass = db_pass.collect(engine="streaming")
         db_pass.write_csv(passfile, separator="\t", quote_style="never")
     if db_fail is not None:
         if isinstance(db_fail, pl.LazyFrame):
-            db_fail = db_fail.collect()
+            db_fail = db_fail.collect(engine="streaming")
         for call in ["d", "j"]:
             for col in addcols:
                 add_col = call + col
@@ -1292,7 +1292,7 @@ def ensure_columns_transferred(
                     db_fail = db_fail.with_columns(pl.lit("").alias(add_col))
         if dat_10x is not None:
             dat_10x_data = (
-                dat_10x._data.collect()
+                dat_10x._data.collect(engine="streaming")
                 if isinstance(dat_10x._data, pl.LazyFrame)
                 else dat_10x._data
             )
@@ -1314,7 +1314,7 @@ def ensure_columns_transferred(
                     )
         db_fail = _sanitize_data_polars(db_fail)
         if isinstance(db_fail, pl.LazyFrame):
-            db_fail = db_fail.collect()
+            db_fail = db_fail.collect(engine="streaming")
         db_fail.write_csv(failfile, separator="\t", quote_style="never")
 
 
@@ -1773,7 +1773,7 @@ def reassign_alleles(
         )
         # Convert LazyFrame to DataFrame if needed
         if isinstance(heavy, pl.LazyFrame):
-            heavy = heavy.collect()
+            heavy = heavy.collect(engine="streaming")
         heavy = heavy.with_columns(pl.col("v_call").alias("v_call_genotyped"))
     else:
         heavy = load_polars(
@@ -1781,7 +1781,7 @@ def reassign_alleles(
             / (out_dir.stem + "_heavy" + fileformat_passed_dict[fileformat])
         )
         if isinstance(heavy, pl.LazyFrame):
-            heavy = heavy.collect()
+            heavy = heavy.collect(engine="streaming")
 
     logg.info(
         "      For convenience, entries for light chain `v_call` are copied to `v_call_genotyped`."
@@ -1790,7 +1790,7 @@ def reassign_alleles(
         out_dir / (out_dir.stem + "_light" + germpass_dict[fileformat])
     )
     if isinstance(light, pl.LazyFrame):
-        light = light.collect()
+        light = light.collect(engine="streaming")
     light = light.with_columns(pl.col("v_call").alias("v_call_genotyped"))
 
     # Initialize sample_id column to None
@@ -1800,7 +1800,7 @@ def reassign_alleles(
     for file, sample_id in sampleNames_dict.items():
         dat_f = load_polars(file)
         if isinstance(dat_f, pl.LazyFrame):
-            dat_f = dat_f.collect()
+            dat_f = dat_f.collect(engine="streaming")
         # Add sample_id to dat_f if not present
         if "sample_id" not in dat_f.collect_schema():
             dat_f = dat_f.with_columns(pl.lit(sample_id).alias("sample_id"))
@@ -1838,9 +1838,9 @@ def reassign_alleles(
     # Concatenate heavy and light with aligned schemas to handle differences
     # Ensure eager DataFrames
     if isinstance(heavy, pl.LazyFrame):
-        heavy = heavy.collect()
+        heavy = heavy.collect(engine="streaming")
     if isinstance(light, pl.LazyFrame):
-        light = light.collect()
+        light = light.collect(engine="streaming")
 
     # Align columns: add missing columns to each with nulls and enforce same order
     heavy_cols = set(heavy.collect_schema().names())
@@ -1882,7 +1882,7 @@ def reassign_alleles(
             # Match original pandas semantics: use TIgGER gene names as-is
             s2 = set(inf_geno["gene"])
             if isinstance(heavy, pl.LazyFrame):
-                heavy = heavy.collect()
+                heavy = heavy.collect(engine="streaming")
             heavy = heavy.with_columns(
                 [
                     pl.col("v_call")
@@ -2520,7 +2520,7 @@ def run_blastn(
             }
         ).lazy()
     # Write directly without AIRR validation (these are just raw BLAST results)
-    dat_collected = dat.collect()
+    dat_collected = dat.collect(engine="streaming")
     if len(dat_collected) > 0:
         dat_collected.write_csv(blast_out, separator="\t", quote_style="never")
     return dat
@@ -2555,7 +2555,7 @@ def transfer_assignment(
     if os.path.isfile(failfile):
         db_fail = load_polars(failfile)
         if isinstance(db_fail, pl.LazyFrame):
-            db_fail = db_fail.collect()
+            db_fail = db_fail.collect(engine="streaming")
         # Fill in missing values
         db_fail = db_fail.with_columns(
             pl.col("vj_in_frame").fill_null("F"),
@@ -2607,13 +2607,13 @@ def transfer_assignment(
 
     # Collect LazyFrame
     if isinstance(blast_result, pl.LazyFrame):
-        blast_result = blast_result.collect()
+        blast_result = blast_result.collect(engine="streaming")
     if blast_result.shape[0] < 1:
         blast_result = None
 
     # Collect DataFrames if needed
     if db_pass is not None and isinstance(db_pass, pl.LazyFrame):
-        db_pass = db_pass.collect()
+        db_pass = db_pass.collect(engine="streaming")
 
     if blast_result is not None:
         # Pre-rename blast_result columns to add _blastn suffix (except sequence_id)
@@ -3408,7 +3408,7 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
             if filePath1 is not None:
                 dbpass = load_polars(filePath1)
                 if isinstance(dbpass, pl.LazyFrame):
-                    dbpass = dbpass.collect()
+                    dbpass = dbpass.collect(engine="streaming")
                 dbpass = update_j_cols_polars(dbpass, jmulti, jmm_transfer_cols)
                 _write_airr(dbpass, filePath1)
 
@@ -3416,7 +3416,7 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
             if filePath1g is not None:
                 dbpassg = load_polars(filePath1g)
                 if isinstance(dbpassg, pl.LazyFrame):
-                    dbpassg = dbpassg.collect()
+                    dbpassg = dbpassg.collect(engine="streaming")
                 dbpassg = update_j_cols_polars(
                     dbpassg, jmulti, jmm_transfer_cols
                 )
@@ -3426,7 +3426,7 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
             if filePath2 is not None:
                 dbfail = load_polars(filePath2)
                 if isinstance(dbfail, pl.LazyFrame):
-                    dbfail = dbfail.collect()
+                    dbfail = dbfail.collect(engine="streaming")
                 dbfail = update_j_cols_polars(dbfail, jmulti, jmm_transfer_cols)
                 dbfail = update_missing_vcall_polars(dbfail)
                 _write_airr(dbfail, filePath2)
@@ -3435,7 +3435,7 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
             if filePath3 is not None:
                 dball = load_polars(filePath3)
                 if isinstance(dball, pl.LazyFrame):
-                    dball = dball.collect()
+                    dball = dball.collect(engine="streaming")
                 dball = update_j_cols_polars(dball, jmulti, jmm_transfer_cols)
                 dball = update_missing_vcall_polars(dball)
                 _write_airr(dball, filePath3)
@@ -3444,7 +3444,7 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
             if filePath4 is not None:
                 dandy = load_polars(filePath4)
                 if isinstance(dandy, pl.LazyFrame):
-                    dandy = dandy.collect()
+                    dandy = dandy.collect(engine="streaming")
                 dandy = update_j_cols_polars(dandy, jmulti, jmm_transfer_cols)
                 _write_airr(dandy, filePath4)
 
@@ -3609,7 +3609,7 @@ def check_multimapper(filename1: str, filename2: str) -> None:
     # Read reference data
     df_ref = load_polars(filename2)
     if isinstance(df_ref, pl.LazyFrame):
-        df_ref = df_ref.collect()
+        df_ref = df_ref.collect(engine="streaming")
 
     # Join to get v_sequence_end for each sequence_id
     df_with_vend = df_filtered.join(
@@ -3656,7 +3656,7 @@ def mask_dj(
         if filePath is not None:
             dat = load_polars(filePath)
             if isinstance(dat, pl.LazyFrame):
-                dat = dat.collect()
+                dat = dat.collect(engine="streaming")
 
             # Mask d_call based on d_support_blastn threshold
             if "d_support_blastn" in dat.collect_schema():
@@ -3716,14 +3716,14 @@ def change_file_location(
         if filePath is not None:
             tmp = load_polars(filePath)
             if isinstance(tmp, pl.LazyFrame):
-                tmp = tmp.collect()
+                tmp = tmp.collect(engine="streaming")
 
             tmp = _check_travdv_polars(tmp, lazy=False)
 
             _airrfile = str(filePath).replace("_db-pass.tsv", ".tsv")
             airr_output = load_polars(_airrfile)
             if isinstance(airr_output, pl.LazyFrame):
-                airr_output = airr_output.collect()
+                airr_output = airr_output.collect(engine="streaming")
 
             cols_to_merge = [
                 "junction_aa_length",

@@ -35,7 +35,7 @@ def test_ari_find_clones_pandas_vs_polars(airr_reannotated):
     # Collect polars data
     pl_data = dan_pl_clones._data
     if isinstance(pl_data, pl.LazyFrame):
-        pl_data = pl_data.collect()
+        pl_data = pl_data.collect(engine="streaming")
 
     # Extract clone IDs in same order as pandas
     polars_clones = pl_data["clone_id"].to_numpy()
@@ -71,7 +71,7 @@ def test_ari_identity_thresholds(airr_reannotated):
         )
         pl_data = dan_pl_clones._data
         if isinstance(pl_data, pl.LazyFrame):
-            pl_data = pl_data.collect()
+            pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
 
         # Calculate ARI
@@ -111,7 +111,7 @@ def test_ari_by_alleles(airr_reannotated):
         )
         pl_data = dan_pl_clones._data
         if isinstance(pl_data, pl.LazyFrame):
-            pl_data = pl_data.collect()
+            pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
 
         # Calculate ARI
@@ -149,7 +149,7 @@ def test_ari_junction_keys(airr_reannotated):
         )
         pl_data = dan_pl_clones._data
         if isinstance(pl_data, pl.LazyFrame):
-            pl_data = pl_data.collect()
+            pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
 
         # Calculate ARI
@@ -187,7 +187,7 @@ def test_ari_sequence_keys(airr_reannotated):
         dan_pl_clones = find_clones_polars(dan_pl, key=seq_key, verbose=False)
         pl_data = dan_pl_clones._data
         if isinstance(pl_data, pl.LazyFrame):
-            pl_data = pl_data.collect()
+            pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
 
         # Calculate ARI
@@ -238,7 +238,7 @@ def test_ari_combined_parameters(airr_reannotated):
         )
         pl_data = dan_pl_clones._data
         if isinstance(pl_data, pl.LazyFrame):
-            pl_data = pl_data.collect()
+            pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
 
         # Calculate ARI

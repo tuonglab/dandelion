@@ -8,7 +8,6 @@ import os
 import re
 import warnings
 
-import _pickle as cPickle
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -30,8 +29,6 @@ from dandelion.utilities._utilities import (
     EMPTIES_STR,
     BOOLEAN_LIKE_COLUMNS,
     deprecated,
-    isGZIP,
-    isBZIP,
     cmp_to_key,
     present,
     all_missing,
@@ -1775,38 +1772,6 @@ class Dandelion:
                     if c not in [clonekey, clonekey_rank]
                 ]
             ]
-
-    def write_pkl(
-        self, filename: str = "dandelion_data.pkl.pbz2", **kwargs
-    ) -> None:
-        """
-        Writes a Dandelion class to .pkl format.
-
-        Parameters
-        ----------
-        filename : str, optional
-            path to `.pkl` file.
-        **kwargs
-            passed to `_pickle`.
-        """
-        if isBZIP(str(filename)):
-            try:
-                with bz2.BZ2File(filename, "wb") as f:
-                    cPickle.dump(self, f, **kwargs)
-            except:
-                with bz2.BZ2File(filename, "wb") as f:
-                    cPickle.dump(self, f, protocol=4, **kwargs)
-        elif isGZIP(str(filename)):
-            try:
-                with gzip.open(filename, "wb") as f:
-                    cPickle.dump(self, f, **kwargs)
-            except:
-                with gzip.open(filename, "wb") as f:
-                    cPickle.dump(self, f, protocol=4, **kwargs)
-        else:
-            f = open(filename, "wb")
-            cPickle.dump(self, f, **kwargs)
-            f.close()
 
     def write_airr(
         self, filename: str = "dandelion_airr.tsv", **kwargs

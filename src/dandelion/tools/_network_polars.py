@@ -258,7 +258,9 @@ def generate_network(
         dat_seq_indexed = (
             dat_seq.with_row_index("_row_pos")
             if isinstance(dat_seq, pl.DataFrame)
-            else dat_seq.lazy().with_row_index("_row_pos").collect()
+            else dat_seq.lazy()
+            .with_row_index("_row_pos")
+            .collect(engine="streaming")
         )
         cell_id_to_pos = dict(
             zip(
@@ -272,7 +274,7 @@ def generate_network(
             if isinstance(dat._metadata, pl.LazyFrame):
                 clone_data = dat._metadata.select(
                     ["cell_id", clone_key]
-                ).collect()
+                ).collect(engine="streaming")
             elif isinstance(dat._metadata, pl.DataFrame):
                 clone_data = dat._metadata.select(["cell_id", clone_key])
             else:
@@ -440,7 +442,7 @@ def generate_network(
 
             # Normalize metadata to Polars DataFrame if lazy
             if isinstance(vdj._metadata, pl.LazyFrame):
-                meta_df = vdj._metadata.collect()
+                meta_df = vdj._metadata.collect(engine="streaming")
             elif isinstance(vdj._metadata, pl.DataFrame):
                 meta_df = vdj._metadata
             else:
@@ -1023,7 +1025,7 @@ def calculate_distance_matrix_original(
     """
     # Ensure dat_seq is a DataFrame (not LazyFrame)
     if isinstance(dat_seq, pl.LazyFrame):
-        dat_seq = dat_seq.collect()
+        dat_seq = dat_seq.collect(engine="streaming")
 
     n = dat_seq.height
     cell_id_list = dat_seq["cell_id"].to_list()
@@ -1238,7 +1240,7 @@ def calculate_distance_matrix_long(
     # Step 1: clean sequences
     # Ensure dat_seq is a DataFrame (not LazyFrame)
     if isinstance(dat_seq, pl.LazyFrame):
-        dat_seq = dat_seq.collect()
+        dat_seq = dat_seq.collect(engine="streaming")
 
     seq_cols = [
         col for col in dat_seq.collect_schema().names() if col != "cell_id"

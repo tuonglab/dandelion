@@ -32,7 +32,7 @@ def test_metadata_structure(annotation_10x_mouse):
     pd_meta = vdj_pd._metadata
     pl_meta = vdj_pl._metadata
     if isinstance(pl_meta, pl.LazyFrame):
-        pl_meta = pl_meta.collect()
+        pl_meta = pl_meta.collect(engine="streaming")
 
     print(f"  Pandas metadata shape: {pd_meta.shape}")
     print(f"  Polars metadata shape: {pl_meta.shape}")

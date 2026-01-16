@@ -23,7 +23,7 @@ def test_locus_values_before_filter(annotation_10x_mouse):
     # Load with polars WITHOUT remove_malformed
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse, remove_malformed=False)
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -40,7 +40,7 @@ def test_locus_values_before_filter(annotation_10x_mouse):
         annotation_10x_mouse, remove_malformed=True
     )
     pl_data_filtered = (
-        vdj_pl_filtered._data.collect()
+        vdj_pl_filtered._data.collect(engine="streaming")
         if isinstance(vdj_pl_filtered._data, pl.LazyFrame)
         else vdj_pl_filtered._data
     )

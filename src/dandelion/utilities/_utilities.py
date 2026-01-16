@@ -203,20 +203,6 @@ def type_check(dataframe: pd.DataFrame, key: str) -> bool:
     )
 
 
-def isGZIP(filename: str) -> bool:
-    """Check if is gzipped file."""
-    if filename.split(".")[-1] == "gz":
-        return True
-    return False
-
-
-def isBZIP(filename: str) -> bool:
-    """Check if is bzipped file."""
-    if filename.split(".")[-1] == "pbz2":
-        return True
-    return False
-
-
 def check_filepath(
     file_or_folder_path: Path | str,
     filename_prefix: str | None = None,

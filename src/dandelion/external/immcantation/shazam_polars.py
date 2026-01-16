@@ -98,7 +98,7 @@ def quantify_mutations(
     # Sanitize and filter using Polars
     dat = _sanitize_data_polars(dat)
     if isinstance(dat, pl.LazyFrame):
-        dat = dat.collect()
+        dat = dat.collect(engine="streaming")
     if "ambiguous" in dat.columns:
         dat_ = dat.filter(pl.col("ambiguous") == "F")
     else:
@@ -199,7 +199,7 @@ def quantify_mutations(
         # Append new columns to data._data via sequence_id join
         base_df = data._data
         if isinstance(base_df, pl.LazyFrame):
-            base_df = base_df.collect()
+            base_df = base_df.collect(engine="streaming")
         add_df = r_out_pl.select(["sequence_id"] + cols_to_return)
         data._data = base_df.join(add_df, on="sequence_id", how="left")
 
@@ -429,7 +429,7 @@ def calculate_threshold(
     # Sanitize using Polars; convert to pandas only for rpy2
     dat_pl = _sanitize_data_polars(dat)
     if isinstance(dat_pl, pl.LazyFrame):
-        dat_pl = dat_pl.collect()
+        dat_pl = dat_pl.collect(engine="streaming")
     if mode == "heavy":
         dat_h = dat_pl.filter(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
         dat_h_r = safe_py2rpy(

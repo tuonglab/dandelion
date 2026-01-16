@@ -29,7 +29,9 @@ def _build_membership_from_metadata(dat, clone_key: str = "clone_id"):
 
     # Handle different metadata types
     if isinstance(dat._metadata, pl.LazyFrame):
-        clone_data = dat._metadata.select(["cell_id", clone_key]).collect()
+        clone_data = dat._metadata.select(["cell_id", clone_key]).collect(
+            engine="streaming"
+        )
         clone_data = clone_data.to_pandas()
     elif isinstance(dat._metadata, pl.DataFrame):
         clone_data = dat._metadata.select(["cell_id", clone_key]).to_pandas()
@@ -77,7 +79,7 @@ def _assert_distance_matrix_original_matches(data, membership):
     # Handle polars LazyFrame/DataFrame
     if isinstance(data, (pl.LazyFrame, pl.DataFrame)):
         if isinstance(data, pl.LazyFrame):
-            data_collected = data.collect()
+            data_collected = data.collect(engine="streaming")
         else:
             data_collected = data
 

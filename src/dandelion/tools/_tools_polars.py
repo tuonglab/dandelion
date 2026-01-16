@@ -111,8 +111,8 @@ def find_clones(
     df = vdj._data
     # Collect lazy frame if necessary, then convert to pandas
     if isinstance(df, pl.LazyFrame):
-        # we will load this to memory and clear the backend
-        df = vdj._safe_collect(df)
+        # we will load this to memory to enable the rest.
+        df = df.collect(engine="streaming")
 
     # Default locus dictionary
     locus_dict = {
@@ -447,6 +447,9 @@ def find_clones(
         # No loci processed, add empty clone_id column
         df_final = df_final.with_columns(pl.lit(None).alias(key_added))
 
+    # overwrite the original key_added column in df if exists
+    if key_added in df.collect_schema():
+        df = df.drop(key_added)
     # Join back to original df
     df = df.join(df_final, on="cell_id", how="left").drop("_original_order")
 
@@ -491,7 +494,7 @@ def _check_chains(
         (has_vdj, has_vj) indicating presence of chains.
     """
     if isinstance(df, pl.LazyFrame):
-        df = df.collect()
+        df = df.collect(engine="streaming")
 
     # Vectorized check for VDJ chains
     has_vdj = df.filter(pl.col("locus").is_in(vdj_loci)).shape[0] > 0
@@ -649,7 +652,7 @@ def _group_sequences(
         df = df.with_columns(pl.lit("1").alias("_membership"))
 
     if isinstance(df, pl.LazyFrame):
-        df = df.collect()
+        df = df.collect(engine="streaming")
 
     return df
 
@@ -2251,7 +2254,7 @@ def vdj_sample(
         # Determine if we need replacement
         # Only collect metadata when needed for numpy indexing
         if isinstance(vdj._metadata, pl.LazyFrame):
-            metadata = vdj._metadata.collect()
+            metadata = vdj._metadata.collect(engine="streaming")
         else:
             metadata = vdj._metadata
 
@@ -2314,7 +2317,7 @@ def vdj_sample(
     if replace:
         # For replacement logic, need to collect if lazy
         if isinstance(vdj_dat, pl.LazyFrame):
-            vdj_dat = vdj_dat.collect()
+            vdj_dat = vdj_dat.collect(engine="streaming")
 
         # sample with replacement
         cell_counts = Counter(keep_cells)
@@ -2805,7 +2808,9 @@ def concat(
         if isinstance(x, DandelionPolars):
             vdjs_.append(x.copy())
         elif isinstance(x, pl.LazyFrame):
-            vdjs_.append(DandelionPolars(x.collect(), verbose=False))
+            vdjs_.append(
+                DandelionPolars(x.collect(engine="streaming"), verbose=False)
+            )
         elif isinstance(x, pl.DataFrame):
             vdjs_.append(DandelionPolars(x, verbose=False))
         elif isinstance(x, pd.DataFrame):
@@ -2823,7 +2828,10 @@ def concat(
         # Get names as lists
         if isinstance(tmp._metadata, pl.LazyFrame):
             tmp_meta_names.extend(
-                tmp._metadata.select("cell_id").collect().to_series().to_list()
+                tmp._metadata.select("cell_id")
+                .collect(engine="streaming")
+                .to_series()
+                .to_list()
             )
         elif isinstance(tmp._metadata, pl.DataFrame):
             tmp_meta_names.extend(
@@ -2832,7 +2840,10 @@ def concat(
 
         if isinstance(tmp._data, pl.LazyFrame):
             tmp_data_names.extend(
-                tmp._data.select("sequence_id").collect().to_series().to_list()
+                tmp._data.select("sequence_id")
+                .collect(engine="streaming")
+                .to_series()
+                .to_list()
             )
         elif isinstance(tmp._data, pl.DataFrame):
             tmp_data_names.extend(
@@ -2881,7 +2892,7 @@ def concat(
                     metadata_index_order.extend(
                         vdjs_[i]
                         ._metadata.select("cell_id")
-                        .collect()
+                        .collect(engine="streaming")
                         .to_series()
                         .to_list()
                     )
@@ -2897,7 +2908,7 @@ def concat(
                     data_index_order.extend(
                         vdjs_[i]
                         ._data.select("sequence_id")
-                        .collect()
+                        .collect(engine="streaming")
                         .to_series()
                         .to_list()
                     )
@@ -2937,7 +2948,7 @@ def concat(
                     data_index_order.extend(
                         vdjs_[i]
                         ._data.select("sequence_id")
-                        .collect()
+                        .collect(engine="streaming")
                         .to_series()
                         .to_list()
                     )
@@ -3007,7 +3018,7 @@ def concat(
     if len(missing_meta_cols) > 0:
         # Collect metadata if lazy for easier manipulation
         if isinstance(vdj_concat._metadata, pl.LazyFrame):
-            meta_df = vdj_concat._metadata.collect()
+            meta_df = vdj_concat._metadata.collect(engine="streaming")
         else:
             meta_df = vdj_concat._metadata.clone()
 
@@ -3019,7 +3030,7 @@ def concat(
         for vdj_ in vdjs_:
             # Collect if lazy
             if isinstance(vdj_._metadata, pl.LazyFrame):
-                source_meta = vdj_._metadata.collect()
+                source_meta = vdj_._metadata.collect(engine="streaming")
             else:
                 source_meta = vdj_._metadata
 
@@ -3048,7 +3059,7 @@ def concat(
 
     # Reorder metadata according to original order
     if isinstance(vdj_concat._metadata, pl.LazyFrame):
-        concat_meta = vdj_concat._metadata.collect()
+        concat_meta = vdj_concat._metadata.collect(engine="streaming")
     else:
         concat_meta = vdj_concat._metadata
 
@@ -3253,7 +3264,7 @@ def refine_clone_assignment_polars(
     """
     # Collect if lazy
     if isinstance(df, pl.LazyFrame):
-        df = df.collect()
+        df = df.collect(engine="streaming")
 
     # Add row index to maintain order
     df = df.with_row_index("_original_order")
@@ -3373,7 +3384,7 @@ def clone_size_polars(
     # Get metadata
     metadata_ = vdj._metadata
     if isinstance(metadata_, pl.LazyFrame):
-        metadata_ = metadata_.collect()
+        metadata_ = metadata_.collect(engine="streaming")
 
     clone_key = "clone_id" if clone_key is None else clone_key
     if clone_key not in metadata_.columns:
@@ -3611,7 +3622,7 @@ def clone_overlap_polars(
     # Get metadata
     metadata_ = vdj._metadata
     if isinstance(metadata_, pl.LazyFrame):
-        metadata_ = metadata_.collect()
+        metadata_ = metadata_.collect(engine="streaming")
 
     if min_clone_size is None:
         min_size = 2
@@ -3741,7 +3752,7 @@ def productive_ratio(
 
     # Get data, handling lazy frames
     if isinstance(vdjx._data, pl.LazyFrame):
-        data = vdjx._data.collect()
+        data = vdjx._data.collect(engine="streaming")
     else:
         data = vdjx._data
 

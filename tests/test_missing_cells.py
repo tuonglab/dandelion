@@ -24,7 +24,7 @@ def test_missing_cells_in_metadata(annotation_10x_mouse):
     pd_meta = vdj_pd._metadata
     pl_meta = vdj_pl._metadata
     if isinstance(pl_meta, pl.LazyFrame):
-        pl_meta = pl_meta.collect()
+        pl_meta = pl_meta.collect(engine="streaming")
 
     pd_cells = set(pd_meta.index.tolist())
     pl_cells = set(pl_meta["cell_id"].to_list())

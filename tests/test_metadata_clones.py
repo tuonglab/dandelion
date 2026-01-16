@@ -24,7 +24,7 @@ def test_clone_count_metadata(annotation_10x_mouse):
     # Count clones in vdj data
     pd_data = load_data(vdj_pd._data)
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -41,7 +41,7 @@ def test_clone_count_metadata(annotation_10x_mouse):
     pd_meta = vdj_pd._metadata
     pl_meta = vdj_pl._metadata
     if isinstance(pl_meta, pl.LazyFrame):
-        pl_meta = pl_meta.collect()
+        pl_meta = pl_meta.collect(engine="streaming")
 
     pd_meta_clones = pd_meta["clone_id"].nunique()
     pl_meta_clones = pl_meta["clone_id"].n_unique()

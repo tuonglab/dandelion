@@ -24,7 +24,7 @@ def test_clone_naming_convention(annotation_10x_mouse):
 
     pd_data = load_data(vdj_pd._data)
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -106,7 +106,7 @@ def test_clone_naming_convention(annotation_10x_mouse):
 
     if hasattr(vdj_pl, "_metadata"):
         pl_meta = (
-            vdj_pl._metadata.collect()
+            vdj_pl._metadata.collect(engine="streaming")
             if isinstance(vdj_pl._metadata, pl.LazyFrame)
             else vdj_pl._metadata
         )

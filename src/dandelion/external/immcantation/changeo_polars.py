@@ -433,7 +433,7 @@ def define_clones(
 
     # Ensure we have eager DataFrame for operations
     if isinstance(dat_, pl.LazyFrame):
-        dat_ = dat_.collect()
+        dat_ = dat_.collect(engine="streaming")
 
     # Filter ambiguous sequences
     if "ambiguous" in dat_.columns:
@@ -735,7 +735,7 @@ def define_clones(
 
     h_df = load_polars(h_df)
     if isinstance(h_df, pl.LazyFrame):
-        h_df = h_df.collect()
+        h_df = h_df.collect(engine="streaming")
 
     # Create a dictionary for cell_id : clone_id from h_df
     linked_clones = dict(
@@ -750,7 +750,7 @@ def define_clones(
 
     l_df = load_polars(l_df)
     if isinstance(l_df, pl.LazyFrame):
-        l_df = l_df.collect()
+        l_df = l_df.collect(engine="streaming")
 
     # Update light chain clone_ids based on linkage
     def update_light_clone(cell_id, clone_id):

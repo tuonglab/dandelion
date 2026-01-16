@@ -24,7 +24,7 @@ def test_group_sequences_index(annotation_10x_mouse):
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse)
     dat_ = load_polars(vdj_pl._data)
     if isinstance(dat_, pl.LazyFrame):
-        dat_ = dat_.collect()
+        dat_ = dat_.collect(engine="streaming")
     if isinstance(dat_, pl.DataFrame):
         dat_ = dat_.to_pandas()
 

@@ -18,7 +18,7 @@ def test_concat_polars(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Expect double contigs total
     assert (
-        res._data.select(pl.count()).collect()[0, 0]
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
         == airr_reannotated.shape[0] * 2
     )
 
@@ -36,9 +36,14 @@ def test_concat_with_auto_suffixes(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Check that result is combined
-    total_count = vdj1._data.select(pl.count()).collect()[0, 0]
+    total_count = vdj1._data.select(pl.count()).collect(engine="streaming")[
+        0, 0
+    ]
     expected = total_count * 3
-    assert res._data.select(pl.count()).collect()[0, 0] == expected
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == expected
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -53,10 +58,13 @@ def test_concat_dict_input(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
     combined_count = (
-        vdj1._data.select(pl.count()).collect()[0, 0]
-        + vdj2._data.select(pl.count()).collect()[0, 0]
+        vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        + vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
     )
-    assert res._data.select(pl.count()).collect()[0, 0] == combined_count
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == combined_count
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -70,10 +78,13 @@ def test_concat_check_unique_false(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Should still concatenate successfully even without unique check
     combined_count = (
-        vdj1._data.select(pl.count()).collect()[0, 0]
-        + vdj2._data.select(pl.count()).collect()[0, 0]
+        vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        + vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
     )
-    assert res._data.select(pl.count()).collect()[0, 0] == combined_count
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == combined_count
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -92,8 +103,13 @@ def test_concat_multiple_objects(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have triple the contigs
-    single_count = vdj._data.select(pl.count()).collect()[0, 0]
-    assert res._data.select(pl.count()).collect()[0, 0] == single_count * 3
+    single_count = vdj._data.select(pl.count()).collect(engine="streaming")[
+        0, 0
+    ]
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == single_count * 3
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -103,7 +119,7 @@ def test_concat_dandelion_and_polars_dataframe(airr_reannotated):
 
     # Convert DandelionPolars to Polars DataFrame to get compatible schema
     polars_df = (
-        vdj1._data.collect()
+        vdj1._data.collect(engine="streaming")
         if isinstance(vdj1._data, pl.LazyFrame)
         else vdj1._data
     )
@@ -112,8 +128,11 @@ def test_concat_dandelion_and_polars_dataframe(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs (doubled)
-    vdj1_count = vdj1._data.select(pl.count()).collect()[0, 0]
-    assert res._data.select(pl.count()).collect()[0, 0] == vdj1_count * 2
+    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == vdj1_count * 2
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -128,8 +147,11 @@ def test_concat_dandelion_and_polars_lazyframe(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs (doubled)
-    vdj1_count = vdj1._data.select(pl.count()).collect()[0, 0]
-    assert res._data.select(pl.count()).collect()[0, 0] == vdj1_count * 2
+    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == vdj1_count * 2
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -143,10 +165,11 @@ def test_concat_dandelion_and_pandas_dataframe(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect()[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect()[0, 0]
+    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect()[0, 0] == vdj1_count + vdj2_count
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == vdj1_count + vdj2_count
     )
 
 
@@ -158,7 +181,7 @@ def test_concat_mixed_polars_types(airr_reannotated):
 
     # Get eager DataFrame from one
     polars_df = (
-        vdj1._data.collect()
+        vdj1._data.collect(engine="streaming")
         if isinstance(vdj1._data, pl.LazyFrame)
         else vdj1._data
     )
@@ -169,10 +192,11 @@ def test_concat_mixed_polars_types(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect()[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect()[0, 0]
+    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect()[0, 0] == vdj1_count + vdj2_count
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == vdj1_count + vdj2_count
     )
 
 
@@ -186,7 +210,7 @@ def test_concat_all_input_types(airr_reannotated):
 
     # Convert second to eager DataFrame and third to LazyFrame
     polars_df = (
-        vdj2._data.collect()
+        vdj2._data.collect(engine="streaming")
         if isinstance(vdj2._data, pl.LazyFrame)
         else vdj2._data
     )
@@ -197,11 +221,14 @@ def test_concat_all_input_types(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Should have all parts combined
     expected_count = (
-        vdj1._data.select(pl.count()).collect()[0, 0]
-        + vdj2._data.select(pl.count()).collect()[0, 0]
-        + vdj3._data.select(pl.count()).collect()[0, 0]
+        vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        + vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        + vdj3._data.select(pl.count()).collect(engine="streaming")[0, 0]
     )
-    assert res._data.select(pl.count()).collect()[0, 0] == expected_count
+    assert (
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == expected_count
+    )
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -212,12 +239,12 @@ def test_concat_pure_polars_dataframes(airr_reannotated):
 
     # Convert both to Polars DataFrames
     polars_df1 = (
-        vdj1._data.collect()
+        vdj1._data.collect(engine="streaming")
         if isinstance(vdj1._data, pl.LazyFrame)
         else vdj1._data
     )
     polars_df2 = (
-        vdj2._data.collect()
+        vdj2._data.collect(engine="streaming")
         if isinstance(vdj2._data, pl.LazyFrame)
         else vdj2._data
     )
@@ -226,10 +253,11 @@ def test_concat_pure_polars_dataframes(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect()[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect()[0, 0]
+    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect()[0, 0] == vdj1_count + vdj2_count
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == vdj1_count + vdj2_count
     )
 
 
@@ -241,12 +269,12 @@ def test_concat_pure_pandas_dataframes(airr_reannotated):
 
     # Convert both to pandas
     pandas_df1 = (
-        vdj1._data.collect().to_pandas()
+        vdj1._data.collect(engine="streaming").to_pandas()
         if isinstance(vdj1._data, pl.LazyFrame)
         else vdj1._data.to_pandas()
     )
     pandas_df2 = (
-        vdj2._data.collect().to_pandas()
+        vdj2._data.collect(engine="streaming").to_pandas()
         if isinstance(vdj2._data, pl.LazyFrame)
         else vdj2._data.to_pandas()
     )
@@ -255,10 +283,11 @@ def test_concat_pure_pandas_dataframes(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect()[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect()[0, 0]
+    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect()[0, 0] == vdj1_count + vdj2_count
+        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        == vdj1_count + vdj2_count
     )
 
 
@@ -276,7 +305,7 @@ def test_find_clones_polars_basic(airr_reannotated):
     assert isinstance(result, DandelionPolars)
     # Check that clone_id column was added
     data = (
-        result._data.collect()
+        result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
         else result._data
     )
@@ -293,7 +322,7 @@ def test_find_clones_polars_identity_threshold(airr_reannotated):
     # Test with strict identity (0.95)
     result_strict = find_clones_polars(vdj, identity=0.95, verbose=False)
     data_strict = (
-        result_strict._data.collect()
+        result_strict._data.collect(engine="streaming")
         if isinstance(result_strict._data, pl.LazyFrame)
         else result_strict._data
     )
@@ -301,7 +330,7 @@ def test_find_clones_polars_identity_threshold(airr_reannotated):
     # Test with lenient identity (0.8)
     result_lenient = find_clones_polars(vdj, identity=0.8, verbose=False)
     data_lenient = (
-        result_lenient._data.collect()
+        result_lenient._data.collect(engine="streaming")
         if isinstance(result_lenient._data, pl.LazyFrame)
         else result_lenient._data
     )
@@ -319,11 +348,13 @@ def test_find_clones_polars_identity_threshold(airr_reannotated):
 def test_find_clones_polars_preserves_data(airr_reannotated):
     """Test that find_clones_polars preserves original data and only adds clone_id."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
-    original_count = vdj._data.select(pl.count()).collect()[0, 0]
+    original_count = vdj._data.select(pl.count()).collect(engine="streaming")[
+        0, 0
+    ]
 
     result = find_clones_polars(vdj, identity=0.9, verbose=False)
     result_data = (
-        result._data.collect()
+        result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
         else result._data
     )
@@ -346,7 +377,7 @@ def test_find_clones_polars_by_alleles(airr_reannotated):
         vdj, identity=0.9, by_alleles=True, verbose=False
     )
     data = (
-        result._data.collect()
+        result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
         else result._data
     )
@@ -384,7 +415,7 @@ def test_find_clones_polars_junction_aa(airr_reannotated):
     )
 
     data = (
-        result._data.collect()
+        result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
         else result._data
     )
@@ -398,7 +429,7 @@ def test_find_clones_polars_multiple_loci(airr_reannotated):
 
     result = find_clones_polars(vdj, identity=0.9, verbose=False)
     data = (
-        result._data.collect()
+        result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
         else result._data
     )
@@ -422,12 +453,12 @@ def test_find_clones_polars_consistency(airr_reannotated):
     result2 = find_clones_polars(vdj2, identity=0.9, verbose=False)
 
     data1 = (
-        result1._data.collect()
+        result1._data.collect(engine="streaming")
         if isinstance(result1._data, pl.LazyFrame)
         else result1._data
     )
     data2 = (
-        result2._data.collect()
+        result2._data.collect(engine="streaming")
         if isinstance(result2._data, pl.LazyFrame)
         else result2._data
     )

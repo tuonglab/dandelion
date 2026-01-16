@@ -14,7 +14,7 @@ def test_productive_filtering(annotation_10x_mouse):
     # Load data
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse, remove_malformed=False)
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )

@@ -3,7 +3,6 @@ from dandelion.utilities._utilities import (
     makeblastdb,
 )
 from dandelion.utilities._io import (
-    read_pkl,
     read_h5ddl,
     read_h5ddl_legacy,
     read_airr,
@@ -21,7 +20,6 @@ __all__ = [
     "load_data",
     "write_airr",
     "write_blastn",
-    "read_pkl",
     "read_h5ddl",
     "read_h5ddl_legacy",
     "read_airr",

@@ -225,13 +225,6 @@ class DandelionPolars:
             self._original_sequence_ids = self._data[self._data_name_col].copy()
             self._original_cell_ids = self._data[self._metadata_name_col].copy()
 
-    @staticmethod
-    def _safe_collect(lf: pl.LazyFrame) -> pl.DataFrame:
-        """Collect LazyFrame and clean up any temp files created by _cache_data."""
-        if hasattr(lf, "_collect"):
-            return lf._collect()
-        return lf.collect(engine="streaming")
-
     def _gen_repr(self, n_obs, n_contigs) -> str:
         """Report."""
         # inspire by AnnData's function
@@ -725,6 +718,40 @@ class DandelionPolars:
         for v in getattr(self, f"{attr}m").values():
             if isinstance(v, pd.DataFrame):
                 v.index = value
+
+    def _cache_data(self) -> None:
+        """Cache _data and _metadata into temp parquet files."""
+        self._data = self._cache_lazyframe(self._data)
+        self._metadata = self._cache_lazyframe(self._metadata)
+
+    def _cache_lazyframe(
+        self, obj: pl.LazyFrame | pl.DataFrame
+    ) -> pl.LazyFrame:
+        # Ensure we have a LazyFrame
+        if isinstance(obj, pl.DataFrame):
+            obj = obj.lazy()
+
+        # Already cached
+        if hasattr(obj, "_temp_file_handle"):
+            return obj
+
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix=".parquet",
+            delete=True,
+        )
+
+        # Materialize once
+        df = obj.collect(engine="streaming")
+        df.write_parquet(temp_file.name)
+        temp_file.flush()
+
+        lf = pl.scan_parquet(temp_file.name)
+
+        # Monkey-patch *state only*
+        lf._temp_file_handle = temp_file
+        lf._temp_file_path = temp_file.name
+
+        return lf
 
     def _cache_data(self) -> None:
         """Trick to cache _data and _metadata in temporary files."""
@@ -1891,7 +1918,7 @@ class DandelionPolars:
         if self._backend == "pandas":
             return
         if isinstance(self._data, pl.LazyFrame):
-            self._data = self._safe_collect(self._data).to_pandas()
+            self._data = self._data.collect(engine="streaming").to_pandas()
         if isinstance(self._data, pl.DataFrame):
             self._data = self._data.to_pandas()
         self._data.index = self._data[self._data_name_col]
@@ -1962,10 +1989,10 @@ class DandelionPolars:
         """Convert lazy slots to eager slots."""
         if self._backend == "polars":
             if isinstance(self._data, pl.LazyFrame):
-                self._data = self._safe_collect(self._data)
+                self._data = self._data.collect(engine="streaming")
             if self._metadata is not None:
                 if isinstance(self._metadata, pl.LazyFrame):
-                    self._metadata = self._safe_collect(self._metadata)
+                    self._metadata = self._metadata.collect(engine="streaming")
             # distances: eager types are np.ndarray or csr_matrix
         if self.distances is not None and not isinstance(
             self.distances, (np.ndarray, csr_matrix)
@@ -2484,7 +2511,7 @@ class DandelionPolars:
                 self.to_polars(lazy=False)
             self._data = _sanitize_data_polars(self._data)
             # Collect and clean temp file before writing
-            self._data = self._safe_collect(self._data)
+            self._data = self._data.collect(engine="streaming")
             _write_parquet_blob(
                 tables_grp,
                 "data.parquet",
@@ -2496,7 +2523,7 @@ class DandelionPolars:
                 # convert to Polars first
                 self.to_polars(lazy=False)
             if isinstance(self._metadata, pl.LazyFrame):
-                self._metadata = self._safe_collect(self._metadata)
+                self._metadata = self._metadata.collect(engine="streaming")
             _write_parquet_blob(
                 tables_grp,
                 "metadata.parquet",
@@ -2677,48 +2704,6 @@ class DandelionPolars:
                 )
         # Close store
         store.close()
-
-    @deprecated(
-        deprecated_in="1.0.0",
-        removed_in="1.1.0",
-        details="pickle format will removed from future versions.",
-    )
-    def write_pkl(
-        self, filename: str = "dandelion_data.pkl.pbz2", **kwargs
-    ) -> None:
-        """
-        Writes a Dandelion class to .pkl format.
-
-        Parameters
-        ----------
-        filename : str, optional
-            path to `.pkl` file.
-        **kwargs
-            passed to `_pickle`.
-        """
-        import bz2
-        import gzip
-        import _pickle as cPickle
-        from dandelion.utilities._utilities import isBZIP, isGZIP
-
-        if isBZIP(str(filename)):
-            try:
-                with bz2.BZ2File(filename, "wb") as f:
-                    cPickle.dump(self, f, **kwargs)
-            except:
-                with bz2.BZ2File(filename, "wb") as f:
-                    cPickle.dump(self, f, protocol=4, **kwargs)
-        elif isGZIP(str(filename)):
-            try:
-                with gzip.open(filename, "wb") as f:
-                    cPickle.dump(self, f, **kwargs)
-            except:
-                with gzip.open(filename, "wb") as f:
-                    cPickle.dump(self, f, protocol=4, **kwargs)
-        else:
-            f = open(filename, "wb")
-            cPickle.dump(self, f, **kwargs)
-            f.close()
 
     @deprecated(
         deprecated_in="1.0.0",
@@ -3570,7 +3555,7 @@ def _write_airr(
     if isinstance(data, pl.LazyFrame):
         # Use _collect if available for temp file cleanup, otherwise regular collect
         if hasattr(data, "_collect"):
-            data = data._collect()
+            data = data._collect(engine="streaming")
         else:
             data = data.collect(engine="streaming")
     data.write_csv(save, separator="\t", **kwargs)

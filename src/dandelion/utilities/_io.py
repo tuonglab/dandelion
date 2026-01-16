@@ -1,12 +1,8 @@
-import bz2
-import gzip
 import h5py
 import json
 import os
-import pickle
 import re
 
-import _pickle as cPickle
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -20,16 +16,11 @@ from dandelion.utilities._core import Dandelion, load_data
 from dandelion.utilities._utilities import (
     DEFAULT_PREFIX,
     deprecated,
-    isGZIP,
-    isBZIP,
-    present,
     all_missing,
     sanitize_blastn,
     sanitize_data,
     Contig,
 )
-
-pickle.HIGHEST_PROTOCOL = 4
 
 
 AIRR = [
@@ -129,32 +120,6 @@ def fasta_iterator(fh: str) -> tuple[str, str]:
         yield (header, sequence)
         if not line:
             return
-
-
-def read_pkl(filename: str = "dandelion_data.pkl.pbz2") -> Dandelion:
-    """
-    Read in and returns a Dandelion class saved using pickle format.
-
-    Parameters
-    ----------
-    filename : str, optional
-        path to `.pkl` file. Depending on the extension, it will try to unzip accordingly.
-
-    Returns
-    -------
-    Dandelion
-        saved Dandelion object in pickle format.
-    """
-    if isBZIP(str(filename)):
-        data = bz2.BZ2File(filename, "rb")
-        data = cPickle.load(data)
-    elif isGZIP(str(filename)):
-        data = gzip.open(filename, "rb")
-        data = cPickle.load(data)
-    else:
-        with open(filename, "rb") as f:
-            data = cPickle.load(f)
-    return data
 
 
 def decode(df):

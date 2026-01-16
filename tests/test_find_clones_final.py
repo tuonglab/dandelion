@@ -42,7 +42,7 @@ def test_phase8b_polars_find_clones(annotation_10x_mouse):
 
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse)
     print(
-        f"✓ Loaded polars Dandelion: {vdj_pl._data.collect().shape if hasattr(vdj_pl._data, 'collect') else vdj_pl._data.shape}"
+        f"✓ Loaded polars Dandelion: {vdj_pl._data.collect(engine="streaming").shape if hasattr(vdj_pl._data, 'collect') else vdj_pl._data.shape}"
     )
 
     vdj_pl = find_clones_polars(vdj_pl, verbose=False)
@@ -51,7 +51,7 @@ def test_phase8b_polars_find_clones(annotation_10x_mouse):
 
     if vdj_pl is not None:
         pl_data = (
-            vdj_pl._data.collect()
+            vdj_pl._data.collect(engine="streaming")
             if isinstance(vdj_pl._data, pl.LazyFrame)
             else vdj_pl._data
         )
@@ -75,7 +75,7 @@ def test_phase8c_compare_outputs(annotation_10x_mouse):
 
     pd_data = load_data(vdj_pd._data)
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
@@ -110,7 +110,7 @@ def test_phase8d_ari_comparison(annotation_10x_mouse):
 
     pd_data = load_data(vdj_pd._data)
     pl_data = (
-        vdj_pl._data.collect()
+        vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)
         else vdj_pl._data
     )
