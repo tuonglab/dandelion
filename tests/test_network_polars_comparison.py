@@ -49,14 +49,15 @@ def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
     )
 
     # Compare distance matrices
-    distances_pandas = np.nan_to_num(vdj_pandas.distances.toarray())
-    distances_polars = np.nan_to_num(vdj_polars.distances.toarray())
-
-    assert np.allclose(
-        distances_pandas, distances_polars
+    distances_pandas = vdj_pandas.distances.toarray()
+    distances_polars = vdj_polars.distances.toarray()
+    print(distances_pandas), print(distances_polars)
+    assert np.array_equal(
+        distances_pandas, distances_polars, equal_nan=True
     ), "Distance matrices differ between pandas and Polars implementations"
     assert (
-        distances_pandas.sum() == distances_polars.sum()
+        np.nan_to_num(distances_pandas).sum()
+        == np.nan_to_num(distances_polars).sum()
     ), "Distance matrix sums differ"
 
     # Compare graph structure (both full and MST graphs in tuple)
@@ -151,14 +152,15 @@ def test_generate_network_polars_vs_pandas_full(vdj_smaller):
     )
 
     # Compare distance matrices
-    distances_pandas = np.nan_to_num(vdj_pandas.distances.toarray())
-    distances_polars = np.nan_to_num(vdj_polars.distances.toarray())
+    distances_pandas = vdj_pandas.distances.toarray()
+    distances_polars = vdj_polars.distances.toarray()
 
-    assert np.allclose(
-        distances_pandas, distances_polars
+    assert np.array_equal(
+        distances_pandas, distances_polars, equal_nan=True
     ), "Distance matrices differ between pandas and Polars implementations"
     assert (
-        distances_pandas.sum() == distances_polars.sum()
+        np.nan_to_num(distances_pandas).sum()
+        == np.nan_to_num(distances_polars).sum()
     ), "Distance matrix sums differ"
 
     # Compare graph structure (both full and MST graphs in tuple)
@@ -232,18 +234,18 @@ def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
 
     # Compute lazy distances if needed
     if hasattr(vdj_lazy.distances, "compute"):
-        lazy_distances = np.nan_to_num(vdj_lazy.distances.compute())
+        lazy_distances = vdj_lazy.distances.compute()
     else:
-        lazy_distances = np.nan_to_num(vdj_lazy.distances.toarray())
+        lazy_distances = vdj_lazy.distances.toarray()
 
-    eager_distances = np.nan_to_num(vdj_eager.distances.toarray())
-
+    eager_distances = vdj_eager.distances.toarray()
     # Compare results
-    assert np.allclose(
-        eager_distances, lazy_distances
+    assert np.array_equal(
+        eager_distances, lazy_distances, equal_nan=True
     ), "Distance matrices differ between eager and lazy modes"
     assert (
-        eager_distances.sum() == lazy_distances.sum()
+        np.nan_to_num(eager_distances).sum()
+        == np.nan_to_num(lazy_distances).sum()
     ), "Distance matrix sums differ between modes"
 
 
@@ -286,12 +288,13 @@ def test_generate_network_polars_vs_pandas_padded(vdj_smaller, pad_to_max):
     )
 
     # Compare distance matrices
-    distances_pandas = np.nan_to_num(vdj_pandas.distances.toarray())
-    distances_polars = np.nan_to_num(vdj_polars.distances.toarray())
+    distances_pandas = vdj_pandas.distances.toarray()
+    distances_polars = vdj_polars.distances.toarray()
 
-    assert np.allclose(
-        distances_pandas, distances_polars
+    assert np.array_equal(
+        distances_pandas, distances_polars, equal_nan=True
     ), f"Distance matrices differ with pad_to_max={pad_to_max}"
     assert (
-        distances_pandas.sum() == distances_polars.sum()
+        np.nan_to_num(distances_pandas).sum()
+        == np.nan_to_num(distances_polars).sum()
     ), f"Distance matrix sums differ with pad_to_max={pad_to_max}"

@@ -514,21 +514,22 @@ def generate_network(
                                 )
                             )
                             if len(list(set(idx))) > 1:
-                                # Map cell ids to positional indices (Polars-safe)
-                                pos = [cell_id_to_pos[i] for i in idx]
+                                # Mirror pandas: slice using the current clone's members (idxs)
+                                # even when overlapping clones exist.
+                                pos = [cell_id_to_pos[i] for i in idxs]
                                 if lazy:
                                     dist_mat_ = pd.DataFrame(
                                         dask_safe_slice_square(
                                             total_dist, pos
                                         ).compute(),
-                                        index=idx,
-                                        columns=idx,
+                                        index=idxs,
+                                        columns=idxs,
                                     )
                                 else:
                                     dist_mat_ = pd.DataFrame(
                                         total_dist[np.ix_(pos, pos)],
-                                        index=idx,
-                                        columns=idx,
+                                        index=idxs,
+                                        columns=idxs,
                                     )
                                 s1, s2 = dist_mat_.shape
                                 if s1 > 1 and s2 > 1:
@@ -652,12 +653,8 @@ def generate_network(
             weights = (
                 Gcoo.data[mask] - 1
             )  # -1 to revert back to original distance
-            meta_cells = (
-                meta_pd["cell_id"].tolist()
-                if hasattr(meta_pd, "columns")
-                and ("cell_id" in meta_pd.columns)
-                else list(meta_pd.index)
-            )
+            # Ensure cell ordering matches the distance matrix rows (dat_seq order)
+            meta_cells = dat_seq_indexed["cell_id"].to_list()
             tmp_totaldiststack = {
                 meta_cells[r] + "|" + meta_cells[c]: w
                 for r, c, w in zip(rows, cols, weights)
