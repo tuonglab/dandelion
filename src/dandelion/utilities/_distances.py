@@ -1,5 +1,6 @@
 from __future__ import annotations
 import hashlib
+import inspect
 
 import numpy as np
 
@@ -10,65 +11,7 @@ from rapidfuzz import process
 from typing import Callable, Protocol, runtime_checkable
 
 
-def dist_func_long_sep(
-    x: list[str],
-    y: list[str],
-    metric: Metric,
-    pad_to_max: bool = False,
-    sep: str = "#",
-) -> float:
-    """
-    Concatenate column-wise with long separators and apply the metric.
-    """
-    # If the metric is a substitution matrix, skip sep padding
-    if isinstance(metric, SubstitutionMatrixMetric):
-        # Just concatenate without adding separators
-        s1 = "".join(x)
-        s2 = "".join(y)
-    elif pad_to_max:
-        max_len = [max(len(a), len(b)) for a, b in zip(x, y)]
-        s1_parts, s2_parts = [], []
-
-        for s1, s2, le in zip(x, y, max_len):
-            # Pad each element
-            s1_parts.append(s1.ljust(le + 1, sep))
-            s2_parts.append(s2.ljust(le + 1, sep))
-
-        # Join with per-column separators
-        s1_result, s2_result = [], []
-        for i, (s1_part, s2_part, le) in enumerate(
-            zip(s1_parts, s2_parts, max_len)
-        ):
-            s1_result.append(s1_part)
-            s2_result.append(s2_part)
-
-            # Add separator between columns (but not after the last one)
-            if i < len(max_len) - 1:
-                col_sep = sep * (le + 2)  # Longer than padded length (le + 1)
-                s1_result.append(col_sep)
-                s2_result.append(col_sep)
-
-        s1 = "".join(s1_result)
-        s2 = "".join(s2_result)
-    else:
-        # Dynamically choose separator length: longer than the max column
-        try:
-            max_x = max(len(s) for s in x)
-        except ValueError:
-            max_x = 0
-        try:
-            max_y = max(len(s) for s in y)
-        except ValueError:
-            max_y = 0
-        max_len = max(max_x, max_y)
-        long_sep = sep * (max_len + 1)
-        s1 = long_sep.join(x)
-        s2 = long_sep.join(y)
-
-    return metric.compute(s1, s2)
-
-
-def prepare_sequences_with_separator(
+def _prepare_sequences_with_separator(
     sequences: list[list[str]],
     metric: Metric,
     pad_to_max: bool = False,
@@ -105,7 +48,7 @@ def prepare_sequences_with_separator(
     >>> from dandelion.utilities._distances import LevenshteinMetric
     >>> metric = LevenshteinMetric()
     >>> seqs = [['ACGT', 'CGAT'], ['AAAA', 'TTTT'], ['CCCC', 'AAAA']]
-    >>> prepared = prepare_sequences_with_separator(seqs, metric, pad_to_max=False)
+    >>> prepared = _prepare_sequences_with_separator(seqs, metric, pad_to_max=False)
     >>> len(prepared)
     3
     >>> prepared[0]  # Concatenated with separator
@@ -184,13 +127,18 @@ class Metric(Protocol):
     Optionally can provide `compute_vectorized(seqs: list[str]) -> np.ndarray` for performance.
     """
 
-    def compute(self, s1: str, s2: str) -> float: ...
+    def compute(self, s1: str, s2: str, n_cpus: int = 1) -> float: ...
 
-    def compute_vectorized(self, seqs: list[str]) -> np.ndarray: ...
+    def compute_vectorized(
+        self, seqs: list[str], n_cpus: int = 1
+    ) -> np.ndarray: ...
 
 
 class CallableMetric:
-    """Wraps a callable f(s1, s2) or f(seqs) into a Metric object."""
+    """Wraps a callable f(s1, s2) or f(seqs) into a Metric object.
+
+    Automatically detects whether the callable is pairwise (2 params) or vectorized (1 param).
+    """
 
     def __init__(
         self,
@@ -202,15 +150,58 @@ class CallableMetric:
                 "Must provide at least one of 'func' or 'vectorized_func'"
             )
 
-        self.func = func
-        self._vectorized_func = vectorized_func
+        # Auto-detect if single function provided
+        if func is not None and vectorized_func is None:
+            try:
+                sig = inspect.signature(func)
+                params = [
+                    p
+                    for p in sig.parameters.values()
+                    if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                ]
+
+                if len(params) == 1:
+                    # Vectorized function: f(seqs) -> np.ndarray
+                    self.func = None
+                    self._vectorized_func = func
+                elif len(params) == 2:
+                    # Pairwise function: f(s1, s2) -> float
+                    self.func = func
+                    self._vectorized_func = None
+                else:
+                    raise ValueError(
+                        f"Callable must have 1 parameter (vectorized) or 2 parameters (pairwise), got {len(params)}"
+                    )
+            except ValueError as e:
+                # Built-in C functions don't have inspectable signatures
+                # Try to detect by calling with 2 args - if it works, it's pairwise
+                if "no signature found for builtin" in str(e):
+                    self.func = func
+                    self._vectorized_func = None
+                else:
+                    raise
+        else:
+            self.func = func
+            self._vectorized_func = vectorized_func
 
     def compute(self, s1: str, s2: str) -> float:
         """Use provided function to compute distance between two strings."""
-        return float(self.func(s1, s2))
+        if self.func is not None:
+            return float(self.func(s1, s2))
+        else:
+            # Fall back to computing on a 2-element list if only vectorized is available
+            result = self._vectorized_func([s1, s2])
+            return float(result[0, 1])
 
-    def compute_vectorized(self, seqs: list[str]) -> np.ndarray:
-        """Use provided vectorized function."""
+    def compute_vectorized(
+        self, seqs: list[str], n_cpus: int = 1
+    ) -> np.ndarray:
+        """
+        Use provided vectorized function.
+
+        Note: n_cpus is provided for built-in metrics but is ignored for custom callables.
+        Custom callables don't receive n_cpus - parallelization is handled at the chunk level.
+        """
         # Use custom vectorized implementation if provided
         if self._vectorized_func is not None:
             return self._vectorized_func(seqs)
@@ -236,7 +227,9 @@ class LevenshteinMetric:
     def compute(self, s1: str, s2: str) -> float:
         return float(Levenshtein.distance(s1, s2))
 
-    def compute_vectorized(self, seqs: list[str]) -> np.ndarray:
+    def compute_vectorized(
+        self, seqs: list[str], n_cpus: int = 1
+    ) -> np.ndarray:
         if not seqs:
             return np.empty((0, 0), dtype=float)
 
@@ -245,6 +238,7 @@ class LevenshteinMetric:
             seqs,
             scorer=Levenshtein.distance,
             dtype=np.int32,
+            workers=n_cpus if n_cpus > 1 else 1,
         ).astype(float)
 
 
@@ -320,7 +314,9 @@ class HammingMetric:
             )
         return float(sum(c1 != c2 for c1, c2 in zip(s1, s2)))
 
-    def compute_vectorized(self, seqs: list[str]) -> np.ndarray:
+    def compute_vectorized(
+        self, seqs: list[str], n_cpus: int = 1
+    ) -> np.ndarray:
         """
         Compute pairwise Hamming distances using the best available backend.
 
@@ -328,6 +324,8 @@ class HammingMetric:
         ----------
         seqs : list[str]
             List of sequences to compare.
+        n_cpus : int, optional
+            Number of CPUs to use (currently not utilized for GPU backends).
 
         Returns
         -------
@@ -474,7 +472,9 @@ class IdentityMetric:
         """Compute identity distance between two strings (0 = same, 1 = different)."""
         return 0.0 if s1 == s2 else 1.0
 
-    def compute_vectorized(self, seqs: list[str]) -> np.ndarray:
+    def compute_vectorized(
+        self, seqs: list[str], n_cpus: int = 1
+    ) -> np.ndarray:
         """
         Compute pairwise identity distance matrix.
 
@@ -482,6 +482,8 @@ class IdentityMetric:
         ----------
         seqs : list[str]
             List of sequences to compare.
+        n_cpus : int, optional
+            Number of CPUs to use (currently not utilized for GPU backends).
 
         Returns
         -------
@@ -590,7 +592,9 @@ class SubstitutionMatrixMetric:
         max_score = min(s1_self, s2_self)
         return max(0.0, max_score - score_12)
 
-    def compute_vectorized(self, seqs: list[str]) -> np.ndarray:
+    def compute_vectorized(
+        self, seqs: list[str], n_cpus: int = 1
+    ) -> np.ndarray:
         """
         Vectorized pairwise distance computation using substitution matrices.
 
@@ -601,6 +605,8 @@ class SubstitutionMatrixMetric:
         ----------
         seqs : list[str]
             List of sequences to compare (can have different lengths).
+        n_cpus : int, optional
+            Number of CPUs to use (currently not utilized).
 
         Returns
         -------

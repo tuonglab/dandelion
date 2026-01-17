@@ -18,7 +18,10 @@ from scanpy import logging as logg
 from tqdm import tqdm
 from zarr.codecs import BloscCodec
 
-from dandelion.utilities._distances import dist_func_long_sep, Metric
+from dandelion.utilities._distances import (
+    Metric,
+    _prepare_sequences_with_separator,
+)
 
 
 def calculate_distance_matrix_zarr(
@@ -258,6 +261,18 @@ def _compute_multicol_distances_streaming(
         dat_seq.replace("[.]", "", regex=True).fillna("").replace("None", "")
     )
 
+    # Prepare sequences once with global padding before scattering to workers
+    seqs_np = dat_seq_clean.to_numpy(dtype=object)
+    seqs_list = seqs_np.tolist()
+    prepared_seqs = _prepare_sequences_with_separator(
+        seqs_list, metric=metric, pad_to_max=pad_to_max, sep="#"
+    )
+
+    # Reconstruct DataFrame with prepared sequences as single column
+    dat_seq_clean = pd.DataFrame(
+        {"_prepared_seq": prepared_seqs}, index=dat_seq_clean.index
+    )
+
     seqs_np = dat_seq_clean.to_numpy(dtype=object)
     seqs = da.from_delayed(
         dask.delayed(lambda x: x)(seqs_np), shape=seqs_np.shape, dtype=object
@@ -401,7 +416,6 @@ def _compute_multicol_distances_streaming(
                     idx_cat=idx_cat,
                     seq_lengths=seq_len,
                     metric=metric,
-                    pad_to_max=pad_to_max,
                     z_array=z_array,
                     compress=compress,
                 )
@@ -441,7 +455,6 @@ def _compute_multicol_distances_streaming(
                         chunk_i=chunks_list[i],
                         chunk_j=chunks_list[j],
                         metric=metric,
-                        pad_to_max=pad_to_max,
                         z_array=z_array,
                         start_i=start_i,
                         end_i=end_i,
@@ -474,22 +487,25 @@ def _compute_block_multicol(
     seqs_i: np.ndarray,
     seqs_j: np.ndarray,
     metric: Metric,
-    pad_to_max: bool,
 ):
     """
-    Compute pairwise distances between two sequence chunks across multiple columns.
-    seqs_i and seqs_j are 2D arrays: shape (n_rows, n_cols)
+    Compute pairwise distances between two sequence chunks.
+    seqs_i and seqs_j are 2D arrays: shape (n_rows, 1)
+
+    Note: Sequences are already prepared (padded, concatenated) before this function,
+    so we skip re-preparation and directly compute distances.
     """
-    n_i, n_j = len(seqs_i), len(seqs_j)
-    dist_block = np.zeros((n_i, n_j), dtype=float)
+    # Extract prepared sequences (already concatenated with separators and padded)
+    seqs_i_flat = seqs_i.flatten().tolist()
+    seqs_j_flat = seqs_j.flatten().tolist()
+    all_seqs = seqs_i_flat + seqs_j_flat
 
-    for i, row_i in enumerate(seqs_i):
-        for j, row_j in enumerate(seqs_j):
-            dist_block[i, j] = dist_func_long_sep(
-                row_i, row_j, metric=metric, pad_to_max=pad_to_max
-            )
+    # Vectorized computation on already-prepared sequences
+    n_i = len(seqs_i_flat)
+    full_dist = metric.compute_vectorized(all_seqs)
 
-    return dist_block
+    # Extract the i×j block (cross-distances between chunks)
+    return full_dist[:n_i, n_i:]
 
 
 def dask_safe_slice_square(arr: da.Array, pos: list) -> da.Array:
@@ -504,7 +520,6 @@ def _compute_and_write_block(
     chunk_i: np.ndarray,
     chunk_j: np.ndarray,
     metric: Metric,
-    pad_to_max: bool,
     z_array: zarr.Array,
     start_i: int,
     end_i: int,
@@ -516,7 +531,7 @@ def _compute_and_write_block(
     """
     Compute a single block and write it directly to Zarr.
     """
-    block = _compute_block_multicol(chunk_i, chunk_j, metric, pad_to_max)
+    block = _compute_block_multicol(chunk_i, chunk_j, metric)
     tmp_array, tmp_dir = create_tmp_zarr(z_array, compress)
 
     # Write to Zarr immediately
@@ -533,7 +548,6 @@ def _process_batch(
     idx_cat: list[list[int]],
     seq_lengths: list[int],
     metric: Metric,
-    pad_to_max: bool,
     z_array: zarr.Array,
     compress: bool = True,
 ):
@@ -545,7 +559,6 @@ def _process_batch(
         idxs_cat=idx_cat,
         boundaries=boundaries,
         metric=metric,
-        pad_to_max=pad_to_max,
         z_array=z_array,
         compress=compress,
     )
@@ -557,7 +570,6 @@ def _compute_and_write_membership_cat(
     idxs_cat: np.ndarray,
     boundaries: np.ndarray,
     metric: Metric,
-    pad_to_max: bool,
     z_array: zarr.Array,
     compress: bool = True,
 ):
@@ -565,7 +577,7 @@ def _compute_and_write_membership_cat(
     Compute distances within each membership group only.
     """
     # Compute full block once
-    block = _compute_block_multicol(seqs_cat, seqs_cat, metric, pad_to_max)
+    block = _compute_block_multicol(seqs_cat, seqs_cat, metric)
     # compress the tmp_array
     n_groups = len(boundaries) - 1
     tmp_array, tmp_dir = create_tmp_zarr(z_array, compress)

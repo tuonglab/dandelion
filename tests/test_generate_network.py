@@ -68,8 +68,8 @@ def test_generate_network_clone(
         pytest.param(False, 2, False, False, 10398758),  # long parallel
         pytest.param(False, 1, True, False, 10398758),  # lazy
         pytest.param(False, 2, True, False, 10398758),  # lazy parallel
-        pytest.param(True, 1, False, True, 10171634),  # original
-        pytest.param(True, 2, False, True, 10171634),  # original parallel
+        pytest.param(True, 1, False, True, 12328492),  # original
+        pytest.param(True, 2, False, True, 12328492),  # original parallel
         pytest.param(False, 1, False, True, 12186804),  # long
         pytest.param(False, 2, False, True, 12186804),  # long parallel
         pytest.param(False, 1, True, True, 12186804),  # lazy

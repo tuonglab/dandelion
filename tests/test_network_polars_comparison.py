@@ -90,27 +90,28 @@ def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
             polars_g.edges()
         ), f"Graph {g_idx}: Number of edges differ"
 
-        # Compare edge weights
-        pandas_edge_dict = {
-            (u, v): w for u, v, w in pandas_g.edges(data="weight")
-        }
-        polars_edge_dict = {
-            (u, v): w for u, v, w in polars_g.edges(data="weight")
-        }
+        assert len(pandas_g.edges()) == len(
+            polars_g.edges()
+        ), f"Graph {g_idx}: Number of edges differ"
 
-        assert set(pandas_edge_dict.keys()) == set(
-            polars_edge_dict.keys()
+        assert (
+            pandas_g.edges() == polars_g.edges()
         ), f"Graph {g_idx}: Edge sets differ between implementations"
 
-        for edge in pandas_edge_dict.keys():
-            assert (
-                pandas_edge_dict[edge] == polars_edge_dict[edge]
-            ), f"Graph {g_idx}: Weight for edge {edge} differs"
+        import networkx as nx
 
-    for edge in pandas_edge_dict.keys():
+        # Compare edge weights between Polars and pandas graphs
+
+        pandas_edge_dict = {
+            (frozenset((u, v)), w) for u, v, w in pandas_g.edges(data="weight")
+        }
+        polars_edge_dict = {
+            (frozenset((u, v)), w) for u, v, w in polars_g.edges(data="weight")
+        }
+
         assert (
-            pandas_edge_dict[edge] == polars_edge_dict[edge]
-        ), f"Weight for edge {edge} differs"
+            pandas_edge_dict == polars_edge_dict
+        ), f"Graph {g_idx}: Edge weights differ between pandas and Polars graphs"
 
 
 @pytest.mark.usefixtures("vdj_smaller")

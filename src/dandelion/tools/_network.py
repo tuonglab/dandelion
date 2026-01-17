@@ -13,9 +13,9 @@ from joblib import Parallel, delayed
 from pathlib import Path
 from polyleven import levenshtein
 from scanpy import logging as logg
-from scipy.spatial.distance import pdist, squareform
+
 from scipy.sparse.csgraph import csgraph_from_dense
-from sklearn.metrics import pairwise_distances
+from sklearn.metrics.pairwise import euclidean_distances
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
 from typing import Callable, Literal, TYPE_CHECKING
@@ -29,8 +29,7 @@ from dandelion.tools._layout import generate_layout
 from dandelion.utilities._core import Dandelion, Query
 from dandelion.utilities._distances import (
     Metric,
-    dist_func_long_sep,
-    prepare_sequences_with_separator,
+    _prepare_sequences_with_separator,
     resolve_metric,
 )
 from dandelion.utilities._utilities import (
@@ -937,24 +936,15 @@ def calculate_distance_matrix_original(
                 .replace("None", "")
             )
             for col in tmp.columns:
-                tdarray = np.array(tmp[col]).reshape(-1, 1)
-                # keep the original NaN-check logic: return 0 when either is NaN
-                d_mat_tmp = squareform(
-                    pdist(
-                        tdarray,
-                        lambda x, y: (
-                            dist_func_long_sep(
-                                x[0],
-                                y[0],
-                                metric=metric,
-                                pad_to_max=pad_to_max,
-                                sep="" if not pad_to_max else "#",
-                            )
-                            if (pd.notnull(x[0]) and pd.notnull(y[0]))
-                            else 0
-                        ),
-                    )
+                seqs_raw = [[s] for s in tmp[col].values]
+                prepared_seqs = _prepare_sequences_with_separator(
+                    seqs_raw,
+                    metric=metric,
+                    pad_to_max=pad_to_max,
+                    sep="" if not pad_to_max else "#",
                 )
+                # Vectorized computation
+                d_mat_tmp = metric.compute_vectorized(prepared_seqs)
                 df_block = pd.DataFrame(
                     d_mat_tmp, index=tmp.index, columns=tmp.index
                 )
@@ -1029,7 +1019,7 @@ def calculate_distance_matrix_original_full(
 
         # Prepare sequences for single column (reshape to list of single-element lists)
         seqs_raw = [[s] for s in nonnull.to_numpy(dtype=object)]
-        prepared_seqs = prepare_sequences_with_separator(
+        prepared_seqs = _prepare_sequences_with_separator(
             seqs_raw,
             metric=metric,
             pad_to_max=pad_to_max,
@@ -1037,7 +1027,7 @@ def calculate_distance_matrix_original_full(
         )
 
         # Compute distance matrix using vectorized metric
-        results = metric.compute_vectorized(prepared_seqs)
+        results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
         total_dist += results
 
     np.fill_diagonal(total_dist, np.nan)
@@ -1093,7 +1083,7 @@ def calculate_distance_matrix_long(
     # Step 2: prepare sequences (concatenate with separators, apply padding)
     # This happens ONCE upfront, not per-pair
     seqs_raw = dat_seq_clean.values.tolist()
-    prepared_seqs = prepare_sequences_with_separator(
+    prepared_seqs = _prepare_sequences_with_separator(
         seqs_raw,
         metric=metric,
         pad_to_max=pad_to_max,
@@ -1107,7 +1097,7 @@ def calculate_distance_matrix_long(
 
     if membership is None:
         # Step 4: compute full distance matrix at once using vectorized metric
-        results = metric.compute_vectorized(prepared_seqs)
+        results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
         total_dist += results
     else:
         # Step 4: iterate over clone memberships
@@ -1125,7 +1115,7 @@ def calculate_distance_matrix_long(
                 clone_seqs = [prepared_seqs[i] for i in tmp_indices]
 
                 # Compute distance matrix for this clone using vectorized metric
-                d_mat_tmp = metric.compute_vectorized(clone_seqs)
+                d_mat_tmp = metric.compute_vectorized(clone_seqs, n_cpus=n_cpus)
 
                 total_dist[np.ix_(tmp_indices, tmp_indices)] += d_mat_tmp
 

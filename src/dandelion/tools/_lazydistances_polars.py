@@ -23,7 +23,10 @@ from tqdm import tqdm
 from zarr.codecs import BloscCodec
 from scanpy import logging as logg
 
-from dandelion.utilities._distances import Metric, dist_func_long_sep
+from dandelion.utilities._distances import (
+    Metric,
+    _prepare_sequences_with_separator,
+)
 
 
 def calculate_distance_matrix_zarr(
@@ -37,7 +40,6 @@ def calculate_distance_matrix_zarr(
     memory_limit_gb: float | None = None,
     verbose: bool = True,
     compress: bool = True,
-    chunk_batch_limit: int | None = None,
     # Backward-compat alias used by generate_network
     zarr_path: str | None = None,
 ) -> da.Array:
@@ -71,8 +73,6 @@ def calculate_distance_matrix_zarr(
         Whether to show progress bars.
     compress : bool
         Whether to compress the Zarr array.
-    chunk_batch_limit : int, optional
-        Hard limit on number of clonotypes per batch (membership mode only).
 
     Returns
     -------
@@ -114,9 +114,25 @@ def calculate_distance_matrix_zarr(
         ]
     )
 
+    # Prepare sequences once with global padding before scattering to workers
+    # Convert to list of lists, prepare, then store back as single column
+    seq_arrays = dat_seq_clean.select(seq_cols).to_numpy(allow_copy=True)
+    seq_lists = seq_arrays.tolist()
+    prepared_seqs = _prepare_sequences_with_separator(
+        seq_lists, metric=metric, pad_to_max=pad_to_max, sep="#"
+    )
+
+    # Reconstruct DataFrame with prepared sequences as single column
+    dat_seq_clean = pl.DataFrame(
+        {
+            "_original_order": dat_seq_clean["_original_order"],
+            "_prepared_seq": prepared_seqs,
+        }
+    )
+
     # Store cleaned dataframe for lazy chunk extraction - do NOT convert to numpy yet
     m = dat_seq_clean.height
-    n_cols = len(seq_cols)
+    n_cols = 1  # Now we have single prepared sequence column
 
     logg.info(
         f"Preparing distance matrix computation for {m} sequences across {n_cols} columns..."
@@ -179,12 +195,8 @@ def calculate_distance_matrix_zarr(
             dat_seq_clean=dat_seq_clean,
             membership=membership,
             cell_id_to_idx=cell_id_to_idx,
-            seq_cols=seq_cols,
             metric=metric,
-            pad_to_max=pad_to_max,
             z_array=z_array,
-            compress=compress,
-            verbose=verbose,
         )
 
     else:
@@ -217,13 +229,11 @@ def calculate_distance_matrix_zarr(
                     future = client.submit(
                         _compute_block_and_write,
                         df_future,
-                        seq_cols,
                         start_i,
                         end_i,
                         start_j,
                         end_j,
                         metric,
-                        pad_to_max,
                         zarr_path_str,
                         is_diagonal,
                         compress,
@@ -232,17 +242,16 @@ def calculate_distance_matrix_zarr(
                 else:
                     # Fallback to delayed for single-threaded execution
                     chunk_i = dask.delayed(_extract_chunk_from_polars)(
-                        df_future, seq_cols, start_i, end_i
+                        df_future, start_i, end_i
                     )
                     chunk_j = dask.delayed(_extract_chunk_from_polars)(
-                        df_future, seq_cols, start_j, end_j
+                        df_future, start_j, end_j
                     )
                     delayed_blocks.append(
                         dask.delayed(_compute_and_write_block)(
                             chunk_i=chunk_i,
                             chunk_j=chunk_j,
                             metric=metric,
-                            pad_to_max=pad_to_max,
                             zarr_path=zarr_path_str,
                             start_i=start_i,
                             end_i=end_i,
@@ -280,10 +289,10 @@ def calculate_distance_matrix_zarr(
 
 
 def _extract_chunk_from_polars(
-    df: pl.DataFrame | object, seq_cols: list[str], start: int, end: int
+    df: pl.DataFrame | object, start: int, end: int
 ) -> np.ndarray:
     """
-    Extract a chunk of sequences from Polars DataFrame lazily.
+    Extract a chunk of prepared sequences from Polars DataFrame lazily.
 
     This function only loads the requested rows into memory, avoiding
     loading the entire dataset at once. Handles both regular DataFrames
@@ -292,9 +301,7 @@ def _extract_chunk_from_polars(
     Parameters
     ----------
     df : pl.DataFrame | Future
-        Polars DataFrame with sequence data or a Dask future containing one
-    seq_cols : list[str]
-        Column names containing sequences
+        Polars DataFrame with prepared sequence data or a Dask future containing one
     start : int
         Starting row index
     end : int
@@ -303,24 +310,25 @@ def _extract_chunk_from_polars(
     Returns
     -------
     np.ndarray
-        2D numpy array of sequences for the requested chunk
+        2D numpy array with prepared sequences (shape: (n_rows, 1))
     """
     # If df is a Dask future, it will be automatically resolved by Dask
     # when this function is called by a worker
+    # Extract the prepared sequence column
     return (
-        df.slice(start, end - start).select(seq_cols).to_numpy(allow_copy=True)
+        df.slice(start, end - start)
+        .select(["_prepared_seq"])
+        .to_numpy(allow_copy=True)
     )
 
 
 def _compute_block_and_write(
     df_future: pl.DataFrame | object,
-    seq_cols: list[str],
     start_i: int,
     end_i: int,
     start_j: int,
     end_j: int,
     metric: Metric,
-    pad_to_max: bool,
     zarr_path: str,
     is_diagonal: bool,
     compress: bool,
@@ -335,16 +343,12 @@ def _compute_block_and_write(
     ----------
     df_future : pl.DataFrame | Future
         Scattered DataFrame or future reference
-    seq_cols : list[str]
-        Sequence column names
     start_i, end_i : int
         Row indices for first chunk
     start_j, end_j : int
         Row indices for second chunk
     metric : Metric
         Distance metric
-    pad_to_max : bool
-        Whether to pad sequences
     zarr_path : str
         Path to Zarr array
     is_diagonal : bool
@@ -358,15 +362,14 @@ def _compute_block_and_write(
         Path to temporary Zarr array
     """
     # Extract chunks
-    chunk_i = _extract_chunk_from_polars(df_future, seq_cols, start_i, end_i)
-    chunk_j = _extract_chunk_from_polars(df_future, seq_cols, start_j, end_j)
+    chunk_i = _extract_chunk_from_polars(df_future, start_i, end_i)
+    chunk_j = _extract_chunk_from_polars(df_future, start_j, end_j)
 
     # Compute and write
     return _compute_and_write_block(
         chunk_i,
         chunk_j,
         metric,
-        pad_to_max,
         zarr_path,
         start_i,
         end_i,
@@ -381,22 +384,26 @@ def _compute_block_multicol(
     seqs_i: np.ndarray,
     seqs_j: np.ndarray,
     metric: Metric,
-    pad_to_max: bool,
 ):
     """
-    Compute pairwise distances between two sequence chunks across multiple columns.
-    seqs_i and seqs_j are 2D arrays: shape (n_rows, n_cols)
+    Compute pairwise distances between two sequence chunks.
+
+    seqs_i and seqs_j are 2D arrays: shape (n_rows, 1)
+
+    Note: Sequences are already prepared (padded, concatenated) before this function,
+    so we skip re-preparation and directly compute distances.
     """
-    n_i, n_j = len(seqs_i), len(seqs_j)
-    dist_block = np.zeros((n_i, n_j), dtype=float)
+    # Extract prepared sequences (already concatenated with separators and padded)
+    seqs_i_flat = seqs_i.flatten().tolist()
+    seqs_j_flat = seqs_j.flatten().tolist()
+    all_seqs = seqs_i_flat + seqs_j_flat
 
-    for i, row_i in enumerate(seqs_i):
-        for j, row_j in enumerate(seqs_j):
-            dist_block[i, j] = dist_func_long_sep(
-                row_i, row_j, metric=metric, pad_to_max=pad_to_max
-            )
+    # Vectorized computation on already-prepared sequences
+    n_i = len(seqs_i_flat)
+    full_dist = metric.compute_vectorized(all_seqs)
 
-    return dist_block
+    # Extract the i×j block (cross-distances between chunks)
+    return full_dist[:n_i, n_i:]
 
 
 def dask_safe_slice_square(arr: da.Array, pos: list) -> da.Array:
@@ -411,7 +418,6 @@ def _compute_and_write_block(
     chunk_i: np.ndarray,
     chunk_j: np.ndarray,
     metric: Metric,
-    pad_to_max: bool,
     zarr_path: str,
     start_i: int,
     end_i: int,
@@ -458,7 +464,7 @@ def _compute_and_write_block(
     root = zarr.open_group(store=store, mode="r")
     z_array = root["distance_matrix"]
 
-    block = _compute_block_multicol(chunk_i, chunk_j, metric, pad_to_max)
+    block = _compute_block_multicol(chunk_i, chunk_j, metric)
     tmp_array, tmp_dir = create_tmp_zarr(z_array, compress)
 
     # Write to Zarr immediately
@@ -475,7 +481,6 @@ def _process_batch(
     idx_cat: list[list[int]],
     seq_lengths: list[int],
     metric: Metric,
-    pad_to_max: bool,
     zarr_path: str,
     compress: bool = True,
 ):
@@ -492,8 +497,6 @@ def _process_batch(
         Lengths of each group in the batch
     metric : Metric
         Distance metric
-    pad_to_max : bool
-        Whether to pad sequences
     zarr_path : str
         Path to Zarr array
     compress : bool
@@ -517,7 +520,6 @@ def _process_batch(
         idxs_cat=idx_cat,
         boundaries=boundaries,
         metric=metric,
-        pad_to_max=pad_to_max,
         z_array=z_array,
         compress=compress,
     )
@@ -529,7 +531,6 @@ def _compute_and_write_membership_cat(
     idxs_cat: np.ndarray,
     boundaries: np.ndarray,
     metric: Metric,
-    pad_to_max: bool,
     z_array: zarr.Array,
     compress: bool = True,
 ):
@@ -537,7 +538,7 @@ def _compute_and_write_membership_cat(
     Compute distances within each membership group only.
     """
     # Compute full block once
-    block = _compute_block_multicol(seqs_cat, seqs_cat, metric, pad_to_max)
+    block = _compute_block_multicol(seqs_cat, seqs_cat, metric)
     # compress the tmp_array
     n_groups = len(boundaries) - 1
     tmp_array, tmp_dir = create_tmp_zarr(z_array, compress)
@@ -721,12 +722,8 @@ def _compute_distances_polars_native(
     dat_seq_clean: pl.DataFrame,
     membership: dict,
     cell_id_to_idx: dict,
-    seq_cols: list[str],
     metric: Metric,
-    pad_to_max: bool,
     z_array: zarr.Array,
-    compress: bool,
-    verbose: bool,
 ) -> list[str]:
     """
     Compute distances using fully vectorized Polars operations.
@@ -737,17 +734,13 @@ def _compute_distances_polars_native(
     Parameters
     ----------
     dat_seq_clean : pl.DataFrame
-        Cleaned Polars DataFrame with sequences
+        Cleaned Polars DataFrame with prepared sequences (already padded and concatenated)
     membership : dict
         Mapping from clone_id -> list of cell_ids
     cell_id_to_idx : dict
         Mapping from cell_id -> array index
-    seq_cols : list[str]
-        Sequence column names
     metric : Metric
         Distance metric
-    pad_to_max : bool
-        Whether to pad sequences
     z_array : zarr.Array
         Zarr array to write to
     compress : bool
@@ -760,8 +753,6 @@ def _compute_distances_polars_native(
     list[str]
         List of temporary Zarr array paths
     """
-    from scipy.spatial.distance import pdist, squareform
-
     # Create reverse mapping: cell_id -> clone_id
     cell_to_clone = {}
     for clone_id, members in membership.items():
@@ -794,19 +785,17 @@ def _compute_distances_polars_native(
         if group_df.height < 2:
             return pl.DataFrame()
 
-        # Get array indices and sequences - fully vectorized extraction
+        # Get array indices and prepared sequences
         array_indices = group_df["_original_order"].to_numpy()
-        sequences = group_df.select(seq_cols).to_numpy(allow_copy=True)
+        prepared_seqs = group_df.select(["_prepared_seq"]).to_numpy(
+            allow_copy=True
+        )
 
-        # Vectorized pairwise distance computation using scipy
-        # Check metric type by string comparison since metric object is serialized
-        metric_name = type(metric).__name__
-        if metric_name == "LevenshteinMetric" or "Levenshtein" in metric_name:
-            dist_block = _vectorized_distance_levenshtein(sequences, pad_to_max)
-        else:
-            dist_block = _vectorized_distance_generic(
-                sequences, metric, pad_to_max
-            )
+        # Flatten to list of prepared sequence strings
+        seqs_flat = prepared_seqs.flatten().tolist()
+
+        # Vectorized pairwise distance computation on already-prepared sequences
+        dist_block = metric.compute_vectorized(seqs_flat)
 
         # Write directly to the main Zarr array at the group's indices
         z_array[np.ix_(array_indices, array_indices)] = dist_block
@@ -824,91 +813,3 @@ def _compute_distances_polars_native(
 
     # Return empty list since we write directly to z_array
     return []
-
-
-def _vectorized_distance_levenshtein(
-    sequences: np.ndarray, pad_to_max: bool = False
-) -> np.ndarray:
-    """
-    Compute vectorized Levenshtein distance across multiple columns.
-
-    Concatenates sequences across columns and computes pairwise distances
-    using scipy's pdist for efficiency.
-
-    Parameters
-    ----------
-    sequences : np.ndarray
-        2D array of shape (n_sequences, n_cols) with sequences
-    pad_to_max : bool
-        Whether to pad sequences to max length
-
-    Returns
-    -------
-    np.ndarray
-        Pairwise distance matrix
-    """
-    from polyleven import levenshtein
-    from scipy.spatial.distance import pdist, squareform
-
-    n = len(sequences)
-
-    # Concatenate columns with separator for multi-column distance
-    if sequences.shape[1] > 1:
-        # Create long separator string
-        long_sep = "X" * 100
-        concatenated = np.array(
-            [long_sep.join(str(s) for s in row) for row in sequences]
-        ).reshape(-1, 1)
-    else:
-        concatenated = sequences
-
-    # Vectorized pairwise distance using scipy
-    dist_vec = pdist(concatenated, metric=lambda x, y: levenshtein(x[0], y[0]))
-    dist_matrix = squareform(dist_vec)
-
-    return dist_matrix
-
-
-def _vectorized_distance_generic(
-    sequences: np.ndarray, metric: Metric, pad_to_max: bool = False
-) -> np.ndarray:
-    """
-    Compute vectorized distance using generic metric.
-
-    Parameters
-    ----------
-    sequences : np.ndarray
-        2D array of shape (n_sequences, n_cols)
-    metric : Metric
-        Distance metric
-    pad_to_max : bool
-        Whether to pad sequences
-
-    Returns
-    -------
-    np.ndarray
-        Pairwise distance matrix
-    """
-    from scipy.spatial.distance import pdist, squareform
-
-    n = len(sequences)
-
-    # Concatenate columns for multi-column distance
-    if sequences.shape[1] > 1:
-        long_sep = "X" * 100
-        concatenated = np.array(
-            [long_sep.join(str(s) for s in row) for row in sequences]
-        ).reshape(-1, 1)
-    else:
-        concatenated = sequences
-
-    # Use custom metric function
-    def distance_func(x, y):
-        return dist_func_long_sep(x, y, metric=metric, pad_to_max=pad_to_max)
-
-    dist_vec = pdist(
-        concatenated, metric=lambda x, y: distance_func(x[0], y[0])
-    )
-    dist_matrix = squareform(dist_vec)
-
-    return dist_matrix
