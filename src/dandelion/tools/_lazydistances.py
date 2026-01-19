@@ -73,10 +73,6 @@ def calculate_distance_matrix_zarr(
         Memory limit per worker in GB
     memory_safety_fraction : float
         Fraction of available memory to use (conservative for Dask overhead)
-    chunk_size : int | None, optional
-        Chunk size for Zarr storage (can differ from computation chunk_size).
-        Larger = better compression, smaller = better random access.
-        If None, uses same as chunk_size.
     compress : bool, optional
         Whether to compress the Zarr array using Blosc with zstd.
     lazy: bool, optional

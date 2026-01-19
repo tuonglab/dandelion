@@ -504,7 +504,7 @@ def gini_indices(
     if isinstance(data, DandelionPolars):
         # convert to eager first
         original_backend = data._backend
-        original_lazy = data.lazy
+        original_lazy = data._lazy
         if original_backend == "polars":
             data.to_pandas()
         data = data[data._metadata[groupby].isin(groups)]
@@ -607,7 +607,7 @@ def estimate_diversity(
     if isinstance(data, DandelionPolars):
         # convert to eager first
         original_backend = data._backend
-        original_lazy = data.lazy
+        original_lazy = data._lazy
         if original_backend == "polars":
             data.to_pandas()
         data = data[data._metadata[groupby].isin(groups)]

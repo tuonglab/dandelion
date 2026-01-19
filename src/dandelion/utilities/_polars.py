@@ -82,6 +82,7 @@ class DandelionPolars:
         library_type: Literal["tr-ab", "tr-gd", "ig"] | None = None,
         lazy: bool = True,
         verbose: bool = True,
+        cache_handles: dict[str, tempfile.NamedTemporaryFile] | None = None,
         **kwargs,
     ) -> None:
         """
@@ -118,15 +119,17 @@ class DandelionPolars:
         **kwargs
             passed to `Dandelion.update_metadata`.
         """
-        self.lazy = lazy
+        self._lazy = lazy
         self._data_name_col = "sequence_id"
         self._metadata_name_col = "cell_id"
         self._backend = "polars"
-        # Preserve existing tmpfiles if re-initializing
-        if not hasattr(self, "_tmpfiles"):
-            self._tmpfiles = {}
+        # Preserve existing cache_handles if re-initializing or accept provided ones
+        if cache_handles is not None:
+            self._cache_handles = cache_handles
+        elif not hasattr(self, "_cache_handles"):
+            self._cache_handles = {}
 
-        self._data = load_polars(data, lazy=self.lazy)
+        self._data = load_polars(data, lazy=self._lazy)
         self._metadata = metadata
         self.layout = layout
         self.graph = graph
@@ -144,7 +147,7 @@ class DandelionPolars:
                 else lib_type(self.library_type)
             )
             if acceptable is not None:
-                if self.lazy:
+                if self._lazy:
                     self._data = (
                         self._data.filter(pl.col("locus").is_in(acceptable))
                         .collect(engine="streaming")
@@ -154,7 +157,7 @@ class DandelionPolars:
                     self._data = self._data.filter(
                         pl.col("locus").is_in(acceptable)
                     )
-            self._data = _check_travdv_polars(self._data, lazy=self.lazy)
+            self._data = _check_travdv_polars(self._data, lazy=self._lazy)
             sort_cols = {"cell_id", "productive", "umi_count"}
             if isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
                 cols = set(self._data.collect_schema().names())
@@ -177,7 +180,7 @@ class DandelionPolars:
                     )
                     .drop("_cell_order")
                 )
-            if self.lazy:
+            if self._lazy:
                 self._data = self._data.collect(engine="streaming").lazy()
                 # Keep temp files alive - don't close them yet
             if metadata is None:
@@ -191,7 +194,7 @@ class DandelionPolars:
                         if metadata.index.name is None:
                             metadata.index.name = self._metadata_name_col
                     metadata = pl.from_pandas(metadata.reset_index(drop=False))
-                if self.lazy:
+                if self._lazy:
                     if isinstance(metadata, pl.DataFrame):
                         self._metadata = metadata.lazy()
                     else:
@@ -228,7 +231,7 @@ class DandelionPolars:
     def _gen_repr(self, n_obs, n_contigs) -> str:
         """Report."""
         # inspire by AnnData's function
-        if self.lazy:
+        if self._lazy:
             descr = f"Lazy Dandelion object with n_obs = {n_obs} and n_contigs = {n_contigs}"
         else:
             descr = f"Dandelion object with n_obs = {n_obs} and n_contigs = {n_contigs}"
@@ -617,7 +620,7 @@ class DandelionPolars:
                 value = pl.from_pandas(value.reset_index(drop=False))
             else:
                 value = pl.from_pandas(value)
-            if self.lazy:
+            if self._lazy:
                 value = value.lazy()
         self._metadata = value
         return
@@ -730,7 +733,7 @@ class DandelionPolars:
 
     def _cache_data(self) -> None:
         """Cache _data and _metadata into temp parquet files when lazy."""
-        if not self.lazy:
+        if not self._lazy:
             return
         self._data = self._cache_lazyframe(self._data, "data")
         self._metadata = self._cache_lazyframe(self._metadata, "metadata")
@@ -740,9 +743,9 @@ class DandelionPolars:
     ) -> pl.LazyFrame | None:
         if obj is None:
             # Nothing to cache but make sure stale handles are cleaned up
-            if slot_name in self._tmpfiles:
-                self._tmpfiles[slot_name].close()
-                del self._tmpfiles[slot_name]
+            if slot_name in self._cache_handles:
+                self._cache_handles[slot_name].close()
+                del self._cache_handles[slot_name]
             return obj
 
         # Materialize first to avoid closing backing files too early
@@ -753,9 +756,9 @@ class DandelionPolars:
         )
 
         # Close and drop any stale temp file for this slot
-        if slot_name in self._tmpfiles:
-            self._tmpfiles[slot_name].close()
-            del self._tmpfiles[slot_name]
+        if slot_name in self._cache_handles:
+            self._cache_handles[slot_name].close()
+            del self._cache_handles[slot_name]
 
         temp_file = tempfile.NamedTemporaryFile(
             suffix=".parquet",
@@ -768,7 +771,7 @@ class DandelionPolars:
         lf = pl.scan_parquet(temp_file.name)
 
         # Store in the unified dict
-        self._tmpfiles[slot_name] = temp_file
+        self._cache_handles[slot_name] = temp_file
 
         return lf
 
@@ -1086,7 +1089,7 @@ class DandelionPolars:
                         engine="streaming"
                     ).lazy()
         # Ensure data is backed after potentially removing backing with .lazy()
-        if self.lazy and isinstance(self._data, pl.LazyFrame):
+        if self._lazy and isinstance(self._data, pl.LazyFrame):
             self._cache_data()
 
     def simplify(self, **kwargs) -> None:
@@ -1625,7 +1628,7 @@ class DandelionPolars:
             self._metadata = pl.DataFrame(
                 {"cell_id": unique_cells["cell_id"].to_list()}
             )
-            if self.lazy:
+            if self._lazy:
                 self._metadata = self._metadata.lazy()
         else:
             # initialise clone_id and sample_id first if present
@@ -1705,7 +1708,7 @@ class DandelionPolars:
                 self._metadata = pl.DataFrame(
                     {"cell_id": unique_cells["cell_id"].to_list()}
                 )
-                if self.lazy:
+                if self._lazy:
                     self._metadata = self._metadata.lazy()
             if "c_call_VDJ" in self._metadata:
                 iso_tmp = self._split("c_call", join=False, data=_data)
@@ -1830,16 +1833,16 @@ class DandelionPolars:
                     reg_stat.lazy(), on="cell_id", how="left"
                 )
             # always lazy
-            if self.lazy:
+            if self._lazy:
                 self._metadata = self._metadata.collect(
                     engine="streaming"
                 ).lazy()
             else:
                 self._metadata = self._metadata.collect(engine="streaming")
-            if "metadata" in self._tmpfiles.keys():
-                self._tmpfiles["metadata"].close()
-                del self._tmpfiles["metadata"]
-            if self.lazy:
+            if "metadata" in self._cache_handles.keys():
+                self._cache_handles["metadata"].close()
+                del self._cache_handles["metadata"]
+            if self._lazy:
                 # back to tmpfile on disk when working lazily
                 self._cache_data()
 
@@ -1899,7 +1902,7 @@ class DandelionPolars:
                 raise KeyError(
                     f"{self._metadata_name_col} not found in metadata columns."
                 )
-        self.lazy = False
+        self._lazy = False
         self._backend = "pandas"
 
     def to_polars(self, lazy: bool = True) -> None:
@@ -1909,22 +1912,22 @@ class DandelionPolars:
         if not isinstance(
             self._data, (pl.DataFrame, pl.LazyFrame)
         ) or not isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
-            self.lazy = lazy
+            self._lazy = lazy
             if isinstance(self._data, pd.DataFrame):
                 # drop index to avoid duplication
                 self._data = self._data.reset_index(drop=True)
                 self._data = pl.from_pandas(self._data)
-                if self.lazy:
+                if self._lazy:
                     self._data = self._data.lazy()
             if self._metadata is not None:
                 if not isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
                     if isinstance(self._metadata, pd.DataFrame):
                         self._metadata = self._metadata.reset_index(drop=False)
                         self._metadata = pl.from_pandas(self._metadata)
-                        if self.lazy:
+                        if self._lazy:
                             self._metadata = self._metadata.lazy()
             self._backend = "polars"
-        if self.lazy:
+        if self._lazy:
             self._cache_data()
 
     def to_anndata(self) -> AnnData:
@@ -1964,7 +1967,7 @@ class DandelionPolars:
             else:
                 self.distances = csr_matrix(computed)
             self.distances._index_names = self.metadata_names
-        self.lazy = False
+        self._lazy = False
 
     def to_lazy(self, *, chunks="auto") -> None:
         """Convert eager slots to lazy slots."""
@@ -1989,7 +1992,7 @@ class DandelionPolars:
                 chunks=chunks,
                 asarray=False,
             )
-        self.lazy = True
+        self._lazy = True
         self._cache_data()
 
     def copy(self) -> DandelionPolars:
@@ -2017,7 +2020,7 @@ class DandelionPolars:
 
         # Copy non-frame attributes; deep copy for structures that can alias
         for k, v in self.__dict__.items():
-            if k in {"_data", "_metadata", "_tmpfiles"}:
+            if k in {"_data", "_metadata", "_cache_handles"}:
                 continue
             if k in {"layout", "graph", "germline"}:
                 setattr(new, k, copy.deepcopy(v))
@@ -2033,8 +2036,8 @@ class DandelionPolars:
                 else:
                     setattr(new, k, v)
 
-        # Fresh tmpfiles map
-        new._tmpfiles = {}
+        # Fresh cache handle map
+        new._cache_handles = {}
 
         # Clone frames
         new._data = _clone_frame(self._data)
@@ -2047,10 +2050,10 @@ class DandelionPolars:
         return new
 
     def __getstate__(self):
-        """Provide a deepcopy/pickle-friendly state without open tmpfiles."""
+        """Provide a deepcopy/pickle-friendly state without open cache handles."""
         state = self.__dict__.copy()
-        # Ensure tmpfiles map exists but is not shared
-        state["_tmpfiles"] = {}
+        # Ensure cache_handles map exists but is not shared
+        state["_cache_handles"] = {}
 
         # Materialize lazy frames to break references to temp parquet handles
         if isinstance(state.get("_data"), pl.LazyFrame):
@@ -2064,12 +2067,12 @@ class DandelionPolars:
         # Restore dict first
         self.__dict__.update(state)
 
-        # Recreate tmpfiles container
-        if not hasattr(self, "_tmpfiles") or self._tmpfiles is None:
-            self._tmpfiles = {}
+        # Recreate cache handle container
+        if not hasattr(self, "_cache_handles") or self._cache_handles is None:
+            self._cache_handles = {}
 
         # Re-lazify if the object was lazy and frames are eager
-        if self.lazy:
+        if self._lazy:
             if isinstance(self._data, pl.DataFrame):
                 self._data = self._data.lazy()
             if isinstance(self._metadata, pl.DataFrame):
@@ -2322,7 +2325,7 @@ class DandelionPolars:
         v_call_key = "v_call"
         if self._backend == "pandas":
             # switch to polars
-            self.to_polars(lazy=self.lazy)
+            self.to_polars(lazy=self._lazy)
         if genotyped_v_call:
             if f"{v_call_key}_genotyped" in self._data.collect_schema():
                 v_call_key = f"{v_call_key}_genotyped"
@@ -2343,7 +2346,7 @@ class DandelionPolars:
             if init_cols is None
             else init_cols
         )
-        self.lazy = lazy
+        self._lazy = lazy
         metadata_status = self._metadata
 
         if (metadata_status is None) or reinitialize:
@@ -2376,9 +2379,9 @@ class DandelionPolars:
                         .collect(engine="streaming")
                         .lazy()
                     )
-                    if "metadata" in self._tmpfiles.keys():
-                        self._tmpfiles["metadata"].close()
-                        del self._tmpfiles["metadata"]
+                    if "metadata" in self._cache_handles.keys():
+                        self._cache_handles["metadata"].close()
+                        del self._cache_handles["metadata"]
 
         if retrieve is not None:
             if self._metadata is None:
@@ -2387,7 +2390,7 @@ class DandelionPolars:
                 )
             # first check that self._data and self._metadata are converted to Polars
             if not isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
-                self.to_polars(lazy=self.lazy)
+                self.to_polars(lazy=self._lazy)
             if type(retrieve) is str:
                 retrieve = [retrieve]
             _data = (
@@ -2486,12 +2489,12 @@ class DandelionPolars:
                 )
                 self._metadata = (
                     self._metadata.collect(engine="streaming").lazy()
-                    if self.lazy
+                    if self._lazy
                     else self._metadata.collect(engine="streaming")
                 )
-                if "metadata" in self._tmpfiles.keys():
-                    self._tmpfiles["metadata"].close()
-                    del self._tmpfiles["metadata"]
+                if "metadata" in self._cache_handles.keys():
+                    self._cache_handles["metadata"].close()
+                    del self._cache_handles["metadata"]
             # clean up self._data
             self._cache_data()
         if as_pandas:
@@ -3323,15 +3326,15 @@ def read_zipddl(
         # Polars lazy scan
         return pl.scan_parquet(tmp.name), tmp  # return tmp to keep file alive
 
-    tmp_files = {}
+    cache_handles = {}
     if "data.parquet" in root["tables"]:
         data_lazy, data_tmp = load_parquet_lazy("data.parquet")
         constructor["data"] = data_lazy
-        tmp_files["data"] = data_tmp
+        cache_handles["data"] = data_tmp
     if "metadata.parquet" in root["tables"]:
         metadata_lazy, metadata_tmp = load_parquet_lazy("metadata.parquet")
         constructor["metadata"] = metadata_lazy
-        tmp_files["metadata"] = metadata_tmp
+        cache_handles["metadata"] = metadata_tmp
 
     # ---------------------------
     # Distances: Zarr arrays
@@ -3417,8 +3420,9 @@ def read_zipddl(
     # ---------------------------
     # Construct Dandelion
     # ---------------------------
-    res = DandelionPolars(**constructor, verbose=verbose)
-    res._tmpfiles = tmp_files
+    res = DandelionPolars(
+        **constructor, verbose=verbose, cache_handles=cache_handles
+    )
 
     return res
 

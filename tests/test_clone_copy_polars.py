@@ -72,5 +72,5 @@ def test_clone_and_copy_consistency(vdj_smaller, full_check):
         assert "_tmp_meta_col" not in _to_pandas(base._metadata).columns
 
     # Cache handles are not shared
-    assert base._tmpfiles is not cloned._tmpfiles
-    assert base._tmpfiles is not copied._tmpfiles
+    assert base._cache_handles is not cloned._cache_handles
+    assert base._cache_handles is not copied._cache_handles

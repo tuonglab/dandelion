@@ -951,7 +951,7 @@ def transfer(
     else:
         recipient = adata
     original_backend = vdj._backend
-    original_lazy = vdj.lazy
+    original_lazy = vdj._lazy
     if original_backend == "polars":
         vdj.to_pandas()
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
@@ -1429,7 +1429,7 @@ def clone_size(
         original_backend = vdj._backend
         if original_backend == "polars":
             # originally lazy or not
-            original_lazy = vdj.lazy
+            original_lazy = vdj._lazy
             vdj.to_pandas()
         else:
             original_lazy = False
@@ -2571,7 +2571,7 @@ def to_scirpy(
         The converted data in either AnnData or MuData format.
     """
     original_backend = data._backend
-    original_lazy = data.lazy
+    original_lazy = data._lazy
     if original_backend == "polars":
         data.to_pandas()
     # if gex_adata is provided, make sure to only transfer cells that are present in both
@@ -3217,7 +3217,7 @@ def concat(
     )
 
     vdj_concat._metadata = (
-        reordered_meta.lazy() if vdj_concat.lazy else reordered_meta
+        reordered_meta.lazy() if vdj_concat._lazy else reordered_meta
     )
 
     return vdj_concat
@@ -3721,7 +3721,7 @@ def clone_size_polars(
         )
 
     # Update metadata
-    vdj._metadata = metadata_ if not vdj.lazy else metadata_.lazy()
+    vdj._metadata = metadata_ if not vdj._lazy else metadata_.lazy()
 
 
 def clone_overlap_polars(

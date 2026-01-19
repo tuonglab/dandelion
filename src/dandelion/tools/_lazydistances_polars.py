@@ -32,16 +32,15 @@ from dandelion.utilities._distances import (
 def calculate_distance_matrix_zarr(
     dat_seq: pl.DataFrame,
     metric: Metric,
-    membership: dict | None = None,
     pad_to_max: bool = True,
-    out_path: str | None = None,
+    membership: dict | None = None,
+    zarr_path: str | None = None,
     chunk_size: int | None = None,
     n_cpus: int = 1,
     memory_limit_gb: float | None = None,
-    verbose: bool = True,
+    memory_safety_fraction: float = 0.3,
     compress: bool = True,
-    # Backward-compat alias used by generate_network
-    zarr_path: str | None = None,
+    verbose: bool = True,
 ) -> da.Array:
     """
     Calculate distance matrix using Zarr for out-of-core computation with polars DataFrames.
@@ -54,14 +53,14 @@ def calculate_distance_matrix_zarr(
     ----------
     dat_seq : pl.DataFrame
         Polars DataFrame containing sequence data. Must include 'cell_id' column for indexing.
+    metric : Metric
+        Distance metric to use.
+    pad_to_max : bool
+        Whether to pad sequences to maximum length before distance calculation.
     membership : dict or None, optional
         Dictionary mapping indices to membership groups. If provided, distances are only
         computed within groups (clone mode). If None, computes full pairwise distances.
-    metric : Metric
-        Distance metric to use (default: LEVENSHTEIN).
-    pad_to_max : bool
-        Whether to pad sequences to maximum length before distance calculation.
-    out_path : str, optional
+    zarr_path : str, optional
         Path to save the Zarr array. If None, uses a temporary directory.
     chunk_size : int, optional
         Size of chunks for computation. If None, automatically determined based on memory.
@@ -69,10 +68,12 @@ def calculate_distance_matrix_zarr(
         Number of CPUs to use for parallel computation.
     memory_limit_gb : float, optional
         Memory limit per worker in GB. If None, auto-detected from environment or system.
-    verbose : bool
-        Whether to show progress bars.
+    memory_safety_fraction : float
+        Fraction of available memory to use (conservative for Dask overhead)
     compress : bool
         Whether to compress the Zarr array.
+    verbose : bool
+        Whether to show progress bars.
 
     Returns
     -------
@@ -140,7 +141,12 @@ def calculate_distance_matrix_zarr(
 
     # Auto-determine chunk size if not provided
     if chunk_size is None:
-        chunk_size, _ = _auto_chunk_size(m, n_cpus, memory_limit_gb)
+        chunk_size, _ = _auto_chunk_size(
+            m,
+            n_cpus=n_cpus,
+            memory_limit_gb=memory_limit_gb,
+            safety_fraction=memory_safety_fraction,
+        )
         logg.info(
             f"Auto-determined chunk size: {chunk_size} (for {m} sequences)"
         )
@@ -149,11 +155,11 @@ def calculate_distance_matrix_zarr(
     client = _setup_dask_client(n_cpus=n_cpus, memory_limit_gb=memory_limit_gb)
 
     # Resolve output path, support alias `zarr_path`
-    if out_path is None:
-        out_path = zarr_path if zarr_path is not None else tempfile.mkdtemp()
+    if zarr_path is None:
+        zarr_path = zarr_path if zarr_path is not None else tempfile.mkdtemp()
 
     comp = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-    store = zarr.storage.LocalStore(out_path + "/distance_matrix.zarr")
+    store = zarr.storage.LocalStore(zarr_path + "/distance_matrix.zarr")
     root = zarr.open_group(store=store, mode="w")
 
     z_array = root.create_array(
@@ -165,7 +171,7 @@ def calculate_distance_matrix_zarr(
         compressors=[comp] if compress else None,
     )
 
-    logg.info(f"Created Zarr array at: {out_path}")
+    logg.info(f"Created Zarr array at: {zarr_path}")
 
     # Scatter the DataFrame to workers once to avoid graph bloat
     # This sends the data once instead of embedding it in every task
@@ -214,7 +220,7 @@ def calculate_distance_matrix_zarr(
         # Process chunks using client.submit for better efficiency with large numbers of tasks
         # This avoids nested delayed objects which cause graph bloat
         futures = []
-        zarr_path_str = out_path + "/distance_matrix.zarr"
+        zarr_path_str = zarr_path + "/distance_matrix.zarr"
 
         for i in range(len(chunk_sizes)):
             for j in range(i, len(chunk_sizes)):

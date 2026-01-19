@@ -785,7 +785,7 @@ def define_clones(
     dat_ = dat_.with_columns(pl.col(str(clone_key)).fill_null(""))
 
     if isinstance(vdj, DandelionPolars):
-        if vdj.lazy:
+        if vdj._lazy:
             vdj._data = dat_.lazy()
         else:
             vdj._data = dat_

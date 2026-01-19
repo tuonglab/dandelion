@@ -64,7 +64,6 @@ def generate_network(
     lazy: bool = False,
     zarr_path: Path | str | None = None,
     chunk_size: int | None = None,
-    chunk_clone_limit: int | None = None,
     memory_limit_gb: float | None = None,
     memory_safety_fraction: float = 0.3,
     compress: bool = True,
@@ -137,16 +136,13 @@ def generate_network(
         Chunk size for distance matrix computation when using lazy mode. If None, chunk size is automatically computed
         based on available memory and number of cores. The automatic chunk size can be further adjusted using
         `memory_limit_gb` and `memory_safety_fraction` parameters.
-    chunk_clone_limit: int | None, optional
-        Maximum number of clones to process per chunk when using lazy mode and distance method = "clone". If None, chunk sizes will be
-        automatically determined based on available memory and number of cores.
     memory_limit_gb: float | None, optional
         Memory limit per worker in GB for Dask. None defaults to all available memory/cores.
     memory_safety_fraction: float, optional
         Fraction of available memory to use. Defaults to 0.3 (i.e., 30% of available memory will be used for chunk size calculation).
     compress: bool, optional
         Whether to compress the Zarr array using Blosc with zstd.
-    rnandom_state : int | np.random.RandomState | None, optional
+    random_state : int | np.random.RandomState | None, optional
         Random state for reproducible sampling.
     **kwargs
         additional kwargs passed to options specified in `networkx.drawing.layout.spring_layout` or
@@ -343,6 +339,7 @@ def generate_network(
                     chunk_size=chunk_size,
                     n_cpus=n_cpus,
                     memory_limit_gb=memory_limit_gb,
+                    memory_safety_fraction=memory_safety_fraction,
                     compress=compress,
                     verbose=verbose,
                 )
@@ -408,6 +405,7 @@ def generate_network(
                     chunk_size=chunk_size,
                     n_cpus=n_cpus,
                     memory_limit_gb=memory_limit_gb,
+                    memory_safety_fraction=memory_safety_fraction,
                     compress=compress,
                     verbose=verbose,
                 )

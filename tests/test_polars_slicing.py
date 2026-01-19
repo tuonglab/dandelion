@@ -250,10 +250,10 @@ def test_slice_lazy_object(vdj_polars):
     # Convert to lazy
     if hasattr(vdj_polars, "lazy"):
         original_lazy = vdj_polars.lazy
-        vdj_polars.lazy = True
+        vdj_polars._lazy = True
         result = vdj_polars[vdj_polars.metadata.chain_status == "Single pair"]
         assert isinstance(result._data, (pl.LazyFrame, pl.DataFrame))
-        vdj_polars.lazy = original_lazy
+        vdj_polars._lazy = original_lazy
 
 
 def test_slice_eager_object(vdj_polars):
@@ -261,7 +261,7 @@ def test_slice_eager_object(vdj_polars):
     # Ensure eager
     if hasattr(vdj_polars, "lazy"):
         original_lazy = vdj_polars.lazy
-        vdj_polars.lazy = False
+        vdj_polars._lazy = False
         result = vdj_polars[vdj_polars.metadata.chain_status == "Single pair"]
         assert isinstance(result._data, (pl.LazyFrame, pl.DataFrame))
-        vdj_polars.lazy = original_lazy
+        vdj_polars._lazy = original_lazy
