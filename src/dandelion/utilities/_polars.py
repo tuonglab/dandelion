@@ -746,7 +746,11 @@ class DandelionPolars:
             return obj
 
         # Materialize first to avoid closing backing files too early
-        df = obj.collect(engine="streaming") if isinstance(obj, pl.LazyFrame) else obj
+        df = (
+            obj.collect(engine="streaming")
+            if isinstance(obj, pl.LazyFrame)
+            else obj
+        )
 
         # Close and drop any stale temp file for this slot
         if slot_name in self._tmpfiles:
@@ -1999,6 +2003,49 @@ class DandelionPolars:
         """
         return copy.deepcopy(self)
 
+    def clone(self) -> DandelionPolars:
+        """Polars-style clone: duplicate frames and state without sharing cache handles."""
+
+        def _clone_frame(obj):
+            if isinstance(obj, pl.LazyFrame) or isinstance(obj, pl.DataFrame):
+                return obj.clone()
+            if isinstance(obj, pd.DataFrame):
+                return obj.copy(deep=True)
+            return None
+
+        new = DandelionPolars.__new__(DandelionPolars)
+
+        # Copy non-frame attributes; deep copy for structures that can alias
+        for k, v in self.__dict__.items():
+            if k in {"_data", "_metadata", "_tmpfiles"}:
+                continue
+            if k in {"layout", "graph", "germline"}:
+                setattr(new, k, copy.deepcopy(v))
+            elif k == "distances":
+                try:
+                    setattr(new, k, v.copy())
+                except Exception:
+                    setattr(new, k, copy.deepcopy(v))
+            else:
+                # shallow for primitives, deep for common containers
+                if isinstance(v, (dict, list, set, tuple)):
+                    setattr(new, k, copy.deepcopy(v))
+                else:
+                    setattr(new, k, v)
+
+        # Fresh tmpfiles map
+        new._tmpfiles = {}
+
+        # Clone frames
+        new._data = _clone_frame(self._data)
+        new._metadata = _clone_frame(self._metadata)
+
+        # Rebuild parquet backing if operating lazily
+        if getattr(new, "lazy", False):
+            new._cache_data()
+
+        return new
+
     def __getstate__(self):
         """Provide a deepcopy/pickle-friendly state without open tmpfiles."""
         state = self.__dict__.copy()
@@ -2009,9 +2056,7 @@ class DandelionPolars:
         if isinstance(state.get("_data"), pl.LazyFrame):
             state["_data"] = state["_data"].collect(engine="streaming")
         if isinstance(state.get("_metadata"), pl.LazyFrame):
-            state["_metadata"] = state["_metadata"].collect(
-                engine="streaming"
-            )
+            state["_metadata"] = state["_metadata"].collect(engine="streaming")
         return state
 
     def __setstate__(self, state):

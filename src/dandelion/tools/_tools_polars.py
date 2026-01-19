@@ -2945,9 +2945,7 @@ def concat(
         if isinstance(x, DandelionPolars):
             vdjs_.append(x.copy())
         elif isinstance(x, pl.LazyFrame):
-            tmp = DandelionPolars(
-                x.collect(engine="streaming"), verbose=False
-            )
+            tmp = DandelionPolars(x.collect(engine="streaming"), verbose=False)
             vdjs_.append(tmp)
         elif isinstance(x, pl.DataFrame):
             tmp = DandelionPolars(x, verbose=False)
