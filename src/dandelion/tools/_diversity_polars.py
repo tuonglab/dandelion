@@ -1,6 +1,7 @@
 import numpy as np
 import networkx as nx
 import pandas as pd
+import polars as pl
 
 from anndata import AnnData
 from collections import defaultdict
@@ -32,12 +33,12 @@ from dandelion.tools._network import (
     clone_degree,
     generate_network,
 )
-from dandelion.utilities._core import Dandelion
+from dandelion.utilities._polars import DandelionPolars
 from dandelion.utilities._utilities import flatten
 
 
 def clone_rarefaction(
-    data: Dandelion | AnnData,
+    data: DandelionPolars | AnnData,
     groupby: str,
     clone_key: str | None = None,
     palette: list[str] | None = None,
@@ -67,9 +68,9 @@ def clone_rarefaction(
 
     Parameters
     ----------
-    data : AnnData or Dandelion
+    data : AnnData or DandelionPolars
         Object containing V(D)J metadata. Clone IDs must be stored in
-        `.obs` (AnnData) or `.metadata` (Dandelion).
+        `.obs` (AnnData) or `.metadata` (DandelionPolars).
     groupby : str
         Column in metadata specifying the grouping variable (e.g., sample,
         donor, condition).
@@ -127,8 +128,8 @@ def clone_rarefaction(
     # --------------------------
     if isinstance(data, AnnData):
         metadata = data.obs.copy()
-    elif isinstance(data, Dandelion):
-        metadata = data._metadata.copy()
+    elif isinstance(data, DandelionPolars):
+        metadata = _meta_conversion_helper(data)
     elif hasattr(data, "mod"):
         metadata = data.mod["airr"].copy()
 
@@ -254,7 +255,7 @@ def clone_rarefaction(
 
 
 def clone_diversity(
-    data: Dandelion | AnnData,
+    data: DandelionPolars | AnnData,
     groupby: str,
     method: Literal["gini", "chao1", "shannon"] = "gini",
     use_network: bool = True,
@@ -276,8 +277,8 @@ def clone_diversity(
 
     Parameters
     ----------
-    data : Dandelion | AnnData
-        Dandelion or AnnData object.
+    data : DandelionPolars | AnnData
+        DandelionPolars or AnnData object.
     groupby : str
         Column name to calculate the gini indices on, for e.g. sample id, patient etc.
     method : Literal["gini", "chao1", "shannon"], optional
@@ -346,7 +347,7 @@ def clone_diversity(
 
 
 def diversity_gini(
-    data: Dandelion | AnnData,
+    data: DandelionPolars | AnnData,
     groupby: str,
     metric: str | None = None,
     clone_key: str | None = None,
@@ -363,8 +364,8 @@ def diversity_gini(
 
     Parameters
     ----------
-    data : Dandelion | AnnData
-        Dandelion or AnnData object.
+    data : DandelionPolars | AnnData
+        DandelionPolars or AnnData object.
     groupby : str
         Column name to calculate the Gini indices on, for e.g. sample id, patient etc.
     metric : str | None, optional
@@ -422,7 +423,7 @@ def diversity_gini(
 
 
 def diversity_estimates(
-    data: Dandelion | AnnData,
+    data: DandelionPolars | AnnData,
     groupby: str,
     method: Literal["chao1", "shannon", "gini"] = "chao1",
     clone_key: str | None = None,
@@ -437,8 +438,8 @@ def diversity_estimates(
 
     Parameters
     ----------
-    data : Dandelion | AnnData
-        Dandelion or AnnData object.
+    data : DandelionPolars | AnnData
+        DandelionPolars or AnnData object.
     groupby : str
         Column name to calculate the Chao1 estimates on, for e.g. sample id, patient etc.
     method : Literal["chao1", "shannon", "gini"], optional
@@ -478,7 +479,7 @@ def diversity_estimates(
 
 
 def gini_indices(
-    data: Dandelion,
+    data: DandelionPolars,
     groupby: str,
     metric: str | None = None,
     clone_key: str | None = None,
@@ -500,13 +501,18 @@ def gini_indices(
         data, groupby, min_size
     )
     # filter the vdj object as well
-    if isinstance(data, Dandelion):
-        data = data[data.metadata[groupby].isin(groups)].copy()
+    if isinstance(data, DandelionPolars):
+        # convert to eager first
+        original_backend = data._backend
+        original_lazy = data.lazy
+        if original_backend == "polars":
+            data.to_pandas()
+        data = data[data._metadata[groupby].isin(groups)]
 
     res1, res2, cluster_raw, vertex_raw = {}, {}, {}, {}
     for g in groups:
         # clone size distribution
-        ddl_dat = data[data.metadata[groupby] == g].copy()
+        ddl_dat = data[data._metadata[groupby] == g].copy()
 
         # --- parallel bootstrap
         iterator = tqdm(
@@ -542,12 +548,15 @@ def gini_indices(
     res_df2.reset_index(inplace=True)
     res_df1.rename(columns={"index": groupby}, inplace=True)
     res_df2.rename(columns={"index": groupby}, inplace=True)
-
+    # convert back to original backend
+    if isinstance(data, DandelionPolars):
+        if original_backend == "polars":
+            data.to_polars(lazy=original_lazy)
     return res_df1, res_df2, cluster_raw, vertex_raw
 
 
 def estimate_diversity(
-    data: Dandelion | AnnData,
+    data: DandelionPolars | AnnData,
     groupby: str,
     clone_key: str | None = None,
     metric: Literal["chao1", "shannon", "gini"] = "chao1",
@@ -595,8 +604,14 @@ def estimate_diversity(
     )
 
     # --- Subset the actual data
-    if isinstance(data, Dandelion):
-        data = data[data.metadata[groupby].isin(groups)].copy()
+    if isinstance(data, DandelionPolars):
+        # convert to eager first
+        original_backend = data._backend
+        original_lazy = data.lazy
+        if original_backend == "polars":
+            data.to_pandas()
+        data = data[data._metadata[groupby].isin(groups)]
+
     elif isinstance(data, AnnData):
         data = data[data.obs[groupby].isin(groups)].copy()
 
@@ -630,20 +645,23 @@ def estimate_diversity(
     res_df = pd.DataFrame.from_dict(res).T
     res_df.reset_index(inplace=True)
     res_df.rename(columns={"index": groupby}, inplace=True)
-
+    # convert back to original backend
+    if isinstance(data, DandelionPolars):
+        if original_backend == "polars":
+            data.to_polars(lazy=original_lazy)
     return res_df, res_raw
 
 
 def _prepare_diversity_groups(
-    data: Dandelion | AnnData,
+    data: DandelionPolars | AnnData,
     groupby: str,
     min_size: int | None = None,
 ):
     """Shared logic for preparing metadata and filtering valid groups."""
     if isinstance(data, AnnData):
         _metadata = data.obs.copy()
-    elif isinstance(data, Dandelion):
-        _metadata = data._metadata.copy()
+    elif isinstance(data, DandelionPolars):
+        _metadata = _meta_conversion_helper(data)
     else:
         raise TypeError("data must be an AnnData or Dandelion object")
 
@@ -672,7 +690,7 @@ def _prepare_diversity_groups(
 
 
 def _bootstrap_network(
-    ddl_dat: Dandelion,
+    ddl_dat: DandelionPolars,
     clonekey: str,
     met: str,
     min_size: int,
@@ -955,15 +973,15 @@ def safe_bootstrap_summary(
 
 
 def process_clone_network_stats(
-    ddl_dat: Dandelion, expanded_only: bool, contracted: bool
+    ddl_dat: DandelionPolars, expanded_only: bool, contracted: bool
 ) -> tuple[dict, dict, dict]:
     """
     Process clone network statistics and calculate Gini indices.
 
     Parameters
     ----------
-    ddl_dat : Any
-        The Dandelion object to process.
+    ddl_dat : DandelionPolars
+        The DandelionPolars object to process.
     expanded_only : bool
         Whether to consider only expanded clones.
     contracted : bool
@@ -1001,7 +1019,7 @@ def process_clone_network_stats(
 
 
 def clone_networkstats(
-    vdj: Dandelion,
+    vdj: DandelionPolars,
     expanded_only: bool = False,
     network_clustersize: bool = False,
 ) -> tuple[defaultdict, defaultdict, defaultdict]:
@@ -1009,7 +1027,7 @@ def clone_networkstats(
 
     Parameters
     ----------
-    vdj : Dandelion
+    vdj : DandelionPolars
         input object
     expanded_only : bool, optional
         whether or not to calculate only on expanded clones.
@@ -1070,3 +1088,14 @@ def clone_networkstats(
                 vertexsizes[tmp] = [1]
                 clustersizes[tmp] = [1]
         return (nodes_names, vertexsizes, clustersizes)
+
+
+def _meta_conversion_helper(vdj: DandelionPolars) -> pd.DataFrame:
+    """Helper function to convert polars metadata to pandas."""
+    metadata = vdj._metadata
+    if isinstance(metadata, pl.DataFrame):
+        metadata = metadata.to_pandas()
+    elif isinstance(metadata, pl.LazyFrame):
+        metadata = metadata.collect(engine="streaming").to_pandas()
+    metadata.set_index("cell_id", inplace=True)
+    return metadata

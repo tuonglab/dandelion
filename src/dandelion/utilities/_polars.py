@@ -35,6 +35,7 @@ from dandelion.utilities._io import AIRR, CELLRANGER, fasta_iterator
 from dandelion.utilities._utilities import (
     RECEPTOR_SET,
     TRUES,
+    FALSES,
     EMPTIES_STR,
     BOOLEAN_LIKE_COLUMNS,
     DEFAULT_PREFIX,
@@ -58,6 +59,7 @@ CHECK_COLS = BOOLEAN_LIKE_COLUMNS + [
     "j_frameshift",
 ]
 TRUES_STR = [str(x).upper() for x in TRUES]
+FALSES_STR = [str(x).upper() for x in FALSES]
 
 # Enable string cache for Polars to optimize repeated string operations
 pl.enable_string_cache()
@@ -120,7 +122,9 @@ class DandelionPolars:
         self._data_name_col = "sequence_id"
         self._metadata_name_col = "cell_id"
         self._backend = "polars"
-        self._tmpfiles = {}
+        # Preserve existing tmpfiles if re-initializing
+        if not hasattr(self, "_tmpfiles"):
+            self._tmpfiles = {}
 
         self._data = load_polars(data, lazy=self.lazy)
         self._metadata = metadata
@@ -175,9 +179,7 @@ class DandelionPolars:
                 )
             if self.lazy:
                 self._data = self._data.collect(engine="streaming").lazy()
-                if "data" in self._tmpfiles.keys():
-                    self._tmpfiles["data"].close()
-                    del self._tmpfiles["data"]
+                # Keep temp files alive - don't close them yet
             if metadata is None:
                 if initialize is True:
                     self._ensure_sanitized_data(verbose=verbose)
@@ -197,9 +199,7 @@ class DandelionPolars:
                 else:
                     if isinstance(metadata, pl.LazyFrame):
                         self._metadata = metadata.collect(engine="streaming")
-                        if "metadata" in self._tmpfiles.keys():
-                            self._tmpfiles["metadata"].close()
-                            del self._tmpfiles["metadata"]
+                        # Keep temp files alive
                     else:
                         self._metadata = metadata
 
@@ -280,6 +280,15 @@ class DandelionPolars:
                 pass
         data = self._data
         metadata = self._metadata
+
+        # Convert pandas index types to polars equivalents if needed
+        if isinstance(index, pd.Series):
+            index = pl.from_pandas(index)
+        elif isinstance(index, pd.DataFrame):
+            index = pl.from_pandas(index)
+        elif isinstance(index, pd.Index):
+            index = pl.Series(index.tolist())
+
         # Case 1: Direct cell_id list/array/tuple/set
         if isinstance(index, (list, set, tuple, np.ndarray)):
             cell_ids = pl.Series(list(index), dtype=pl.String)
@@ -752,65 +761,6 @@ class DandelionPolars:
         lf._temp_file_path = temp_file.name
 
         return lf
-
-    def _cache_data(self) -> None:
-        """Trick to cache _data and _metadata in temporary files."""
-        if not hasattr(self._data, "_collect"):
-            # --- TEMPORARY CACHE ---
-            # Use delete=True for auto-cleanup, but keep handle alive for manual control
-            temp_file = tempfile.NamedTemporaryFile(
-                suffix=".parquet", delete=True
-            )
-            if isinstance(self._data, pl.LazyFrame):
-                self._data = self._data.collect(engine="streaming")
-            self._data.write_parquet(temp_file.name)
-            temp_file.flush()  # Ensure data is written
-            lazy_ref = pl.scan_parquet(temp_file.name)
-            self._data = lazy_ref
-            self._data._temp_file_path = temp_file.name
-            self._data._temp_file_handle = temp_file  # Keep handle alive
-
-            state = {"closed": False}
-
-            def _collect(lazy=lazy_ref, handle=temp_file, state=state):
-                result = lazy.collect(engine="streaming")
-                if not state["closed"]:
-                    try:
-                        handle.close()
-                    except Exception:
-                        pass
-                    state["closed"] = True
-                return result
-
-            self._data._collect = _collect
-        if not hasattr(self._metadata, "_collect"):
-            # --- TEMPORARY CACHE ---
-            # Use delete=True for auto-cleanup, but keep handle alive for manual control
-            temp_file = tempfile.NamedTemporaryFile(
-                suffix=".parquet", delete=True
-            )
-            if isinstance(self._metadata, pl.LazyFrame):
-                self._metadata = self._metadata.collect(engine="streaming")
-            self._metadata.write_parquet(temp_file.name)
-            temp_file.flush()  # Ensure data is written
-            lazy_ref = pl.scan_parquet(temp_file.name)
-            self._metadata = lazy_ref
-            self._metadata._temp_file_path = temp_file.name
-            self._metadata._temp_file_handle = temp_file  # Keep handle alive
-
-            state = {"closed": False}
-
-            def _collect(lazy=lazy_ref, handle=temp_file, state=state):
-                result = lazy.collect(engine="streaming")
-                if not state["closed"]:
-                    try:
-                        handle.close()
-                    except Exception:
-                        pass
-                    state["closed"] = True
-                return result
-
-            self._metadata._collect = _collect
 
     def _update_ids(
         self,
@@ -2315,6 +2265,7 @@ class DandelionPolars:
 
         if (metadata_status is None) or reinitialize:
             self.initialize_metadata(
+                clone_key=clone_key,
                 v_call_key=v_call_key,
                 init_cols=init_cols,
                 update_isotype_dict=update_isotype_dict,
@@ -3553,11 +3504,7 @@ def _write_airr(
     """Save as airr formatted file."""
     data = _sanitize_data_polars(data)
     if isinstance(data, pl.LazyFrame):
-        # Use _collect if available for temp file cleanup, otherwise regular collect
-        if hasattr(data, "_collect"):
-            data = data._collect(engine="streaming")
-        else:
-            data = data.collect(engine="streaming")
+        data = data.collect(engine="streaming")
     data.write_csv(save, separator="\t", **kwargs)
 
 
@@ -5060,7 +5007,7 @@ def check_contigs(
 
     if adata is not None:
         # Import transfer function from tools
-        from dandelion.tools import transfer
+        from dandelion.tools._tools_polars import transfer
 
         # Transfer metadata to adata
         transfer(adata_, out_dat)

@@ -159,10 +159,7 @@ def identical_clones(
     df_polars = pl.from_pandas(df)
     vdj._data = df_polars
 
-    vdj.update_metadata(
-        clone_key=clone_key,
-        retrieve=clone_key,
-    )
+    vdj.update_metadata(clone_key=clone_key)
 
     return vdj
 
@@ -330,10 +327,7 @@ def hierarchical_clones(
     df_polars = pl.from_pandas(df)
     vdj._data = df_polars
 
-    vdj.update_metadata(
-        clone_key=clone_id,
-        retrieve=clone_id,
-    )
+    vdj.update_metadata(clone_key=clone_id)
 
     return vdj
 
@@ -516,9 +510,6 @@ def spectral_clones(
     df_polars = pl.from_pandas(df)
     vdj._data = df_polars
 
-    vdj.update_metadata(
-        clone_key=clone_id,
-        retrieve=clone_id,
-    )
+    vdj.update_metadata(clone_key=clone_id)
 
     return vdj

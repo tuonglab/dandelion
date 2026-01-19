@@ -24,10 +24,10 @@ if TYPE_CHECKING:
     from mudata import MuData
     from awkward import Array
 
-from dandelion.utilities._polars import DandelionPolars, TRUES_STR
+from dandelion.utilities._polars import DandelionPolars, TRUES_STR, FALSES_STR
 from dandelion.utilities._utilities import (
-    FALSES,
     VCALL,
+    FALSES,
     JCALL,
     VCALLG,
     STRIPALLELENUM,
@@ -950,9 +950,10 @@ def transfer(
     # we just associate recipient to adata directly
     else:
         recipient = adata
-    if isinstance(vdj, DandelionPolars):
-        if vdj._backend == "polars":
-            vdj.to_pandas()
+    original_backend = vdj._backend
+    original_lazy = vdj.lazy
+    if original_backend == "polars":
+        vdj.to_pandas()
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
         for x in vdj._metadata.columns:
@@ -1175,6 +1176,9 @@ def transfer(
     if uns:
         message_parts += [f"added `.uns['{clone_key}']` clone-level mapping"]
 
+    # convert back
+    if original_backend == "polars":
+        vdj.to_polars(lazy=original_lazy)
     # --- 7) Done ---
     logg.info(
         " finished",
@@ -1422,8 +1426,13 @@ def clone_size(
     elif isinstance(vdj, AnnData):
         metadata_ = vdj.obs.copy()
     elif isinstance(vdj, DandelionPolars):
-        if vdj._backend == "polars":
+        original_backend = vdj._backend
+        if original_backend == "polars":
+            # originally lazy or not
+            original_lazy = vdj.lazy
             vdj.to_pandas()
+        else:
+            original_lazy = False
         metadata_ = vdj._metadata.copy()
 
     clone_key = "clone_id" if clone_key is None else clone_key
@@ -1575,6 +1584,9 @@ def clone_size(
             vdj._metadata[f"{col_key}_size_max_{max_size}"] = metadata_[
                 f"{clone_key}_size_max_{max_size}"
             ]
+        # check if lazy backend and sync
+        if original_backend == "polars":
+            vdj.to_polars(lazy=original_lazy)
     elif isinstance(vdj, AnnData):
         vdj.obs[f"{col_key}_size"] = metadata_[f"{clone_key}_size"]
         vdj.obs[f"{col_key}_size_prop"] = metadata_[f"{clone_key}_size_prop"]
@@ -2333,7 +2345,6 @@ def vdj_sample(
     random_state : int | np.random.RandomState | None, optional
         Random state for reproducibility, by default None.
 
-
     Returns
     -------
     tuple[DandelionPolars, AnnData] | DandelionPolars
@@ -2344,124 +2355,133 @@ def vdj_sample(
     rng = np.random.default_rng(random_state)
 
     if adata is None:
-        # Determine if we need replacement
-        # Only collect metadata when needed for numpy indexing
-        if isinstance(vdj._metadata, pl.LazyFrame):
-            metadata = vdj._metadata.collect(engine="streaming")
-        else:
-            metadata = vdj._metadata
-
+        # Determine if we need replacement based on metadata size (one row per cell)
         n_cells = vdj.n_obs
-        replace = True if size > n_cells else False
-        if force_replace:
-            replace = True
+        replace = (size > n_cells) or force_replace
 
-        # Use numpy for index-based sampling - more efficient and polars-native
+        # Normalize probabilities if provided
         if p is not None:
             p_array = np.asarray(p)
-            p_array = p_array / p_array.sum()  # Ensure probabilities sum to 1
+            p_array = p_array / p_array.sum()
         else:
             p_array = None
 
-        # Get sampled indices using numpy
+        # Sample indices using numpy (faster than polars/pandas sampling)
         sample_indices = rng.choice(
             n_cells, size=size, replace=replace, p=p_array
         )
 
-        # Get the cell IDs from metadata at those indices
-        if isinstance(metadata, pl.DataFrame):
-            keep_cells = metadata[sample_indices]["cell_id"].to_list()
+        # Get cell IDs at sampled indices - only collect what we need
+        if isinstance(vdj._metadata, pl.LazyFrame):
+            # Stay lazy and only get the cell_id column
+            keep_cells = (
+                vdj._metadata.select("cell_id")
+                .collect(streaming=True)
+                .to_series()
+                .gather(sample_indices)
+                .to_list()
+            )
+        elif isinstance(vdj._metadata, pl.DataFrame):
+            keep_cells = (
+                vdj._metadata["cell_id"].gather(sample_indices).to_list()
+            )
         else:
-            keep_cells = metadata.iloc[sample_indices].index.tolist()
+            # pandas DataFrame
+            keep_cells = vdj._metadata.iloc[sample_indices].index.tolist()
     else:
-        # check if MuData and extract the gex modality
+        # Check if MuData and extract the gex modality
         if hasattr(adata, "mod"):
             adata = adata.mod["gex"].copy()
         else:
             adata = adata.copy()
-        # ensure only cells present in both vdj and adata are sampled
-        common_cells = list(
-            set(vdj._metadata.index).intersection(set(adata.obs_names))
-        )
-        adata = adata[adata.obs_names.isin(common_cells)].copy()
-        vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
 
-        replace = True if size > vdj._metadata.shape[0] else False
-        if force_replace:
-            replace = True
-        # use scanpy to sample
+        # Get common cells between vdj and adata - only collect cell_id column
+        if isinstance(vdj._metadata, pl.LazyFrame):
+            vdj_cell_ids = set(
+                vdj._metadata.select("cell_id")
+                .collect(streaming=True)["cell_id"]
+                .to_list()
+            )
+        elif isinstance(vdj._metadata, pl.DataFrame):
+            vdj_cell_ids = set(vdj._metadata["cell_id"].to_list())
+        else:
+            vdj_cell_ids = set(vdj._metadata.index)
+
+        common_cells = list(vdj_cell_ids.intersection(set(adata.obs_names)))
+
+        # Filter to common cells - pass the list of common_cells directly
+        # The __getitem__ will treat it as cell_ids to filter by
+        adata = adata[adata.obs_names.isin(common_cells)].copy()
+        vdj_filtered = vdj[common_cells]
+
+        # Determine replacement based on filtered vdj
+        n_cells = vdj_filtered.n_obs
+        replace = (size > n_cells) or force_replace
+
+        # Use scanpy to sample
         sc.pp.sample(adata, n=size, replace=replace, rng=random_state, p=p)
         keep_cells = list(adata.obs_names)
 
-    # Get the .data without ambiguous assignments
-    if isinstance(vdj._data, pl.LazyFrame):
-        cols = set(vdj._data.collect_schema().names())
+        # Use the filtered vdj for downstream operations
+        vdj = vdj_filtered
+
+    # Now filter the DATA (contigs) - stay lazy as long as possible
+    vdj_dat = vdj._data
+
+    # Check if ambiguous column exists
+    if isinstance(vdj_dat, (pl.LazyFrame, pl.DataFrame)):
+        cols = set(vdj_dat.collect_schema().names())
+        has_ambiguous = "ambiguous" in cols
     else:
-        cols = set(vdj._data.columns)
+        has_ambiguous = "ambiguous" in vdj_dat.columns
 
-    if "ambiguous" in cols:
-        vdj_dat = vdj._data.filter(pl.col("ambiguous").is_in(FALSES))
+    # Apply filters to data while staying lazy
+    if isinstance(vdj_dat, pl.LazyFrame):
+        # Chain filters while staying lazy
+        if has_ambiguous:
+            vdj_dat = vdj_dat.filter(pl.col("ambiguous").is_in(FALSES_STR))
+        vdj_dat = vdj_dat.filter(pl.col("cell_id").is_in(keep_cells))
+
+        # Only collect if we need replacement logic
+        if replace:
+            vdj_dat = vdj_dat.collect(streaming=True)
+    elif isinstance(vdj_dat, pl.DataFrame):
+        if has_ambiguous:
+            vdj_dat = vdj_dat.filter(pl.col("ambiguous").is_in(FALSES_STR))
+        vdj_dat = vdj_dat.filter(pl.col("cell_id").is_in(keep_cells))
     else:
-        vdj_dat = vdj._data.clone()
+        # pandas DataFrame
+        if has_ambiguous:
+            vdj_dat = vdj_dat[vdj_dat["ambiguous"].isin(FALSES)].copy()
+        vdj_dat = vdj_dat[vdj_dat["cell_id"].isin(keep_cells)].copy()
 
-    # Filter to keep only sampled cells
-    vdj_dat = vdj_dat.filter(pl.col("cell_id").is_in(keep_cells))
-
+    # Handle replacement (requires collected data)
     if replace:
-        # For replacement logic, need to collect if lazy
-        if isinstance(vdj_dat, pl.LazyFrame):
-            vdj_dat = vdj_dat.collect(engine="streaming")
-
-        # sample with replacement
         cell_counts = Counter(keep_cells)
-
-        # Only process cells that appear more than once
         duplicated_cells = {
             cell: count for cell, count in cell_counts.items() if count > 1
         }
 
         if duplicated_cells:
-            # Separate data for duplication
             if isinstance(vdj_dat, pl.DataFrame):
-                vdj_dat_to_duplicate = vdj_dat.filter(
-                    pl.col("cell_id").is_in(list(duplicated_cells.keys()))
-                ).clone()
-                vdj_dat_to_keep = vdj_dat.filter(
-                    ~pl.col("cell_id").is_in(list(duplicated_cells.keys()))
-                ).clone()
-            else:
-                vdj_dat_to_duplicate = vdj_dat[
-                    vdj_dat["cell_id"].isin(duplicated_cells.keys())
-                ].copy()
-                vdj_dat_to_keep = vdj_dat[
-                    ~vdj_dat["cell_id"].isin(duplicated_cells.keys())
-                ].copy()
+                # Separate data for duplication
+                duplicated_mask = pl.col("cell_id").is_in(
+                    list(duplicated_cells.keys())
+                )
+                vdj_dat_to_duplicate = vdj_dat.filter(duplicated_mask)
+                vdj_dat_to_keep = vdj_dat.filter(~duplicated_mask)
 
-            # Create duplicates for both dat and adata in one loop
-            all_duplicated_vdj = []
-
-            for cell_id, count in duplicated_cells.items():
-                # Duplicate dat rows
-                if isinstance(vdj_dat, pl.DataFrame):
+                # Create duplicates
+                all_duplicated_vdj = []
+                for cell_id, count in duplicated_cells.items():
                     cell_rows = vdj_dat_to_duplicate.filter(
                         pl.col("cell_id") == cell_id
-                    ).clone()
-                else:
-                    cell_rows = vdj_dat_to_duplicate[
-                        vdj_dat_to_duplicate["cell_id"] == cell_id
-                    ].copy()
-
-                for i in range(count):
-                    suffix = f"-{str(i)}" if i > 0 else ""
-
-                    # Add dat rows
-                    temp_rows = (
-                        cell_rows.clone()
-                        if isinstance(cell_rows, pl.DataFrame)
-                        else cell_rows.copy()
                     )
-                    if suffix:
-                        if isinstance(temp_rows, pl.DataFrame):
+
+                    for i in range(count):
+                        temp_rows = cell_rows.clone()
+                        if i > 0:
+                            suffix = f"-{i}"
                             temp_rows = temp_rows.with_columns(
                                 [
                                     (pl.col("cell_id") + suffix).alias(
@@ -2472,27 +2492,45 @@ def vdj_sample(
                                     ),
                                 ]
                             )
-                        else:
+                        all_duplicated_vdj.append(temp_rows)
+
+                # Combine everything
+                vdj_dat = pl.concat([vdj_dat_to_keep] + all_duplicated_vdj)
+            else:
+                # pandas DataFrame
+                vdj_dat_to_duplicate = vdj_dat[
+                    vdj_dat["cell_id"].isin(duplicated_cells.keys())
+                ].copy()
+                vdj_dat_to_keep = vdj_dat[
+                    ~vdj_dat["cell_id"].isin(duplicated_cells.keys())
+                ].copy()
+
+                all_duplicated_vdj = []
+                for cell_id, count in duplicated_cells.items():
+                    cell_rows = vdj_dat_to_duplicate[
+                        vdj_dat_to_duplicate["cell_id"] == cell_id
+                    ].copy()
+
+                    for i in range(count):
+                        temp_rows = cell_rows.copy()
+                        if i > 0:
+                            suffix = f"-{i}"
                             temp_rows["cell_id"] = temp_rows["cell_id"] + suffix
                             temp_rows["sequence_id"] = (
                                 temp_rows["sequence_id"] + suffix
                             )
-                    all_duplicated_vdj.append(temp_rows)
+                        all_duplicated_vdj.append(temp_rows)
 
-            # Combine everything back together
-            if isinstance(vdj_dat, pl.DataFrame):
-                vdj_dat = pl.concat([vdj_dat_to_keep] + all_duplicated_vdj)
-            else:
                 vdj_dat = pd.concat(
                     [vdj_dat_to_keep] + all_duplicated_vdj, ignore_index=True
                 )
 
-    # reinitialise a copy of the sampled dandelion object using vdj_dat
+    # Reinitialize Dandelion object
     vdj = DandelionPolars(vdj_dat)
+
     if adata is not None:
         adata.obs_names_make_unique()
         if hasattr(adata, "mod"):
-            # if MuData, update the gex modality
             return vdj, to_scirpy(vdj, gex_adata=adata)
         else:
             return vdj, adata
@@ -2532,7 +2570,9 @@ def to_scirpy(
     AnnData | MuData
         The converted data in either AnnData or MuData format.
     """
-    if data._backend == "polars":
+    original_backend = data._backend
+    original_lazy = data.lazy
+    if original_backend == "polars":
         data.to_pandas()
     # if gex_adata is provided, make sure to only transfer cells that are present in both
     # we will only filter the data to match gex_adata
@@ -2561,6 +2601,10 @@ def to_scirpy(
             data._data[h] = None
 
     airr, obs = to_ak(data._data, **kwargs)
+
+    # conver back to original backend
+    if original_backend == "polars":
+        data.to_polars(lazy=original_lazy)
     if to_mudata:
         airr_adata = _create_anndata(airr, obs)
         if tmp_gex is not None:
@@ -3852,7 +3896,7 @@ def productive_ratio(
     # Filter by locus and ambiguous status
     if "ambiguous" in data.columns:
         data_filtered = data.filter(
-            (pl.col("locus") == locus) & (pl.col("ambiguous").is_in(FALSES))
+            (pl.col("locus") == locus) & (pl.col("ambiguous").is_in(FALSES_STR))
         )
     else:
         data_filtered = data.filter(pl.col("locus") == locus)

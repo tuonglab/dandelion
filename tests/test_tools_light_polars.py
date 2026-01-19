@@ -4,7 +4,7 @@ import polars as pl
 import pytest
 
 from dandelion.utilities._polars import DandelionPolars
-from dandelion.tools._tools_polars import concat, find_clones_polars
+from dandelion.tools._tools_polars import concat, find_clones
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -292,15 +292,15 @@ def test_concat_pure_pandas_dataframes(airr_reannotated):
 
 
 # ============================================================================
-# find_clones_polars tests
+# find_clones tests
 # ============================================================================
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_basic(airr_reannotated):
-    """Test basic find_clones_polars functionality."""
+def test_find_clones_basic(airr_reannotated):
+    """Test basic find_clones functionality."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
-    result = find_clones_polars(vdj, identity=0.9, verbose=False)
+    result = find_clones(vdj, identity=0.9, verbose=False)
 
     assert isinstance(result, DandelionPolars)
     # Check that clone_id column was added
@@ -315,12 +315,12 @@ def test_find_clones_polars_basic(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_identity_threshold(airr_reannotated):
-    """Test find_clones_polars with different identity thresholds."""
+def test_find_clones_identity_threshold(airr_reannotated):
+    """Test find_clones with different identity thresholds."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
 
     # Test with strict identity (0.95)
-    result_strict = find_clones_polars(vdj, identity=0.95, verbose=False)
+    result_strict = find_clones(vdj, identity=0.95, verbose=False)
     data_strict = (
         result_strict._data.collect(engine="streaming")
         if isinstance(result_strict._data, pl.LazyFrame)
@@ -328,7 +328,7 @@ def test_find_clones_polars_identity_threshold(airr_reannotated):
     )
 
     # Test with lenient identity (0.8)
-    result_lenient = find_clones_polars(vdj, identity=0.8, verbose=False)
+    result_lenient = find_clones(vdj, identity=0.8, verbose=False)
     data_lenient = (
         result_lenient._data.collect(engine="streaming")
         if isinstance(result_lenient._data, pl.LazyFrame)
@@ -345,14 +345,14 @@ def test_find_clones_polars_identity_threshold(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_preserves_data(airr_reannotated):
-    """Test that find_clones_polars preserves original data and only adds clone_id."""
+def test_find_clones_preserves_data(airr_reannotated):
+    """Test that find_clones preserves original data and only adds clone_id."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
     original_count = vdj._data.select(pl.count()).collect(engine="streaming")[
         0, 0
     ]
 
-    result = find_clones_polars(vdj, identity=0.9, verbose=False)
+    result = find_clones(vdj, identity=0.9, verbose=False)
     result_data = (
         result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
@@ -369,13 +369,11 @@ def test_find_clones_polars_preserves_data(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_by_alleles(airr_reannotated):
-    """Test find_clones_polars with by_alleles parameter."""
+def test_find_clones_by_alleles(airr_reannotated):
+    """Test find_clones with by_alleles parameter."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
 
-    result = find_clones_polars(
-        vdj, identity=0.9, by_alleles=True, verbose=False
-    )
+    result = find_clones(vdj, identity=0.9, by_alleles=True, verbose=False)
     data = (
         result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
@@ -387,15 +385,15 @@ def test_find_clones_polars_by_alleles(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_lazy_evaluation(airr_reannotated):
-    """Test find_clones_polars with lazy evaluation."""
+def test_find_clones_lazy_evaluation(airr_reannotated):
+    """Test find_clones with lazy evaluation."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
     # Convert to lazy
     vdj._data = (
         vdj._data.lazy() if isinstance(vdj._data, pl.DataFrame) else vdj._data
     )
 
-    result = find_clones_polars(vdj, identity=0.9, verbose=False)
+    result = find_clones(vdj, identity=0.9, verbose=False)
 
     # Result should maintain lazy evaluation if input was lazy
     assert isinstance(result._data, pl.LazyFrame) or isinstance(
@@ -404,15 +402,13 @@ def test_find_clones_polars_lazy_evaluation(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_junction_aa(airr_reannotated):
-    """Test find_clones_polars with junction_aa instead of junction."""
+def test_find_clones_junction_aa(airr_reannotated):
+    """Test find_clones with junction_aa instead of junction."""
     if "junction_aa" not in airr_reannotated.columns:
         pytest.skip("junction_aa not in test data")
 
     vdj = DandelionPolars(airr_reannotated, verbose=False)
-    result = find_clones_polars(
-        vdj, key="junction_aa", identity=0.9, verbose=False
-    )
+    result = find_clones(vdj, key="junction_aa", identity=0.9, verbose=False)
 
     data = (
         result._data.collect(engine="streaming")
@@ -423,11 +419,11 @@ def test_find_clones_polars_junction_aa(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_multiple_loci(airr_reannotated):
-    """Test find_clones_polars with data containing multiple loci."""
+def test_find_clones_multiple_loci(airr_reannotated):
+    """Test find_clones with data containing multiple loci."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
 
-    result = find_clones_polars(vdj, identity=0.9, verbose=False)
+    result = find_clones(vdj, identity=0.9, verbose=False)
     data = (
         result._data.collect(engine="streaming")
         if isinstance(result._data, pl.LazyFrame)
@@ -444,13 +440,13 @@ def test_find_clones_polars_multiple_loci(airr_reannotated):
 
 
 @pytest.mark.usefixtures("airr_reannotated")
-def test_find_clones_polars_consistency(airr_reannotated):
-    """Test that find_clones_polars produces consistent results across runs."""
+def test_find_clones_consistency(airr_reannotated):
+    """Test that find_clones produces consistent results across runs."""
     vdj1 = DandelionPolars(airr_reannotated.copy(), verbose=False)
     vdj2 = DandelionPolars(airr_reannotated.copy(), verbose=False)
 
-    result1 = find_clones_polars(vdj1, identity=0.9, verbose=False)
-    result2 = find_clones_polars(vdj2, identity=0.9, verbose=False)
+    result1 = find_clones(vdj1, identity=0.9, verbose=False)
+    result2 = find_clones(vdj2, identity=0.9, verbose=False)
 
     data1 = (
         result1._data.collect(engine="streaming")

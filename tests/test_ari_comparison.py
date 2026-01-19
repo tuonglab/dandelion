@@ -12,7 +12,8 @@ import polars as pl
 from dandelion import Dandelion
 from dandelion.utilities._polars import DandelionPolars
 from dandelion.tools import find_clones
-from dandelion.tools._tools_polars import concat, find_clones_polars
+from dandelion.tools._tools_polars import find_clones as find_clones_polars
+from dandelion.tools._tools_polars import concat
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -30,10 +31,10 @@ def test_ari_find_clones_pandas_vs_polars(airr_reannotated):
     pandas_clones = dan_pd._data["clone_id"].values
 
     # Run polars find_clones
-    dan_pl_clones = find_clones_polars(dan_pl, verbose=False)
+    find_clones_polars(dan_pl, verbose=False)
 
     # Collect polars data
-    pl_data = dan_pl_clones._data
+    pl_data = dan_pl._data
     if isinstance(pl_data, pl.LazyFrame):
         pl_data = pl_data.collect(engine="streaming")
 
@@ -45,7 +46,7 @@ def test_ari_find_clones_pandas_vs_polars(airr_reannotated):
 
     # ARI of 1.0 means perfect agreement
     assert (
-        ari > 0.99
+        ari == 1
     ), f"ARI {ari:.4f} indicates clustering difference between pandas and polars versions"
 
 
@@ -66,10 +67,8 @@ def test_ari_identity_thresholds(airr_reannotated):
         find_clones(dan_pd, identity=identity, verbose=False)
         pandas_clones = dan_pd._data["clone_id"].values
 
-        dan_pl_clones = find_clones_polars(
-            dan_pl, identity=identity, verbose=False
-        )
-        pl_data = dan_pl_clones._data
+        find_clones_polars(dan_pl, identity=identity, verbose=False)
+        pl_data = dan_pl._data
         if isinstance(pl_data, pl.LazyFrame):
             pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
@@ -88,7 +87,7 @@ def test_ari_identity_thresholds(airr_reannotated):
             }
         )
 
-        assert ari > 0.99, f"ARI mismatch at identity={identity}: {ari:.4f}"
+        assert ari == 1, f"ARI mismatch at identity={identity}: {ari:.4f}"
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -106,10 +105,8 @@ def test_ari_by_alleles(airr_reannotated):
         find_clones(dan_pd, by_alleles=by_alleles, verbose=False)
         pandas_clones = dan_pd._data["clone_id"].values
 
-        dan_pl_clones = find_clones_polars(
-            dan_pl, by_alleles=by_alleles, verbose=False
-        )
-        pl_data = dan_pl_clones._data
+        find_clones_polars(dan_pl, by_alleles=by_alleles, verbose=False)
+        pl_data = dan_pl._data
         if isinstance(pl_data, pl.LazyFrame):
             pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
@@ -117,7 +114,7 @@ def test_ari_by_alleles(airr_reannotated):
         # Calculate ARI
         ari = adjusted_rand_score(pandas_clones, polars_clones)
 
-        assert ari > 0.99, f"ARI mismatch at by_alleles={by_alleles}: {ari:.4f}"
+        assert ari == 1, f"ARI mismatch at by_alleles={by_alleles}: {ari:.4f}"
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -144,10 +141,8 @@ def test_ari_junction_keys(airr_reannotated):
         find_clones(dan_pd, key=junction_key, verbose=False)
         pandas_clones = dan_pd._data["clone_id"].values
 
-        dan_pl_clones = find_clones_polars(
-            dan_pl, key=junction_key, verbose=False
-        )
-        pl_data = dan_pl_clones._data
+        find_clones_polars(dan_pl, key=junction_key, verbose=False)
+        pl_data = dan_pl._data
         if isinstance(pl_data, pl.LazyFrame):
             pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
@@ -156,7 +151,7 @@ def test_ari_junction_keys(airr_reannotated):
         ari = adjusted_rand_score(pandas_clones, polars_clones)
 
         assert (
-            ari > 0.99
+            ari == 1
         ), f"ARI mismatch at junction_key={junction_key}: {ari:.4f}"
 
 
@@ -184,8 +179,8 @@ def test_ari_sequence_keys(airr_reannotated):
         find_clones(dan_pd, key=seq_key, verbose=False)
         pandas_clones = dan_pd._data["clone_id"].values
 
-        dan_pl_clones = find_clones_polars(dan_pl, key=seq_key, verbose=False)
-        pl_data = dan_pl_clones._data
+        find_clones_polars(dan_pl, key=seq_key, verbose=False)
+        pl_data = dan_pl._data
         if isinstance(pl_data, pl.LazyFrame):
             pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
@@ -193,7 +188,7 @@ def test_ari_sequence_keys(airr_reannotated):
         # Calculate ARI
         ari = adjusted_rand_score(pandas_clones, polars_clones)
 
-        assert ari > 0.99, f"ARI mismatch at sequence_key={seq_key}: {ari:.4f}"
+        assert ari == 1, f"ARI mismatch at sequence_key={seq_key}: {ari:.4f}"
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -229,14 +224,14 @@ def test_ari_combined_parameters(airr_reannotated):
         pandas_clones = dan_pd._data["clone_id"].values
 
         # Run polars with params
-        dan_pl_clones = find_clones_polars(
+        find_clones_polars(
             dan_pl,
             identity=params["identity"],
             by_alleles=params["by_alleles"],
             key=params["key"],
             verbose=False,
         )
-        pl_data = dan_pl_clones._data
+        pl_data = dan_pl._data
         if isinstance(pl_data, pl.LazyFrame):
             pl_data = pl_data.collect(engine="streaming")
         polars_clones = pl_data["clone_id"].to_numpy()
@@ -244,4 +239,4 @@ def test_ari_combined_parameters(airr_reannotated):
         # Calculate ARI
         ari = adjusted_rand_score(pandas_clones, polars_clones)
 
-        assert ari > 0.99, f"ARI mismatch with params {params}: {ari:.4f}"
+        assert ari == 1, f"ARI mismatch with params {params}: {ari:.4f}"

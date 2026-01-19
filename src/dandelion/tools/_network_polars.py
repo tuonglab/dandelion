@@ -758,8 +758,8 @@ def generate_network(
     graph = (g, g_) if compute_graph else None
     layout = (lyt, lyt_) if compute_graph and compute_layout else None
     if sample is not None:
-        out = Dandelion(
-            data=dat_,
+        out = DandelionPolars(
+            data=vdj._data,
             metadata=vdj._metadata,
             clone_key=clone_key,
             layout=layout,
