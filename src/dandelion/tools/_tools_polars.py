@@ -2946,15 +2946,15 @@ def concat(
             vdjs_.append(x.copy())
         elif isinstance(x, pl.LazyFrame):
             tmp = DandelionPolars(
-                x.collect(engine="streaming"), verbose=False, cache=False
+                x.collect(engine="streaming"), verbose=False
             )
             vdjs_.append(tmp)
         elif isinstance(x, pl.DataFrame):
-            tmp = DandelionPolars(x, verbose=False, cache=False)
+            tmp = DandelionPolars(x, verbose=False)
             vdjs_.append(tmp)
         elif isinstance(x, pd.DataFrame):
             # Convert pandas to polars
-            tmp = DandelionPolars(pl.from_pandas(x), verbose=False, cache=False)
+            tmp = DandelionPolars(pl.from_pandas(x), verbose=False)
             vdjs_.append(tmp)
         else:
             raise ValueError(

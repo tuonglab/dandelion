@@ -729,36 +729,42 @@ class DandelionPolars:
                 v.index = value
 
     def _cache_data(self) -> None:
-        """Cache _data and _metadata into temp parquet files."""
-        self._data = self._cache_lazyframe(self._data)
-        self._metadata = self._cache_lazyframe(self._metadata)
+        """Cache _data and _metadata into temp parquet files when lazy."""
+        if not self.lazy:
+            return
+        self._data = self._cache_lazyframe(self._data, "data")
+        self._metadata = self._cache_lazyframe(self._metadata, "metadata")
 
     def _cache_lazyframe(
-        self, obj: pl.LazyFrame | pl.DataFrame
-    ) -> pl.LazyFrame:
-        # Ensure we have a LazyFrame
-        if isinstance(obj, pl.DataFrame):
-            obj = obj.lazy()
+        self, obj: pl.LazyFrame | pl.DataFrame | None, slot_name: str
+    ) -> pl.LazyFrame | None:
+        if obj is None:
+            # Nothing to cache but make sure stale handles are cleaned up
+            if slot_name in self._tmpfiles:
+                self._tmpfiles[slot_name].close()
+                del self._tmpfiles[slot_name]
+            return obj
 
-        # # Already cached
-        # if hasattr(obj, "_temp_file_handle"):
-        #     return obj
+        # Materialize first to avoid closing backing files too early
+        df = obj.collect(engine="streaming") if isinstance(obj, pl.LazyFrame) else obj
+
+        # Close and drop any stale temp file for this slot
+        if slot_name in self._tmpfiles:
+            self._tmpfiles[slot_name].close()
+            del self._tmpfiles[slot_name]
 
         temp_file = tempfile.NamedTemporaryFile(
             suffix=".parquet",
             delete=True,
         )
 
-        # Materialize once
-        df = obj.collect(engine="streaming")
         df.write_parquet(temp_file.name)
         temp_file.flush()
 
         lf = pl.scan_parquet(temp_file.name)
 
-        # Monkey-patch *state only*
-        lf._temp_file_handle = temp_file
-        lf._temp_file_path = temp_file.name
+        # Store in the unified dict
+        self._tmpfiles[slot_name] = temp_file
 
         return lf
 
@@ -1563,7 +1569,6 @@ class DandelionPolars:
         strip_alleles: bool = True,
         productive_only: bool = True,
         check_rearrangement_status: bool = True,
-        cache: bool = True,
     ) -> pd.DataFrame:
         """Initialize metadata DataFrame from Airrs data."""
         # init_cols = [] if init_cols is None else init_cols
@@ -1830,8 +1835,8 @@ class DandelionPolars:
             if "metadata" in self._tmpfiles.keys():
                 self._tmpfiles["metadata"].close()
                 del self._tmpfiles["metadata"]
-            if cache:
-                # back to tmpfile on disk if cache
+            if self.lazy:
+                # back to tmpfile on disk when working lazily
                 self._cache_data()
 
     def _update_rearrangement_status(self, v_call_key: str) -> None:
@@ -1993,6 +1998,39 @@ class DandelionPolars:
             a deep copy of Dandelion class.
         """
         return copy.deepcopy(self)
+
+    def __getstate__(self):
+        """Provide a deepcopy/pickle-friendly state without open tmpfiles."""
+        state = self.__dict__.copy()
+        # Ensure tmpfiles map exists but is not shared
+        state["_tmpfiles"] = {}
+
+        # Materialize lazy frames to break references to temp parquet handles
+        if isinstance(state.get("_data"), pl.LazyFrame):
+            state["_data"] = state["_data"].collect(engine="streaming")
+        if isinstance(state.get("_metadata"), pl.LazyFrame):
+            state["_metadata"] = state["_metadata"].collect(
+                engine="streaming"
+            )
+        return state
+
+    def __setstate__(self, state):
+        """Restore state and rebuild cache backing when needed."""
+        # Restore dict first
+        self.__dict__.update(state)
+
+        # Recreate tmpfiles container
+        if not hasattr(self, "_tmpfiles") or self._tmpfiles is None:
+            self._tmpfiles = {}
+
+        # Re-lazify if the object was lazy and frames are eager
+        if self.lazy:
+            if isinstance(self._data, pl.DataFrame):
+                self._data = self._data.lazy()
+            if isinstance(self._metadata, pl.DataFrame):
+                self._metadata = self._metadata.lazy()
+            # Rebuild parquet backing for lazy mode
+            self._cache_data()
 
     def update_data(self, skip: list[str] = []) -> None:
         """Sync metadata columns into data via dictionary mapping."""
@@ -2173,7 +2211,6 @@ class DandelionPolars:
         update_isotype_dict: dict[str, str] | None = None,
         lazy: bool = True,
         as_pandas: bool = False,
-        cache: bool = True,
     ) -> None:
         """
         A Dandelion initialisation function to update and populate the `.metadata` slot.
@@ -2273,7 +2310,6 @@ class DandelionPolars:
                 strip_alleles=strip_alleles,
                 productive_only=productive_only,
                 check_rearrangement_status=check_rearrangement_status,
-                cache=cache,
             )
             cols = self._metadata.collect_schema().names()
             if clone_key in cols:
