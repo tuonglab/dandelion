@@ -740,9 +740,9 @@ class DandelionPolars:
         if isinstance(obj, pl.DataFrame):
             obj = obj.lazy()
 
-        # Already cached
-        if hasattr(obj, "_temp_file_handle"):
-            return obj
+        # # Already cached
+        # if hasattr(obj, "_temp_file_handle"):
+        #     return obj
 
         temp_file = tempfile.NamedTemporaryFile(
             suffix=".parquet",
@@ -1563,6 +1563,7 @@ class DandelionPolars:
         strip_alleles: bool = True,
         productive_only: bool = True,
         check_rearrangement_status: bool = True,
+        cache: bool = True,
     ) -> pd.DataFrame:
         """Initialize metadata DataFrame from Airrs data."""
         # init_cols = [] if init_cols is None else init_cols
@@ -1829,8 +1830,8 @@ class DandelionPolars:
             if "metadata" in self._tmpfiles.keys():
                 self._tmpfiles["metadata"].close()
                 del self._tmpfiles["metadata"]
-            if self.lazy:
-                # back to tmpfile on disk if lazy
+            if cache:
+                # back to tmpfile on disk if cache
                 self._cache_data()
 
     def _update_rearrangement_status(self, v_call_key: str) -> None:
@@ -2172,7 +2173,7 @@ class DandelionPolars:
         update_isotype_dict: dict[str, str] | None = None,
         lazy: bool = True,
         as_pandas: bool = False,
-        # by_celltype: bool = False,
+        cache: bool = True,
     ) -> None:
         """
         A Dandelion initialisation function to update and populate the `.metadata` slot.
@@ -2272,6 +2273,7 @@ class DandelionPolars:
                 strip_alleles=strip_alleles,
                 productive_only=productive_only,
                 check_rearrangement_status=check_rearrangement_status,
+                cache=cache,
             )
             cols = self._metadata.collect_schema().names()
             if clone_key in cols:

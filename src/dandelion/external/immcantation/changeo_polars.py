@@ -346,7 +346,7 @@ def creategermlines(
 
 
 def define_clones(
-    vdj: DandelionPolars | pl.DataFrame | pl.LazyFrame | str,
+    vdj: DandelionPolars,
     dist: float,
     action: Literal["first", "set"] = "set",
     model: Literal[
@@ -375,9 +375,8 @@ def define_clones(
 
     Parameters
     ----------
-    vdj : DandelionPolars | pl.DataFrame | pl.LazyFrame | str
-        DandelionPolars object, Polars DataFrame/LazyFrame in changeo/airr format, or file path to changeo/airr file after
-        clones have been determined.
+    vdj : DandelionPolars
+        DandelionPolars object.
     dist : float
         The distance threshold for clonal grouping.
     action : Literal["first", "set"], optional
@@ -426,10 +425,7 @@ def define_clones(
     clone_key = key_added if key_added is not None else "clone_id"
 
     # Load data as Polars
-    if isinstance(vdj, DandelionPolars):
-        dat_ = load_polars(vdj._data)
-    else:
-        dat_ = load_polars(vdj)
+    dat_ = load_polars(vdj._data)
 
     # Ensure we have eager DataFrame for operations
     if isinstance(dat_, pl.LazyFrame):
@@ -789,7 +785,10 @@ def define_clones(
     dat_ = dat_.with_columns(pl.col(str(clone_key)).fill_null(""))
 
     if isinstance(vdj, DandelionPolars):
-        vdj._data = dat_
+        if vdj.lazy:
+            vdj._data = dat_.lazy()
+        else:
+            vdj._data = dat_
         vdj.update_metadata(clone_key=str(clone_key))
         logg.info(
             " finished",
