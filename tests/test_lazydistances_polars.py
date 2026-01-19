@@ -93,7 +93,7 @@ def test_lazydistances_original_vs_eager(
             metric=metric,
             membership=sample_membership_data,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -124,7 +124,7 @@ def test_lazydistances_original_with_membership(
             metric=metric,
             membership=sample_membership_data,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -153,7 +153,7 @@ def test_lazydistances_original_full_vs_eager(sample_sequence_data):
             metric=metric,
             membership=None,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -180,7 +180,7 @@ def test_lazydistances_with_padding(sample_sequence_data):
             sample_sequence_data,
             metric=metric,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -204,7 +204,7 @@ def test_lazydistances_without_padding(sample_sequence_data):
             sample_sequence_data,
             metric=metric,
             pad_to_max=False,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -227,7 +227,7 @@ def test_lazydistances_chunking_effect(sample_sequence_data):
             sample_sequence_data,
             metric=metric,
             pad_to_max=True,
-            out_path=tmpdir1,
+            zarr_path=tmpdir1,
             chunk_size=3,
             n_cpus=1,
             verbose=False,
@@ -239,7 +239,7 @@ def test_lazydistances_chunking_effect(sample_sequence_data):
             sample_sequence_data,
             metric=metric,
             pad_to_max=True,
-            out_path=tmpdir2,
+            zarr_path=tmpdir2,
             chunk_size=20,
             n_cpus=1,
             verbose=False,
@@ -271,7 +271,7 @@ def test_lazydistances_membership_partial(sample_sequence_data):
             metric=metric,
             membership=partial_membership,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -306,7 +306,7 @@ def test_lazydistances_empty_sequences(sample_sequence_data):
             data_with_empty,
             metric=metric,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=5,
             n_cpus=1,
             verbose=False,
@@ -331,7 +331,7 @@ def test_lazydistances_single_cell(sample_sequence_data):
             single_cell,
             metric=metric,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=1,
             n_cpus=1,
             verbose=False,
@@ -354,7 +354,7 @@ def test_lazydistances_two_cells(sample_sequence_data):
             two_cells,
             metric=metric,
             pad_to_max=True,
-            out_path=tmpdir,
+            zarr_path=tmpdir,
             chunk_size=1,
             n_cpus=1,
             verbose=False,
@@ -368,18 +368,18 @@ def test_lazydistances_two_cells(sample_sequence_data):
         assert array[0, 1] == array[1, 0]
 
 
-def test_lazydistances_out_path_created(sample_sequence_data):
+def test_lazydistances_zarr_path_created(sample_sequence_data):
     """Test that output path is properly created."""
     metric = LevenshteinMetric()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        out_path = Path(tmpdir) / "distance_matrix.zarr"
+        zarr_path = Path(tmpdir) / "distance_matrix.zarr"
 
         result = calculate_distance_matrix_zarr(
             sample_sequence_data,
             metric=metric,
             pad_to_max=True,
-            out_path=str(out_path),
+            zarr_path=str(zarr_path),
             chunk_size=5,
             n_cpus=1,
             verbose=False,
