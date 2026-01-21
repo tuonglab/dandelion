@@ -125,7 +125,7 @@ docs = [
 scirpy = ["scirpy<0.23.0", "awkward<2.8.11", "mudata<0.3.3"]
 scrubet = ["scrublet<0.2.4", "annoy<1.17.0"]
 palantir = ["palantir<1.4.3", "jax<0.8.3"]
-dask = ["dask<2025.11.1", "distributed<2025.11.1", "psutil<6.1.2"]
+dask = ["dask<2026.1.2", "distributed<2025.11.1", "psutil<6.1.2"]
 
 [tool.setuptools]
 include-package-data = true
