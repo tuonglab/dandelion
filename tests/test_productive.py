@@ -11,6 +11,9 @@ from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
 from dandelion.polars.tools import productive_ratio as productive_ratio_polars
 from dandelion.polars.tools import vj_usage_pca as vj_usage_pca_polars
 from dandelion.polars.preprocessing import check_contigs as check_contigs_polars
+from dandelion.polars.plotting import (
+    productive_ratio as plot_productive_ratio_polars,
+)
 
 
 @pytest.mark.usefixtures(
@@ -95,33 +98,35 @@ def test_productive_ratio_polars(
         groups=["A", "B", "C"],
     )
     assert "productive_ratio" in dummy_adata_mouse.uns
-    # plot_productive_ratio_polars(dummy_adata_mouse)
+    plot_productive_ratio_polars(dummy_adata_mouse)
 
 
-# @pytest.mark.usefixtures("create_testfolder", "dummy_adata_mouse")
-# def test_vj_usage_pca_polars(create_testfolder, dummy_adata_mouse):
-#     """Test vj usage pca."""
-#     vdj = read_10x_vdj_polars(create_testfolder, filename_prefix="filtered")
-#     _, adata = check_contigs_polars(vdj, dummy_adata_mouse)
-#     group = cycle(["A", "B", "C", "D", "E", "F", "G", "H", "I"])
-#     groups = [next(group) for i in adata.obs_names]
-#     groups2 = [next(group) for i in adata.obs_names]
-#     adata.obs["group"] = groups
-#     adata.obs["group2"] = groups2
-#     new_adata = vj_usage_pca_polars(
-#         adata,
-#         groupby="group",
-#         mode="B",
-#         n_comps=5,
-#         transfer_mapping=["group2"],
-#     )
-#     assert "X_pca" in new_adata.obsm
-#     adata2 = adata.copy()
-#     new_adata2 = vj_usage_pca_polars(
-#         adata2,
-#         groupby="group",
-#         mode="B",
-#         n_comps=5,
-#         transfer_mapping=["group2"],
-#     )
-#     assert "X_pca" in new_adata2.obsm
+@pytest.mark.usefixtures("create_testfolder", "dummy_adata_mouse")
+def test_vj_usage_pca_polars(create_testfolder, dummy_adata_mouse):
+    """Test vj usage pca."""
+    vdj = read_10x_vdj_polars(create_testfolder, filename_prefix="filtered")
+    _, adata = check_contigs_polars(vdj, dummy_adata_mouse)
+    group = cycle(["A", "B", "C", "D", "E", "F", "G", "H", "I"])
+    groups = [next(group) for i in adata.obs_names]
+    groups2 = [next(group) for i in adata.obs_names]
+    adata.obs["group"] = groups
+    adata.obs["group2"] = groups2
+    new_adata = vj_usage_pca_polars(
+        adata,
+        vdj,
+        groupby="group",
+        mode="B",
+        n_comps=5,
+        transfer_mapping=["group2"],
+    )
+    assert "X_pca" in new_adata.obsm
+    adata2 = adata.copy()
+    new_adata2 = vj_usage_pca_polars(
+        adata2,
+        vdj,
+        groupby="group",
+        mode="B",
+        n_comps=5,
+        transfer_mapping=["group2"],
+    )
+    assert "X_pca" in new_adata2.obsm

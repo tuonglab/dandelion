@@ -10,6 +10,7 @@ import scanpy as sc
 
 from anndata import AnnData
 from collections import defaultdict, Counter
+from contextlib import contextmanager
 from distance import hamming
 from itertools import product
 from scanpy import logging as logg
@@ -1793,8 +1794,76 @@ def clustering(
     return out_dict
 
 
+@contextmanager
+def _vj_usage_context(
+    adata: AnnData, vdj: DandelionPolars, mode: Literal["B", "abT", "gdT"]
+):
+    """
+    Context manager that temporarily adds V/J gene columns to adata.obs
+    and removes them upon exit.
+    """
+    # Get the split data using celltype mode
+    # _split_first gives us the "main" (first) gene
+    v_call_main = vdj._split_first(
+        cols="v_call", key_added=f"v_call_{mode}", celltype=mode
+    )
+    j_call_main = vdj._split_first(
+        cols="j_call", key_added=f"j_call_{mode}", celltype=mode
+    )
+    # _split with join=True gives us all genes joined with "|"
+    v_call_full = vdj._split(
+        cols="v_call",
+        key_added=f"v_call_{mode}",
+        join=True,
+        unique=False,
+        celltype=mode,
+    )
+    j_call_full = vdj._split(
+        cols="j_call",
+        key_added=f"j_call_{mode}",
+        join=True,
+        unique=False,
+        celltype=mode,
+    )
+    # Merge all splits into one dataframe
+    merged = (
+        v_call_main.drop("celltype_group")
+        .join(j_call_main.drop("celltype_group"), on="cell_id", how="left")
+        .join(
+            v_call_full.drop("celltype_group"),
+            on="cell_id",
+            how="left",
+            suffix="_full",
+        )
+        .join(
+            j_call_full.drop("celltype_group"),
+            on="cell_id",
+            how="left",
+            suffix="_full",
+        )
+    )
+
+    # Convert to pandas and set index
+    merged_pd = merged.to_pandas().set_index("cell_id")
+
+    # Track original obs
+    original_obs = adata.obs.copy()
+
+    try:
+        # Add columns to adata.obs
+        for col in merged_pd.columns:
+            adata.obs[col] = merged_pd[col]
+
+        yield adata
+
+    finally:
+        # Clean up: restore original obs
+        adata.obs = original_obs
+
+
 def vj_usage_pca(
     adata: AnnData,
+    vdj: DandelionPolars,
     groupby: str,
     min_size: int = 20,
     mode: Literal["B", "abT", "gdT"] = "abT",
@@ -1820,7 +1889,9 @@ def vj_usage_pca(
     Parameters
     ----------
     adata : AnnData
-        AnnData object holding the cell level metadata with Dandelion VDJ info transferred.
+        AnnData object holding the cell level metadata.
+    vdj : DandelionPolars
+        Dandelion VDJ object to extract V/J usage from.
     groupby : str
         Column name in `adata.obs` to groupby as observations for PCA.
     min_size : int, optional
@@ -1855,89 +1926,103 @@ def vj_usage_pca(
         AnnData object with obs as groups and V/J genes as features.
     """
     start = logg.info("Computing PCA for V/J gene usage")
-    # filtering
-    if allowed_chain_status is not None:
-        adata_ = adata[
-            adata.obs["chain_status"].isin(allowed_chain_status)
-        ].copy()
 
-    if groups is not None:
-        adata_ = adata_[adata_.obs[groupby].isin(groups)].copy()
-    # build config
-    gene_config = {
-        "vdj_v": dict(
-            enabled=use_vdj_v,
-            main=f"v_call_{mode}_VDJ_main",
-            full=f"v_call_{mode}_VDJ",
-        ),
-        "vdj_j": dict(
-            enabled=use_vdj_j,
-            main=f"j_call_{mode}_VDJ_main",
-            full=f"j_call_{mode}_VDJ",
-        ),
-        "vj_v": dict(
-            enabled=use_vj_v,
-            main=f"v_call_{mode}_VJ_main",
-            full=f"v_call_{mode}_VJ",
-        ),
-        "vj_j": dict(
-            enabled=use_vj_j,
-            main=f"j_call_{mode}_VJ_main",
-            full=f"j_call_{mode}_VJ",
-        ),
-    }
-    if not any(cfg["enabled"] for cfg in gene_config.values()):
-        raise ValueError("At least one of the use_vj/vdj_v/j must be True.")
+    # Use context manager to temporarily add V/J columns
+    with _vj_usage_context(adata, vdj, mode) as adata_:
+        # filtering
+        if allowed_chain_status is not None:
+            adata_ = adata_[
+                adata_.obs["chain_status"].isin(allowed_chain_status)
+            ].copy()
 
-    # Determine which groups to keep
-    cell_counts = adata_.obs[groupby].value_counts()
-    keep_groups = cell_counts[cell_counts >= min_size].index
+        if groups is not None:
+            adata_ = adata_[adata_.obs[groupby].isin(groups)].copy()
 
-    # collect gene lists
-    gene_lists = {}
-    for key, cfg in gene_config.items():
-        if cfg["enabled"]:
-            uniq = adata_.obs[cfg["main"]].unique().tolist()
-            gene_lists[key] = [
-                g for g in uniq if g not in ("None", "No_contig")
-            ]
-        else:
-            gene_lists[key] = []
+        # build config - now using the temporarily added columns
+        gene_config = {
+            "vdj_v": dict(
+                enabled=use_vdj_v,
+                main=f"v_call_{mode}_VDJ",
+                full=f"v_call_{mode}_VDJ_full",
+            ),
+            "vdj_j": dict(
+                enabled=use_vdj_j,
+                main=f"j_call_{mode}_VDJ",
+                full=f"j_call_{mode}_VDJ_full",
+            ),
+            "vj_v": dict(
+                enabled=use_vj_v,
+                main=f"v_call_{mode}_VJ",
+                full=f"v_call_{mode}_VJ_full",
+            ),
+            "vj_j": dict(
+                enabled=use_vj_j,
+                main=f"j_call_{mode}_VJ",
+                full=f"j_call_{mode}_VJ_full",
+            ),
+        }
+        if not any(cfg["enabled"] for cfg in gene_config.values()):
+            raise ValueError("At least one of the use_vj/vdj_v/j must be True.")
 
-    all_genes = [g for genes in gene_lists.values() for g in genes]
+        # Determine which groups to keep
+        cell_counts = adata_.obs[groupby].value_counts()
+        keep_groups = cell_counts[cell_counts >= min_size].index
 
-    # initialise results df
-    vdj_df = pd.DataFrame(
-        index=keep_groups, columns=all_genes, dtype=float
-    ).fillna(0)
+        # collect gene lists
+        gene_lists = {}
+        for key, cfg in gene_config.items():
+            if cfg["enabled"]:
+                uniq = adata_.obs[cfg["main"]].unique().tolist()
+                gene_lists[key] = [
+                    g
+                    for g in uniq
+                    if g not in ("None", "No_contig", None) and pd.notna(g)
+                ]
+            else:
+                gene_lists[key] = []
 
-    # count genes per group
-    for group in tqdm(
-        vdj_df.index,
-        desc="Tabulating V/J gene usage",
-        disable=not verbose,
-    ):
-        group_mask = adata_.obs[groupby] == group
-        obs_group = adata_.obs.loc[group_mask]
+        all_genes = [g for genes in gene_lists.values() for g in genes]
 
+        # initialise results df
+        vdj_df = pd.DataFrame(
+            index=keep_groups, columns=all_genes, dtype=float
+        ).fillna(0)
+
+        # count genes per group
+        for group in tqdm(
+            vdj_df.index,
+            desc="Tabulating V/J gene usage",
+            disable=not verbose,
+        ):
+            group_mask = adata_.obs[groupby] == group
+            obs_group = adata_.obs.loc[group_mask]
+
+            for key, cfg in gene_config.items():
+                if not cfg["enabled"]:
+                    continue
+
+                # Handle pipe-separated values from join=True
+                all_values = []
+                for val in obs_group[cfg["full"]]:
+                    if pd.notna(val) and val not in ("None", "No_contig"):
+                        all_values.extend(str(val).split("|"))
+
+                counts = Counter(all_values)
+                for gene in gene_lists[key]:
+                    vdj_df.loc[group, gene] = counts.get(gene, 0)
+
+        # normalize each chain separately
         for key, cfg in gene_config.items():
             if not cfg["enabled"]:
                 continue
 
-            counts = Counter(obs_group[cfg["full"]])
-            for gene in gene_lists[key]:
-                vdj_df.loc[group, gene] = counts.get(gene, 0)
+            cols = gene_lists[key]
+            colsum = vdj_df[cols].sum(axis=1)
+            # Avoid division by zero
+            colsum = colsum.replace(0, 1)
+            vdj_df.loc[:, cols] = vdj_df[cols].div(colsum, axis=0) * 100
 
-    # normalize each chain separately
-    for key, cfg in gene_config.items():
-        if not cfg["enabled"]:
-            continue
-
-        cols = gene_lists[key]
-        colsum = vdj_df[cols].sum(axis=1)
-        vdj_df.loc[:, cols] = vdj_df[cols].div(colsum, axis=0) * 100
-
-    # Create new AnnData + PCA
+    # Create new AnnData + PCA (outside context manager)
     obs_df = pd.DataFrame(index=vdj_df.index)
     obs_df["cell_type"] = vdj_df.index
     obs_df["cell_count"] = cell_counts.loc[vdj_df.index]
@@ -1952,7 +2037,8 @@ def vj_usage_pca(
 
     # Transfer old obs columns to new AnnData
     if transfer_mapping is not None:
-        collapsed = adata_.obs.drop_duplicates(subset=groupby)
+        # Need to get the original adata for this
+        collapsed = adata.obs.drop_duplicates(subset=groupby)
         for to in transfer_mapping:
             mapping = dict(zip(collapsed[groupby], collapsed[to]))
             vdj_adata.obs[to] = vdj_adata.obs.index.map(mapping)

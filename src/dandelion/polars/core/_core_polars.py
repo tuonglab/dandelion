@@ -1123,9 +1123,9 @@ class DandelionPolars:
         else:
             agg_exprs += [
                 (
-                    pl.col(col).unique().list().alias(out_col)
+                    pl.col(col).unique().alias(out_col)
                     if unique
-                    else pl.col(col).list().alias(out_col)
+                    else pl.col(col).alias(out_col)
                 )
                 for col, out_col in zip(cols, key_added)
             ]
@@ -1226,20 +1226,40 @@ class DandelionPolars:
         unique: bool = False,
         key_added: list[str] | str | None = None,
         data: pl.DataFrame | pl.LazyFrame | None = None,
+        celltype: Literal["B", "abT", "gdT"] | None = None,
     ) -> pl.DataFrame:
         key_added = cols if key_added is None else key_added
         cols = [cols] if isinstance(cols, str) else cols
         key_added = [key_added] if isinstance(key_added, str) else key_added
         agg_exprs = [pl.col("_original_order").min().alias("_original_order")]
 
+        data = self._data if data is None else data
+        # Add row index once at the start
+        data = data.lazy().with_row_index("_original_order")
+
+        if celltype is not None:
+            # Add a celltype_group column based on locus/isotype logic
+            data = data.with_columns(
+                pl.when(pl.col("locus").is_in(["IGH", "IGK", "IGL"]))
+                .then(pl.lit("B"))
+                .when(pl.col("locus").is_in(["TRB", "TRA"]))
+                .then(pl.lit("abT"))
+                .when(pl.col("locus").is_in(["TRD", "TRG"]))
+                .then(pl.lit("gdT"))
+                .otherwise(pl.lit("Unknown"))
+                .alias("celltype_group")
+            )
+            # Filter for the requested celltype
+            data = data.filter(pl.col("celltype_group") == celltype)
+            group_keys = ["cell_id", "celltype_group"]
+        else:
+            group_keys = ["cell_id"]
+
         if explode:
             # Create separate numbered columns for each contig (like retrieve_mode="split")
             # First group by cell_id and get lists of values
-            data = self._data if data is None else data
             temp_result = (
-                data.lazy()
-                .with_row_index("_original_order")
-                .with_columns(
+                data.with_columns(
                     [
                         pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
                         .then(pl.lit("VDJ"))
@@ -1247,7 +1267,7 @@ class DandelionPolars:
                         .alias("locus_group")
                     ]
                 )
-                .group_by("cell_id")
+                .group_by(group_keys)
                 .agg(
                     [pl.col("_original_order").min().alias("_original_order")]
                     + [
@@ -1282,6 +1302,8 @@ class DandelionPolars:
 
             # Now explode into numbered columns using a more efficient approach
             result_cols = {"cell_id": temp_result["cell_id"]}
+            if celltype is not None:
+                result_cols["celltype_group"] = temp_result["celltype_group"]
 
             for col, key in zip(cols, key_added):
                 # Handle VDJ
@@ -1314,7 +1336,6 @@ class DandelionPolars:
                                 )
 
             result = pl.DataFrame(result_cols)
-            return result
 
         elif join:
             agg_exprs += [
@@ -1339,18 +1360,33 @@ class DandelionPolars:
                             .filter(pl.col("locus_group") == "VJ")
                             .unique()
                             .str.join(delimiter="|")
-                            .alias(f"{col}_VJ")
+                            .alias(f"{key}_VJ")
                             if unique
                             else pl.col(col)
                             .filter(pl.col("locus_group") == "VJ")
                             .str.join(delimiter="|")
-                            .alias(f"{col}_VJ")
+                            .alias(f"{key}_VJ")
                         )
                         if col != "d_call"
                         else None
                     ),
                 ]
             ]
+            result = (
+                data.with_columns(
+                    [
+                        pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
+                        .then(pl.lit("VDJ"))
+                        .otherwise(pl.lit("VJ"))
+                        .alias("locus_group")
+                    ]
+                )
+                .group_by(group_keys)
+                .agg(agg_exprs)
+                .sort("_original_order")
+                .drop("_original_order")
+                .collect(engine="streaming")
+            )
         else:
             agg_exprs += [
                 expr
@@ -1382,27 +1418,39 @@ class DandelionPolars:
                     ),
                 ]
             ]
-        data = self._data if data is None else data
-        result = (
-            data.lazy()
-            .with_row_index("_original_order")
-            .with_columns(
-                [
-                    pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
-                    .then(pl.lit("VDJ"))
-                    .otherwise(pl.lit("VJ"))
-                    .alias("locus_group")
-                ]
+            result = (
+                data.with_columns(
+                    [
+                        pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
+                        .then(pl.lit("VDJ"))
+                        .otherwise(pl.lit("VJ"))
+                        .alias("locus_group")
+                    ]
+                )
+                .group_by(group_keys)
+                .agg(agg_exprs)
+                .sort("_original_order")
+                .drop("_original_order")
+                .collect(engine="streaming")
             )
-            .group_by("cell_id")
-            .agg(agg_exprs)
-            .sort("_original_order")
-            .drop("_original_order")
-            .collect(engine="streaming")
-        )
+
+        # If celltype filtering was used, rejoin with metadata to maintain all cells
+        if celltype is not None:
+            ref = self._metadata.with_row_index("_original_order").select(
+                pl.col(["cell_id", "_original_order"])
+            )
+            result = (
+                ref.lazy()
+                .join(result.lazy(), on="cell_id", how="left")
+                .sort("_original_order")
+                .drop("_original_order")
+                .collect(engine="streaming")
+            )
+
         # drop literal column
         if "literal" in result.collect_schema().names():
             result = result.drop("literal")
+
         return result
 
     def _split_first(
