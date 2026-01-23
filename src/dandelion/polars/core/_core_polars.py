@@ -33,6 +33,9 @@ from dandelion.utilities._utilities import (
     EMPTIES_STR,
     BOOLEAN_LIKE_COLUMNS,
     CHECK_COLS,
+    MUTATIONS,
+    VDJLENGTHS,
+    SEQINFO,
     sanitize_boolean,
     lib_type,
     Contig,
@@ -1407,6 +1410,7 @@ class DandelionPolars:
         cols: list[str] | str,
         key_added: list[str] | str | None = None,
         data: pl.DataFrame | pl.LazyFrame | None = None,
+        celltype: Literal["B", "abT", "gdT"] | None = None,
     ) -> pl.DataFrame:
         key_added = cols if key_added is None else key_added
         cols = [cols] if isinstance(cols, str) else cols
@@ -1431,9 +1435,28 @@ class DandelionPolars:
             ]
         ]
         data = self._data if data is None else data
+        # Add row index once at the start
+        data = data.lazy().with_row_index("_original_order")
+        if celltype is not None:
+            # Add a celltype_group column based on locus/isotype logic
+            data = data.lazy().with_columns(
+                pl.when(pl.col("locus").is_in(["IGH", "IGK", "IGL"]))
+                .then(pl.lit("B"))
+                .when(pl.col("locus").is_in(["TRB", "TRA"]))
+                .then(pl.lit("abT"))
+                .when(pl.col("locus").is_in(["TRD", "TRG"]))
+                .then(pl.lit("gdT"))
+                .otherwise(pl.lit("Unknown"))
+                .alias("celltype_group")
+            )
+            # Filter for the requested celltype
+            data = data.filter(pl.col("celltype_group") == celltype)
+            group_keys = ["cell_id", "celltype_group"]
+        else:
+            group_keys = ["cell_id"]
+        # Compute aggregation, keep _original_order
         result = (
             data.lazy()
-            .with_row_index("_original_order")
             .with_columns(
                 [
                     pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
@@ -1442,12 +1465,26 @@ class DandelionPolars:
                     .alias("locus_group")
                 ]
             )
-            .group_by("cell_id")
+            .group_by(group_keys)
             .agg(agg_exprs)
             .sort("_original_order")
             .drop("_original_order")
             .collect(engine="streaming")
         )
+        # Build reference with _original_order
+        if celltype is not None:
+            ref = self._metadata.with_row_index("_original_order").select(
+                pl.col(["cell_id", "_original_order"])
+            )
+            # Now sort and drop _original_order
+            result = (
+                ref.lazy()
+                .join(result.lazy(), on="cell_id", how="left")
+                .sort("_original_order")
+                .drop("_original_order")
+                .lazy()
+                .collect(engine="streaming")
+            )
         # drop literal column
         if "literal" in result.collect_schema().names():
             result = result.drop("literal")
@@ -2539,8 +2576,27 @@ class DandelionPolars:
             else:
                 meta = None
             if meta is not None:
+                # Get columns that would be duplicated (present in both dataframes, excluding join key)
+                meta_cols = set(meta.collect_schema().names())
+                metadata_cols = set(self._metadata.collect_schema().names())
+                duplicate_cols = meta_cols.intersection(metadata_cols) - {
+                    "cell_id"
+                }
+
+                # Drop duplicate columns from metadata before joining
+                if duplicate_cols:
+                    self._metadata = self._metadata.lazy().drop(*duplicate_cols)
+
                 self._metadata = self._metadata.lazy().join(
                     meta.lazy(), on="cell_id", how="left"
+                )
+                # remove empty strings
+                self._metadata = self._metadata.with_columns(
+                    [
+                        pl.col(col).replace("", None)
+                        for col in self._metadata.collect_schema()
+                        if self._metadata.collect_schema()[col] == pl.String
+                    ]
                 )
                 self._metadata = (
                     self._metadata.collect(engine="streaming").lazy()
@@ -2554,6 +2610,97 @@ class DandelionPolars:
             self._cache_data()
         if as_pandas:
             self.to_pandas()
+
+    def update_plus(
+        self,
+        option: Literal[
+            "all",
+            "sequence",
+            "mutations",
+            "cdr3 lengths",
+            "mutations and cdr3 lengths",
+        ] = "mutations and cdr3 lengths",
+    ) -> None:
+        """Retrieve additional data columns that are useful.
+
+        Parameters
+        ----------
+        option : Literal["all", "sequence", "mutations", "cdr3 lengths", "mutations and cdr3 lengths", ], optional
+            One of 'all', 'sequence', 'mutations', 'cdr3 lengths', 'mutations and cdr3 lengths'.
+        """
+        if self._backend == "pandas":
+            self.to_polars()
+        mutations = [x for x in MUTATIONS if x in self._data.collect_schema()]
+        vdjlengths = [x for x in VDJLENGTHS if x in self._data.collect_schema()]
+        seqinfo = [x for x in SEQINFO if x in self._data.collect_schema()]
+        if option == "all":
+            if len(mutations) > 0:
+                self.update_metadata(
+                    retrieve=mutations,
+                    split=True,
+                    average=False,
+                )
+                self.update_metadata(
+                    retrieve=mutations,
+                    average=False,
+                    split=False,
+                )
+            if len(vdjlengths) > 0:
+                self.update_metadata(
+                    retrieve=vdjlengths,
+                    split=True,
+                    average=True,
+                )
+            if len(seqinfo) > 0:
+                self.update_metadata(
+                    retrieve=seqinfo,
+                    split=True,
+                    join=True,
+                )
+        if option == "sequence":
+            if len(seqinfo) > 0:
+                self.update_metadata(
+                    retrieve=seqinfo,
+                    split=True,
+                    join=True,
+                )
+        if option == "mutations":
+            if len(mutations) > 0:
+                self.update_metadata(
+                    retrieve=mutations,
+                    split=True,
+                    average=False,
+                )
+                self.update_metadata(
+                    retrieve=mutations,
+                    split=False,
+                    average=False,
+                )
+        if option == "cdr3 lengths":
+            if len(vdjlengths) > 0:
+                self.update_metadata(
+                    retrieve=vdjlengths,
+                    split=True,
+                    average=True,
+                )
+        if option == "mutations and cdr3 lengths":
+            if len(mutations) > 0:
+                self.update_metadata(
+                    retrieve=mutations,
+                    split=True,
+                    average=False,
+                )
+                self.update_metadata(
+                    retrieve=mutations,
+                    split=False,
+                    average=False,
+                )
+            if len(vdjlengths) > 0:
+                self.update_metadata(
+                    retrieve=vdjlengths,
+                    split=True,
+                    average=True,
+                )
 
     def write_airr(
         self, filename: str = "dandelion_airr.tsv", **kwargs
