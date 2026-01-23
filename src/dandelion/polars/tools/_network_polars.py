@@ -203,7 +203,7 @@ def generate_network(
             raise ValueError(f"key {key_} not found in data.")
 
         if lazy:
-            from dandelion.tools._lazydistances_polars import (
+            from dandelion.polars.tools._lazydistances_polars import (
                 dask_safe_slice_square,
             )
 
@@ -305,7 +305,7 @@ def generate_network(
         )
         if distance_mode == "clone":
             if lazy:
-                from dandelion.tools._lazydistances_polars import (
+                from dandelion.polars.tools._lazydistances_polars import (
                     calculate_distance_matrix_zarr,
                 )
 
@@ -373,7 +373,7 @@ def generate_network(
                     )
         elif distance_mode == "full":
             if lazy:
-                from dandelion.tools._lazydistances_polars import (
+                from dandelion.polars.tools._lazydistances_polars import (
                     calculate_distance_matrix_zarr,
                 )
 
@@ -954,10 +954,22 @@ def clone_degree(
             )
         else:
             G = vdj.graph[0]
-            cd = pd.DataFrame.from_dict(G.degree(weight=weight))
-            cd.set_index(0, inplace=True)
-            # vdj._metadata["clone_degree"] = pd.Series(cd[1])
-            # TODO: Fix for Polars
+            degree_dict = dict(G.degree(weight=weight))
+            df = pl.DataFrame(
+                {
+                    "cell_id": list(degree_dict.keys()),
+                    "clone_degree": list(degree_dict.values()),
+                }
+            )
+            # now merge into vdj._metadata
+            vdj._metadata = (
+                vdj._metadata.lazy()
+                .with_row_index("_orig_idx")
+                .join(df.lazy(), on="cell_id", how="left")
+                .sort("_orig_idx")
+                .drop("_orig_idx")
+                .collect(engine="streaming")
+            )
     else:
         raise TypeError("Input object must be of {}".format(DandelionPolars))
 
@@ -986,13 +998,21 @@ def clone_centrality(vdj: DandelionPolars):
         else:
             G = vdj.graph[0]
             cc = nx.closeness_centrality(G)
-            cc = pd.DataFrame.from_dict(
-                cc, orient="index", columns=["clone_centrality"]
+            df = pl.DataFrame(
+                {
+                    "cell_id": list(cc.keys()),
+                    "clone_centrality": list(cc.values()),
+                }
             )
-            # vdj._metadata["clone_centrality"] = pd.Series(
-            #     cc["clone_centrality"]
-            # )
-            # TODO: Fix for Polars
+
+            vdj._metadata = (
+                vdj._metadata.lazy()
+                .with_row_index("_orig_idx")
+                .join(df.lazy(), on="cell_id", how="left")
+                .sort("_orig_idx")
+                .drop("_orig_idx")
+                .collect(engine="streaming")
+            )
     else:
         raise TypeError("Input object must be of {}".format(DandelionPolars))
 

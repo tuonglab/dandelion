@@ -113,7 +113,7 @@ def test_scoper_i(create_testfolder):
     f = create_testfolder / "test.tsv"
     vdj = Dandelion(f)
     assert "clone_id" not in vdj._data
-    from dandelion.external.immcantation.scoper import identical_clones
+    from dandelion.external.immcantation.base.scoper import identical_clones
 
     try:
         identical_clones(vdj)
@@ -129,7 +129,7 @@ def test_scoper_h(create_testfolder):
     f = create_testfolder / "test.tsv"
     vdj = Dandelion(f)
     assert "clone_id" not in vdj._data
-    from dandelion.external.immcantation.scoper import hierarchical_clones
+    from dandelion.external.immcantation.base.scoper import hierarchical_clones
 
     try:
         hierarchical_clones(vdj, threshold=0.15)
@@ -145,7 +145,7 @@ def test_scoper_h(create_testfolder):
     f = create_testfolder / "test.tsv"
     vdj = Dandelion(f)
     assert "clone_id" not in vdj._data
-    from dandelion.external.immcantation.scoper import spectral_clones
+    from dandelion.external.immcantation.base.scoper import spectral_clones
 
     try:
         spectral_clones(vdj, method="novj")

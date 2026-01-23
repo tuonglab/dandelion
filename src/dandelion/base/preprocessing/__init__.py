@@ -8,11 +8,11 @@ from dandelion.base.preprocessing._preprocessing import (
     reannotate_genes,
     reassign_alleles,
 )
-from dandelion.external.immcantation.shazam import (
+from dandelion.external.immcantation.base.shazam import (
     calculate_threshold,
     quantify_mutations,
 )
-from dandelion.external.immcantation.changeo import create_germlines
+from dandelion.external.immcantation.base.changeo import create_germlines
 from dandelion.external.scanpy import recipe_scanpy_qc
 
 __all__ = [

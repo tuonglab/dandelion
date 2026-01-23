@@ -4,7 +4,7 @@ import pandas as pd
 
 from typing import Literal
 
-from dandelion.utilities._core import Dandelion, load_data
+from dandelion.base.core._core import Dandelion, load_data
 from dandelion.utilities._utilities import (
     sanitize_data,
     sanitize_data_for_saving,

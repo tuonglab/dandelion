@@ -28,12 +28,12 @@ from typing import Literal
 from dandelion.external.skbio._chao1 import chao1
 from dandelion.external.skbio._gini import gini_index
 from dandelion.external.skbio._shannon import shannon
-from dandelion.tools._network import (
+from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.tools._network_polars import (
     clone_centrality,
     clone_degree,
     generate_network,
 )
-from dandelion.polars.core._core_polars import DandelionPolars
 from dandelion.utilities._utilities import flatten
 
 
@@ -718,12 +718,22 @@ def _bootstrap_network(
             expanded_only=expanded_only,
             contracted=contracted,
         )
-        resample_sized._metadata["clone_network_vertex_size_gini"] = pd.Series(
-            g_c_v_res
+        # use join instead?
+        resample_sized._metadata = (
+            resample_sized._metadata.lazy()
+            .with_row_index("_original_index")
+            .join(g_c_v_res.lazy(), on="cell_id", how="left")
+            .sort("_original_index")
+            .drop("_original_index")
         )
-        resample_sized._metadata["clone_network_cluster_size_gini"] = pd.Series(
-            g_c_c_res
+        resample_sized._metadata = (
+            resample_sized._metadata.lazy()
+            .with_row_index("_original_index")
+            .join(g_c_c_res.lazy(), on="cell_id", how="left")
+            .sort("_original_index")
+            .drop("_original_index")
         )
+
     elif met == "clone_centrality":
         clone_centrality(resample_sized)
     elif met == "clone_degree":
@@ -731,14 +741,28 @@ def _bootstrap_network(
     else:
         raise ValueError("Unknown metric.")
     # ---- Clone size gini
-    _dat = resample_sized._metadata.copy()
-    _tab = _dat[clonekey].value_counts()
-    drop_nan_values(_tab)
+    _dat = resample_sized._metadata.clone()
+
+    # Check if _dat is lazy and collect if needed
+    if isinstance(_dat, pl.LazyFrame):
+        _dat = _dat.collect()
+
     # cluster gini
     if met == "clone_network":
-        cluster_gini = _dat[met + "_cluster_size_gini"].mean()
+        # Use polars select/collect to get mean
+        colname = met + "_cluster_size_gini"
+        cluster_gini = _dat.select(pl.col(colname).mean())[0, 0]
     else:
-        clonesizecounts = np.array(_tab)
+        # Get value counts using polars
+        _tab = (
+            _dat.lazy()
+            .group_by(clonekey)
+            .agg([pl.len().alias("count")])
+            .collect()
+        )
+        # Remove NaN/None clone keys
+        _tab = _tab.filter(~_tab[clonekey].is_null())
+        clonesizecounts = _tab["count"].to_numpy()
         clonesizecounts = clonesizecounts[clonesizecounts > 0]
         if len(clonesizecounts) > 1:
             clonesizecounts = np.append(clonesizecounts, 0)
@@ -747,17 +771,28 @@ def _bootstrap_network(
             if len(clonesizecounts) > 0
             else 0
         )
+
     # vertex gini
     if met == "clone_network":
-        vertex_gini = _dat[met + "_vertex_size_gini"].mean()
+        colname = met + "_vertex_size_gini"
+        vertex_gini = _dat.select(pl.col(colname).mean())[0, 0]
     else:
-        connected = resample_sized._metadata[met][
-            resample_sized._metadata[met] > 0
-        ]
-        graphcounts = np.array(connected.value_counts())
-        vertex_gini = (
-            calculate_gini_index(graphcounts) if len(graphcounts) > 0 else 0
-        )
+        # Use polars for value_counts and filtering
+        connected = _dat.filter(pl.col(met) > 0)
+        if connected.height > 0:
+            graphcounts = (
+                connected.lazy()
+                .group_by(met)
+                .agg([pl.len().alias("count")])
+                .collect()["count"]
+                .to_numpy()
+            )
+            vertex_gini = (
+                calculate_gini_index(graphcounts) if len(graphcounts) > 0 else 0
+            )
+        else:
+            vertex_gini = 0
+
     return cluster_gini, vertex_gini
 
 
@@ -974,7 +1009,7 @@ def safe_bootstrap_summary(
 
 def process_clone_network_stats(
     ddl_dat: DandelionPolars, expanded_only: bool, contracted: bool
-) -> tuple[dict, dict, dict]:
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """
     Process clone network statistics and calculate Gini indices.
 
@@ -989,7 +1024,7 @@ def process_clone_network_stats(
 
     Returns
     -------
-    tuple[dict, dict, dict]
+    tuple[pl.DataFrame, pl.DataFrame]
         Tuple containing dictionaries for node names, vertex sizes, and cluster sizes.
     """
     n_n, v_s, c_s = clone_networkstats(
@@ -1015,7 +1050,21 @@ def process_clone_network_stats(
     for cell in n_n:
         g_c_c_res.update({cell: g_c_c})
 
-    return g_c_v_res, g_c_c_res
+    # return as polars DataFrame
+    g_c_v_df = pl.DataFrame(
+        {
+            "cell_id": list(g_c_v_res.keys()),
+            "clone_network_vertex_size_gini": list(g_c_v_res.values()),
+        }
+    )
+    g_c_c_df = pl.DataFrame(
+        {
+            "cell_id": list(g_c_c_res.keys()),
+            "clone_network_cluster_size_gini": list(g_c_c_res.values()),
+        }
+    )
+
+    return g_c_v_df, g_c_c_df
 
 
 def clone_networkstats(

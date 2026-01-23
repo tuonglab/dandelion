@@ -97,7 +97,10 @@ def identical_clones(
             "Unable to initialise R instance. Please run this separately through R with scoper's tutorials."
         )
 
-    from dandelion.external.immcantation.scoper import safe_py2rpy, safe_rpy2py
+    from dandelion.external.immcantation.base.scoper import (
+        safe_py2rpy,
+        safe_rpy2py,
+    )
 
     scp = importr("scoper")
 
@@ -263,7 +266,10 @@ def hierarchical_clones(
             "Unable to initialise R instance. Please run this separately through R with scoper's tutorials."
         )
 
-    from dandelion.external.immcantation.scoper import safe_py2rpy, safe_rpy2py
+    from dandelion.external.immcantation.base.scoper import (
+        safe_py2rpy,
+        safe_rpy2py,
+    )
 
     scp = importr("scoper")
 
@@ -440,7 +446,10 @@ def spectral_clones(
             "Unable to initialise R instance. Please run this separately through R with scoper's tutorials."
         )
 
-    from dandelion.external.immcantation.scoper import safe_py2rpy, safe_rpy2py
+    from dandelion.external.immcantation.base.scoper import (
+        safe_py2rpy,
+        safe_rpy2py,
+    )
 
     scp = importr("scoper")
 

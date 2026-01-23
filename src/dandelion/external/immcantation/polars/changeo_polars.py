@@ -931,7 +931,7 @@ def create_germlines(
     germpass_outfile = tmpfile.parent / (tmpfile.stem + "_germ-pass.tsv")
     if isinstance(vdj, DandelionPolars):
         vdj._reinitialize_attributes(
-            data=germpass_outfile,
+            data=load_polars(germpass_outfile),
             metadata=vdj._metadata,
             germline=vdj.germline,
             layout=vdj.layout,

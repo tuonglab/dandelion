@@ -210,7 +210,9 @@ def generate_network(
             raise ValueError(f"key {key_} not found in data.")
 
         if lazy:
-            from dandelion.tools._lazydistances import dask_safe_slice_square
+            from dandelion.base.tools._lazydistances import (
+                dask_safe_slice_square,
+            )
 
         if sample is not None:
             if adata is not None:
@@ -265,7 +267,7 @@ def generate_network(
         )
         if distance_mode == "clone":
             if lazy:
-                from dandelion.tools._lazydistances import (
+                from dandelion.base.tools._lazydistances import (
                     calculate_distance_matrix_zarr,
                 )
 
@@ -304,7 +306,7 @@ def generate_network(
                     )
         elif distance_mode == "full":
             if lazy:
-                from dandelion.tools._lazydistances import (
+                from dandelion.base.tools._lazydistances import (
                     calculate_distance_matrix_zarr,
                 )
 

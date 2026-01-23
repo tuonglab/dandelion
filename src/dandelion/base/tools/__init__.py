@@ -19,7 +19,7 @@ from dandelion.base.tools._network import (
 )
 from dandelion.base.tools._diversity import clone_diversity, clone_rarefaction
 
-from dandelion.external.immcantation.changeo import define_clones
+from dandelion.external.immcantation.base.changeo import define_clones
 
 from dandelion.tools._layout import extract_edge_weights
 from dandelion.tools._trajectory import (

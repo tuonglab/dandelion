@@ -4,11 +4,11 @@ from unittest.mock import patch
 
 import polars as pl
 
-from dandelion.external.immcantation.shazam_polars import (
+from dandelion.external.immcantation.polars.shazam_polars import (
     quantify_mutations,
     calculate_threshold,
 )
-from dandelion.external.immcantation.changeo_polars import (
+from dandelion.external.immcantation.polars.changeo_polars import (
     define_clones,
     create_germlines,
 )
@@ -140,7 +140,9 @@ def test_scoper_i_polars(create_testfolder):
     out = load_polars(f)
     vdj = DandelionPolars(out)
     assert "clone_id" not in vdj._data.collect_schema().names()
-    from dandelion.external.immcantation.scoper_polars import identical_clones
+    from dandelion.external.immcantation.polars.scoper_polars import (
+        identical_clones,
+    )
 
     identical_clones(vdj)
     assert "clone_id" in vdj._data.collect_schema().names()
@@ -158,7 +160,7 @@ def test_scoper_h_polars(create_testfolder):
     out = load_polars(f)
     vdj = DandelionPolars(out)
     assert "clone_id" not in vdj._data.collect_schema().names()
-    from dandelion.external.immcantation.scoper_polars import (
+    from dandelion.external.immcantation.polars.scoper_polars import (
         hierarchical_clones,
     )
 
@@ -178,7 +180,9 @@ def test_scoper_spectral_polars(create_testfolder):
     out = load_polars(f)
     vdj = DandelionPolars(out)
     assert "clone_id" not in vdj._data.collect_schema().names()
-    from dandelion.external.immcantation.scoper_polars import spectral_clones
+    from dandelion.external.immcantation.polars.scoper_polars import (
+        spectral_clones,
+    )
 
     spectral_clones(vdj, method="novj")
     assert "clone_id" in vdj._data.collect_schema().names()

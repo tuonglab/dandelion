@@ -33,7 +33,7 @@ from time import sleep
 from tqdm import tqdm
 from typing import Literal
 
-from dandelion.external.immcantation.changeo_polars import (
+from dandelion.external.immcantation.polars.changeo_polars import (
     assigngenes_igblast,
     makedb_igblast,
     parsedb_heavy,
@@ -4332,7 +4332,7 @@ def check_contigs(
 
     if adata is not None:
         # Import transfer function from tools
-        from dandelion.tools._tools_polars import transfer
+        from dandelion.polars.tools._tools_polars import transfer
 
         # Transfer metadata to adata
         transfer(adata_, out_dat)
