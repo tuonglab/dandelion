@@ -236,6 +236,7 @@ def stackedbarplot(
     if isinstance(data, DandelionPolars):
         if data._backend == "polars":
             data.to_pandas()
+        data = data._metadata.copy()
     elif isinstance(data, AnnData):
         data = data.obs.copy()
     # quick fix to prevent dropping of nan

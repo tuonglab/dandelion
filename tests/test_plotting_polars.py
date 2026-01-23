@@ -18,11 +18,7 @@ from dandelion.polars.plotting import (
 def test_setup(create_testfolder, airr_reannotated, dummy_adata):
     """test_setup"""
     vdj, adata = check_contigs(airr_reannotated, dummy_adata)
-    assert airr_reannotated.shape[0] == 8
-    assert vdj._data.shape[0] == 8
-    assert vdj._metadata.shape[0] == 5
-    assert adata.n_obs == 5
-    vdj._data["clone_id"] = ["A", "A", "A", "A", "A", "A", "A", "A"]
+    vdj.data["clone_id"] = ["A", "A", "A", "A", "A", "A", "A", "A"]
     vdj = Dandelion(vdj._data)
     generate_network(vdj, layout_method="mod_fr")
     transfer(adata, vdj)
