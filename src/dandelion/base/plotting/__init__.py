@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from dandelion.plotting._plotting import (
+from dandelion.base.plotting._plotting import (
     barplot,
     clone_network,
     clone_overlap,

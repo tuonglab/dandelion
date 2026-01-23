@@ -3,7 +3,8 @@
 import pytest
 import polars as pl
 import numpy as np
-from dandelion.utilities._polars import DandelionPolars
+
+from dandelion.polars.core._core_polars import DandelionPolars
 
 
 @pytest.fixture

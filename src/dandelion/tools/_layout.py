@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -9,8 +10,6 @@ try:
     from networkx.utils import np_random_state as random_state
 except ImportError:
     from networkx.utils import random_state
-
-from dandelion.utilities._core import Dandelion
 
 
 def generate_layout(
@@ -510,13 +509,15 @@ def _rescale_layout(pos: np.ndarray, scale: float = 1) -> np.ndarray:
     return pos
 
 
-def extract_edge_weights(vdj: Dandelion, expanded_only: bool = False) -> list:
+def extract_edge_weights(
+    vdj: Dandelion | DandelionPolars, expanded_only: bool = False
+) -> list:
     """
     Retrieve edge weights (BCR levenshtein distance) from graph.
 
     Parameters
     ----------
-    vdj : Dandelion
+    vdj : Dandelion | DandelionPolars
         Dandelion object after `tl.generate_network` has been run.
     expanded_only : bool, optional
         whether to retrieve the edge weights from the expanded only graph or entire graph.

@@ -1,18 +1,17 @@
-import pytest
-import pandas as pd
 import polars as pl
+
+from dandelion.polars.io import read_10x_vdj
 
 
 def test_productive_filtering(annotation_10x_mouse):
     """Check if productive filtering is causing the issue"""
-    from dandelion.utilities._polars import read_10x_vdj_polars
 
     missing_cells = ["AGCCTAAGTGTTTGTG-1", "GACGCGTCAGTAGAGC-1"]
 
     print("\n=== PRODUCTIVE FILTERING CHECK ===")
 
     # Load data
-    vdj_pl = read_10x_vdj_polars(annotation_10x_mouse, remove_malformed=False)
+    vdj_pl = read_10x_vdj(annotation_10x_mouse, remove_malformed=False)
     pl_data = (
         vdj_pl._data.collect(engine="streaming")
         if isinstance(vdj_pl._data, pl.LazyFrame)

@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 import dandelion as ddl
+import pandas as pd
+import polars as pl
 import pytest
+
+from dandelion.utilities._utilities import write_fasta
+from dandelion.base.core._core import Dandelion, check_travdv
 
 
 @pytest.mark.usefixtures("create_testfolder")
 def test_loadtravdv(airr_travdv):
     """test_loadtravdv"""
-    temp = ddl.utilities._core.check_travdv(airr_travdv)
+    temp = check_travdv(airr_travdv)
     assert temp.shape[0] == 6
     assert all([i == "TRA" for i in airr_travdv["locus"]])
     assert all([i == "TRD" for i in temp["locus"]])
@@ -15,7 +20,7 @@ def test_loadtravdv(airr_travdv):
 @pytest.mark.usefixtures("airr_travdv")
 def test_loadtravdv2(airr_travdv):
     """test_loadtravdv2"""
-    vdj = ddl.Dandelion(airr_travdv)
+    vdj = Dandelion(airr_travdv)
     assert vdj._data.shape[0] == 6
     assert all([i == "TRD" for i in vdj._data["locus"]])
 
@@ -24,7 +29,7 @@ def test_loadtravdv2(airr_travdv):
 def test_write_fasta_tr(create_testfolder, fasta_10x_travdv):
     """testwrite_fasta_tr"""
     out_fasta = create_testfolder / "filtered_contig.fasta"
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x_travdv, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x_travdv, out_fasta=out_fasta)
     assert len(list(create_testfolder.iterdir())) == 1
 
 
@@ -63,7 +68,16 @@ def test_loadtravdv_reannotated(create_testfolder):
     vdj = ddl.Dandelion(
         create_testfolder / "dandelion" / "filtered_contig_dandelion.tsv"
     )
-    assert len([i for i in vdj._data["locus"] if i == "TRD"]) == 0
+    if isinstance(vdj._data, pd.DataFrame):
+        assert len([i for i in vdj._data["locus"] if i == "TRD"]) == 0
+    else:
+        assert (
+            vdj._data.filter(pl.col("locus") == "TRD")
+            .select(pl.len())
+            .collect()
+            .item()
+            == 0
+        )
 
 
 @pytest.mark.usefixtures("create_testfolder", "dummy_adata_travdv")
@@ -72,6 +86,18 @@ def test_travdv_filter(create_testfolder, dummy_adata_travdv):
     vdj = ddl.Dandelion(
         create_testfolder / "dandelion" / "filtered_contig_dandelion.tsv"
     )
-    assert len([i for i in vdj._data["locus"] if i == "TRD"]) == 0
+    if isinstance(vdj._data, pd.DataFrame):
+        assert len([i for i in vdj._data["locus"] if i == "TRD"]) == 0
+    else:
+        assert (
+            vdj._data.filter(pl.col("locus") == "TRD")
+            .select(pl.len())
+            .collect()
+            .item()
+            == 0
+        )
     vdj2, adata = ddl.pp.check_contigs(vdj, dummy_adata_travdv)
-    assert vdj2._data.shape[0] > 0
+    if isinstance(vdj2._data, pd.DataFrame):
+        assert vdj2._data.shape[0] > 0
+    else:
+        assert vdj2._data.collect().height > 0

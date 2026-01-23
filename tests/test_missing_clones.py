@@ -1,16 +1,14 @@
-import pytest
-import pandas as pd
 import polars as pl
+
+from dandelion.base.core._core import load_data
+from dandelion.base.io import read_10x_vdj
+from dandelion.base.tools import find_clones
+from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
+from dandelion.polars.tools import find_clones as find_clones_polars
 
 
 def test_missing_clones_in_metadata(annotation_10x_mouse):
     """Find which clones are missing from polars metadata"""
-    from dandelion.tools import find_clones
-    from dandelion.tools._tools_polars import find_clones as find_clones_polars
-    from dandelion.utilities._io import read_10x_vdj
-    from dandelion.utilities._polars import read_10x_vdj_polars
-    from dandelion.utilities._core import load_data
-
     # Load data using proper readers
     vdj_pd = read_10x_vdj(annotation_10x_mouse)
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse)

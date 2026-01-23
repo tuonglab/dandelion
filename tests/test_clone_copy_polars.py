@@ -3,9 +3,9 @@ import polars as pl
 import pytest
 from pandas.testing import assert_frame_equal
 
-from dandelion.utilities._polars import DandelionPolars
-from dandelion.tools._tools_polars import find_clones
-from dandelion.tools._network_polars import generate_network
+from dandelion.polars.core import Dandelion
+from dandelion.polars.tools import find_clones
+from dandelion.polars.tools import generate_network
 
 
 @pytest.mark.usefixtures("vdj_smaller")
@@ -23,11 +23,7 @@ def test_clone_and_copy_consistency(vdj_smaller, full_check):
         return df
 
     # Build a Polars-backed object from fixture
-    base = DandelionPolars(
-        data=vdj_smaller.data,
-        lazy=True,
-        verbose=False,
-    )
+    base = Dandelion(vdj_smaller._data)
     if full_check:
         find_clones(base)
         generate_network(base, key="junction")

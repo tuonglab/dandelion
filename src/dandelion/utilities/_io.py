@@ -15,111 +15,15 @@ from scipy.sparse import csr_matrix
 from dandelion.utilities._core import Dandelion, load_data
 from dandelion.utilities._utilities import (
     DEFAULT_PREFIX,
+    CELLRANGER,
+    AIRR,
     deprecated,
+    fasta_iterator,
     all_missing,
     sanitize_blastn,
     sanitize_data,
     Contig,
 )
-
-
-AIRR = [
-    "cell_id",
-    "sequence_id",
-    "sequence",
-    "sequence_aa",
-    "productive",
-    "complete_vdj",
-    "vj_in_frame",
-    "locus",
-    "v_call",
-    "d_call",
-    "j_call",
-    "c_call",
-    "junction",
-    "junction_aa",
-    "consensus_count",
-    "umi_count",
-    "cdr3_start",
-    "cdr3_end",
-    "sequence_length_10x",
-    "high_confidence_10x",
-    "is_cell_10x",
-    "fwr1_aa",
-    "fwr1",
-    "cdr1_aa",
-    "cdr1",
-    "fwr2_aa",
-    "fwr2",
-    "cdr2_aa",
-    "cdr2",
-    "fwr3_aa",
-    "fwr3",
-    "fwr4_aa",
-    "fwr4",
-    "clone_id",
-    "raw_consensus_id_10x",
-    "exact_subclonotype_id_10x",
-]
-CELLRANGER = [
-    "barcode",
-    "contig_id",
-    "sequence",
-    "aa_sequence",
-    "productive",
-    "full_length",
-    "frame",
-    "chain",
-    "v_gene",
-    "d_gene",
-    "j_gene",
-    "c_gene",
-    "cdr3_nt",
-    "cdr3",
-    "reads",
-    "umis",
-    "cdr3_start",
-    "cdr3_stop",
-    "length",
-    "high_confidence",
-    "is_cell",
-    "fwr1",
-    "fwr1_nt",
-    "cdr1",
-    "cdr1_nt",
-    "fwr2",
-    "fwr2_nt",
-    "cdr2",
-    "cdr2_nt",
-    "fwr3",
-    "fwr3_nt",
-    "fwr4",
-    "fwr4_nt",
-    "raw_clonotype_id",
-    "raw_consensus_id",
-    "exact_subclonotype_id",
-]
-
-
-def fasta_iterator(fh: str) -> tuple[str, str]:
-    """Read in a fasta file as an iterator."""
-    while True:
-        line = fh.readline()
-        if line.startswith(">"):
-            break
-    while True:
-        header = line[1:-1].rstrip()
-        sequence = fh.readline().rstrip()
-        while True:
-            line = fh.readline()
-            if not line:
-                break
-            if line.startswith(">"):
-                break
-            sequence += line.rstrip()
-        yield (header, sequence)
-        if not line:
-            return
 
 
 def decode(df):

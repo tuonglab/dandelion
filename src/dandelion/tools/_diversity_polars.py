@@ -33,7 +33,7 @@ from dandelion.tools._network import (
     clone_degree,
     generate_network,
 )
-from dandelion.utilities._polars import DandelionPolars
+from dandelion.polars.core._core_polars import DandelionPolars
 from dandelion.utilities._utilities import flatten
 
 

@@ -12,15 +12,15 @@ from scanpy import logging as logg
 from subprocess import run
 from typing import Literal
 
-from dandelion.utilities._polars import (
+from dandelion.polars.core._core_polars import (
     DandelionPolars,
     load_polars,
-    _write_airr,
+    write_airr,
 )
-from dandelion.utilities._core import write_fasta
 from dandelion.utilities._utilities import (
     set_germline_env,
     set_igblast_env,
+    write_fasta,
     NO_DS,
 )
 
@@ -475,8 +475,8 @@ def define_clones(
         outfile = outFolder / (out_FilePrefix + "_clone.tsv")
 
     # Write files
-    _write_airr(dat_h, h_file1)
-    _write_airr(dat_l, l_file)
+    write_airr(dat_h, h_file1)
+    write_airr(dat_l, l_file)
 
     # Determine v_call field
     v_field = (
@@ -719,7 +719,7 @@ def define_clones(
         )
 
         # Write heavy chains
-        _write_airr(heavy_df, out_file)
+        write_airr(heavy_df, out_file)
         return (heavy_df, light_df)
 
     logg.info("Running command: %s\n" % (" ".join(cmd)))
@@ -891,7 +891,7 @@ def create_germlines(
             else Path(tempfile.TemporaryDirectory().name) / "tmp.tsv"
         )
         if isinstance(vdj, (pl.DataFrame, pl.LazyFrame)):
-            _write_airr(data=vdj, save=tmpfile)
+            write_airr(data=vdj, save=tmpfile)
         creategermlines(
             airr_file=tmpfile,
             germline=germline,
@@ -930,13 +930,12 @@ def create_germlines(
     # return as DandelionPolars object
     germpass_outfile = tmpfile.parent / (tmpfile.stem + "_germ-pass.tsv")
     if isinstance(vdj, DandelionPolars):
-        vdj.__init__(
+        vdj._reinitialize_attributes(
             data=germpass_outfile,
             metadata=vdj._metadata,
             germline=vdj.germline,
             layout=vdj.layout,
             graph=vdj.graph,
-            verbose=False,
         )
         out_vdj = vdj.copy()
     else:

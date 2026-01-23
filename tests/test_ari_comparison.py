@@ -9,11 +9,10 @@ import pytest
 from sklearn.metrics import adjusted_rand_score
 import polars as pl
 
-from dandelion import Dandelion
-from dandelion.utilities._polars import DandelionPolars
-from dandelion.tools import find_clones
-from dandelion.tools._tools_polars import find_clones as find_clones_polars
-from dandelion.tools._tools_polars import concat
+from dandelion.base.core import Dandelion
+from dandelion.base.tools import find_clones
+from dandelion.polars.core import Dandelion as DandelionPolars
+from dandelion.polars.tools import find_clones as find_clones_polars
 
 
 @pytest.mark.usefixtures("airr_reannotated")
@@ -22,9 +21,8 @@ def test_ari_find_clones_pandas_vs_polars(airr_reannotated):
     # Create Dandelion (pandas) object
     dan_pd = Dandelion(airr_reannotated, verbose=False)
 
-    # Create DandelionPolars object - use concat to handle dtype issues
-    dan_pl_init = DandelionPolars(airr_reannotated, verbose=False)
-    dan_pl = concat([dan_pl_init], verbose=False)
+    # Create DandelionPolars object
+    dan_pl = DandelionPolars(airr_reannotated, verbose=False)
 
     # Run pandas find_clones (modifies in place)
     find_clones(dan_pd, verbose=False)
@@ -60,8 +58,7 @@ def test_ari_identity_thresholds(airr_reannotated):
         dan_pd = Dandelion(airr_reannotated, verbose=False)
 
         # Create DandelionPolars object
-        dan_pl_init = DandelionPolars(airr_reannotated, verbose=False)
-        dan_pl = concat([dan_pl_init], verbose=False)
+        dan_pl = DandelionPolars(airr_reannotated, verbose=False)
 
         # Run with identity threshold
         find_clones(dan_pd, identity=identity, verbose=False)
@@ -98,8 +95,7 @@ def test_ari_by_alleles(airr_reannotated):
         dan_pd = Dandelion(airr_reannotated, verbose=False)
 
         # Create DandelionPolars object
-        dan_pl_init = DandelionPolars(airr_reannotated, verbose=False)
-        dan_pl = concat([dan_pl_init], verbose=False)
+        dan_pl = DandelionPolars(airr_reannotated, verbose=False)
 
         # Run with by_alleles
         find_clones(dan_pd, by_alleles=by_alleles, verbose=False)
@@ -134,8 +130,7 @@ def test_ari_junction_keys(airr_reannotated):
         dan_pd = Dandelion(airr_reannotated, verbose=False)
 
         # Create DandelionPolars object
-        dan_pl_init = DandelionPolars(airr_reannotated, verbose=False)
-        dan_pl = concat([dan_pl_init], verbose=False)
+        dan_pl = DandelionPolars(airr_reannotated, verbose=False)
 
         # Run with specific junction_key
         find_clones(dan_pd, key=junction_key, verbose=False)
@@ -172,8 +167,7 @@ def test_ari_sequence_keys(airr_reannotated):
         dan_pd = Dandelion(airr_reannotated, verbose=False)
 
         # Create DandelionPolars object
-        dan_pl_init = DandelionPolars(airr_reannotated, verbose=False)
-        dan_pl = concat([dan_pl_init], verbose=False)
+        dan_pl = DandelionPolars(airr_reannotated, verbose=False)
 
         # Run with specific sequence key
         find_clones(dan_pd, key=seq_key, verbose=False)
@@ -210,8 +204,7 @@ def test_ari_combined_parameters(airr_reannotated):
         dan_pd = Dandelion(airr_reannotated, verbose=False)
 
         # Create DandelionPolars object
-        dan_pl_init = DandelionPolars(airr_reannotated, verbose=False)
-        dan_pl = concat([dan_pl_init], verbose=False)
+        dan_pl = DandelionPolars(airr_reannotated, verbose=False)
 
         # Run pandas with params
         find_clones(

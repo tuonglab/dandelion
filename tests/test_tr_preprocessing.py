@@ -3,12 +3,14 @@ import pytest
 import pandas as pd
 import dandelion as ddl
 
+from dandelion.utilities._utilities import write_fasta
+
 
 @pytest.mark.usefixtures("create_testfolder", "fasta_10x_tr1")
 def test_write_fasta_tr1(create_testfolder, fasta_10x_tr1):
     """test_write_fasta_tr1"""
     out_fasta = create_testfolder / "filtered_contig.fasta"
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x_tr1, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x_tr1, out_fasta=out_fasta)
     assert len(list(create_testfolder.iterdir())) == 1
 
 
@@ -16,7 +18,7 @@ def test_write_fasta_tr1(create_testfolder, fasta_10x_tr1):
 def test_write_fasta_tr2(create_testfolder, fasta_10x_tr2):
     """test_write_fasta_tr2"""
     out_fasta = create_testfolder / "all_contig.fasta"
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x_tr2, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x_tr2, out_fasta=out_fasta)
     assert len(list(create_testfolder.iterdir())) == 2
 
 
@@ -106,6 +108,10 @@ def test_filtercontigs(
     dat = pd.read_csv(f, sep="\t")
     vdj, adata = ddl.pp.check_contigs(dat, dummy_adata_tr)
     assert dat.shape[0] == expected
-    assert vdj._data.shape[0] == expected
-    assert vdj._metadata.shape[0] == expected
+    if isinstance(vdj._data, pd.DataFrame):
+        assert vdj._data.shape[0] == expected
+        assert vdj._metadata.shape[0] == expected
+    else:
+        assert vdj._data.collect().height == expected
+        assert vdj._metadata.collect().height == expected
     assert adata.n_obs == 3

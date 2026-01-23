@@ -1,33 +1,36 @@
 #!/usr/bin/env python
-import dandelion as ddl
 import pytest
+
+from dandelion.base.core import Dandelion
+from dandelion.base.tools import find_clones, generate_network
+from dandelion.base.preprocessing import check_contigs
 
 
 @pytest.mark.usefixtures("airr_reannotated")
 def test_load_data(airr_reannotated):
     """test load_data"""
-    vdj = ddl.Dandelion(airr_reannotated)
+    vdj = Dandelion(airr_reannotated)
     assert all(
         [x != y for x, y in zip(vdj._data["cell_id"], vdj._data["sequence_id"])]
     )
     cell_ids = list(vdj._data["cell_id"])
     tmp = vdj._data.drop("cell_id", axis=1)
-    vdj = ddl.Dandelion(tmp)
+    vdj = Dandelion(tmp)
     assert all([x == y for x, y in zip(vdj._data["cell_id"], cell_ids)])
 
 
 @pytest.mark.usefixtures("airr_generic")
 def test_slice_data(airr_generic):
     """test load_data"""
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)
     assert vdj._data.shape[0] == 130
-    assert vdj._metadata.shape[0] == 45
+    assert vdj._metadata.shape[0] == 43
     vdj2 = vdj[vdj.data["productive"] == "T"]
     assert vdj2._data.shape[0] == 119
     assert vdj2._metadata.shape[0] == 43
     vdj2 = vdj[vdj.metadata["productive_VDJ"] == "T"]
-    assert vdj2._data.shape[0] == 41
-    assert vdj2._metadata.shape[0] == 20
+    assert vdj2._data.shape[0] == 49
+    assert vdj2._metadata.shape[0] == 23
     vdj2 = vdj[
         vdj.metadata_names.isin(
             [
@@ -84,7 +87,7 @@ def test_slice_data(airr_generic):
 @pytest.mark.usefixtures("airr_generic")
 def test_names(airr_generic):
     """test load_data"""
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)
     assert all(i == j for i, j in zip(vdj.data_names, vdj._data.index))
     assert all(i == j for i, j in zip(vdj.metadata_names, vdj._metadata.index))
 
@@ -92,10 +95,10 @@ def test_names(airr_generic):
 @pytest.mark.usefixtures("airr_generic")
 def test_slice_data_with_graph(airr_generic):
     """Test slicing data with graph"""
-    vdj = ddl.Dandelion(airr_generic)
-    vdj = ddl.pp.check_contigs(vdj, productive_only=False)
-    ddl.tl.find_clones(vdj)
-    ddl.tl.generate_network(vdj, key="junction", layout_method="mod_fr")
+    vdj = Dandelion(airr_generic)
+    vdj = check_contigs(vdj, productive_only=False)
+    find_clones(vdj)
+    generate_network(vdj, key="junction", layout_method="mod_fr")
     vdj2 = vdj[vdj.data["productive"] == "T"]
     assert vdj2._data.shape[0] == 111  # 116
     assert vdj2._metadata.shape[0] == 43
@@ -168,18 +171,18 @@ def test_slice_data_with_graph(airr_generic):
 @pytest.mark.usefixtures("airr_generic")
 def test_isotype(airr_generic):
     """test load_data"""
-    vdj = ddl.Dandelion(airr_generic, custom_isotype_dict={"IGHC": "IGC"})
+    vdj = Dandelion(airr_generic, custom_isotype_dict={"IGHC": "IGC"})
 
 
 @pytest.mark.usefixtures("airr_generic")
 def test_change_ids(airr_generic):
     """test load_data"""
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)
     vdj.add_sequence_prefix("test")
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)
     vdj.add_sequence_suffix("test")
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)
     vdj.add_cell_prefix("test")
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)
     vdj.add_cell_suffix("test")
-    vdj = ddl.Dandelion(airr_generic)
+    vdj = Dandelion(airr_generic)

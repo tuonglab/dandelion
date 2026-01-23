@@ -25,7 +25,7 @@ from scanpy.plotting import palettes
 from scanpy.plotting._tools.scatterplots import embedding
 from typing import Callable, Literal, TYPE_CHECKING
 
-from dandelion.utilities._core import Dandelion
+from dandelion.base.core._core import Dandelion
 
 if TYPE_CHECKING:
     from anndata import AnnData

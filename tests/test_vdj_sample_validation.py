@@ -1,15 +1,10 @@
 """Test vdj_sample implementation."""
 
-import pytest
-import sys
 import pandas as pd
 import polars as pl
-import numpy as np
 
-sys.path.insert(0, "src")
-
-from dandelion.utilities._polars import DandelionPolars
-from dandelion.tools._tools_polars import vdj_sample
+from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.tools._tools_polars import vdj_sample
 
 
 def test_vdj_sample_without_replacement():

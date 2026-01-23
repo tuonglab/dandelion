@@ -27,7 +27,7 @@ from dandelion.utilities._utilities import (
     TRUES,
     FALSES,
     EMPTIES_STR,
-    BOOLEAN_LIKE_COLUMNS,
+    CHECK_COLS,
     deprecated,
     cmp_to_key,
     present,
@@ -51,16 +51,6 @@ from dandelion.external.anndata._compat import (
     unpack_index,
     Index,
 )
-
-CHECK_COLS = BOOLEAN_LIKE_COLUMNS + [
-    "rev_comp",
-    "productive",
-    "vj_in_frame",
-    "stop_codon",
-    "complete_vdj",
-    "v_frameshift",
-    "j_frameshift",
-]
 
 
 class Dandelion:

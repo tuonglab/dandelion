@@ -24,7 +24,8 @@ if TYPE_CHECKING:
     from mudata import MuData
     from awkward import Array
 
-from dandelion.utilities._polars import DandelionPolars, TRUES_STR, FALSES_STR
+from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.utilities._utilities import TRUES_STR, FALSES_STR
 from dandelion.utilities._utilities import (
     VCALL,
     FALSES,
@@ -457,7 +458,7 @@ def find_clones(
                 lambda s: _combine_single_locus(
                     s["_vdj_set"], s["_vj_set"], locus_celltype
                 ),
-                return_dtype=pl.List(pl.Utf8),
+                return_dtype=pl.List(pl.String),
             )
             .alias(f"_{key_added}_{locus_celltype}")
         )

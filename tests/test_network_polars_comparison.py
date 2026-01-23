@@ -5,9 +5,12 @@ Ensures both implementations produce identical results.
 
 import pytest
 import numpy as np
-import dandelion as ddl
-from dandelion.utilities._polars import DandelionPolars
-from dandelion.tools._network_polars import generate_network
+
+from dandelion.base.tools import generate_network
+from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.tools._network_polars import (
+    generate_network as generate_network_polars,
+)
 
 
 @pytest.mark.usefixtures("vdj_smaller")
@@ -21,7 +24,7 @@ def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
     vdj_polars = DandelionPolars(vdj_smaller.data)
 
     # Run generate_network on pandas version
-    ddl.tl.generate_network(
+    generate_network(
         vdj_pandas,
         key="junction",
         distance_mode="clone",
@@ -35,7 +38,7 @@ def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
     )
 
     # Run generate_network on Polars version
-    generate_network(
+    generate_network_polars(
         vdj_polars,
         key="junction",
         distance_mode="clone",
@@ -125,7 +128,7 @@ def test_generate_network_polars_vs_pandas_full(vdj_smaller):
     vdj_polars = DandelionPolars(vdj_smaller.data)
 
     # Run generate_network on pandas version
-    ddl.tl.generate_network(
+    generate_network(
         vdj_pandas,
         key="junction",
         distance_mode="full",
@@ -139,7 +142,7 @@ def test_generate_network_polars_vs_pandas_full(vdj_smaller):
     )
 
     # Run generate_network on Polars version
-    generate_network(
+    generate_network_polars(
         vdj_polars,
         key="junction",
         distance_mode="full",
@@ -205,7 +208,7 @@ def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
     vdj_eager = DandelionPolars(vdj_smaller.data, lazy=False)
 
     # Run lazy mode
-    generate_network(
+    generate_network_polars(
         vdj_eager,
         key="junction",
         distance_mode="clone",
@@ -219,7 +222,7 @@ def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
     )
 
     # Run lazy mode
-    generate_network(
+    generate_network_polars(
         vdj_lazy,
         key="junction",
         distance_mode="clone",
@@ -261,7 +264,7 @@ def test_generate_network_polars_vs_pandas_padded(vdj_smaller, pad_to_max):
     vdj_polars = DandelionPolars(vdj_smaller.data)
 
     # Run on pandas version
-    ddl.tl.generate_network(
+    generate_network(
         vdj_pandas,
         key="junction",
         distance_mode="full",
@@ -275,7 +278,7 @@ def test_generate_network_polars_vs_pandas_padded(vdj_smaller, pad_to_max):
     )
 
     # Run on Polars version
-    generate_network(
+    generate_network_polars(
         vdj_polars,
         key="junction",
         distance_mode="full",

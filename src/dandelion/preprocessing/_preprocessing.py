@@ -2918,7 +2918,7 @@ def check_contigs(
     """
     start = logg.info("Filtering contigs")
     if isinstance(data, Dandelion):
-        dat_ = load_data(data._data)    
+        dat_ = load_data(data._data)
     else:
         dat_ = load_data(data)
     # ensure that "unknown" are switched to blanks
@@ -3005,7 +3005,6 @@ def check_contigs(
     else:
         if save is not None:
             if save.endswith(".tsv"):
-                # _write_airr(dat, str(save))
                 write_airr(dat, save)
             else:
                 raise ValueError(
@@ -4307,13 +4306,11 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
                 dbpass = load_data(filePath1)
                 for col in jmm_transfer_cols:
                     update_j_col_df(dbpass, jmulti, col)
-                # _write_airr(dbpass, filePath1)
                 write_airr(dbpass, filePath1)
             if filePath1g is not None:
                 dbpassg = load_data(filePath1g)
                 for col in jmm_transfer_cols:
                     update_j_col_df(dbpassg, jmulti, col)
-                # _write_airr(dbpassg, filePath1g)
                 write_airr(dbpassg, filePath1g)
             if filePath2 is not None:
                 dbfail = load_data(filePath2)
@@ -4344,7 +4341,6 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
                             dbfail.at[i, "j_support"] = float(
                                 jmmapperssupport[0]
                             )
-                # _write_airr(dbfail, filePath2)
                 write_airr(dbfail, filePath2)
             if filePath3 is not None:
                 dball = load_data(filePath3)
@@ -4375,13 +4371,11 @@ def update_j_multimap(data: list[str], filename_prefix: list[str]):
                             dball.at[i, "j_support"] = float(
                                 jmmapperssupport[0]
                             )
-                # _write_airr(dball, filePath3)
                 write_airr(dball, filePath3)
             if filePath4 is not None:
                 dandy = load_data(filePath4)
                 for col in jmm_transfer_cols:
                     update_j_col_df(dandy, jmulti, col)
-                # _write_airr(dandy, filePath4)
                 write_airr(dandy, filePath4)
 
 
@@ -4540,7 +4534,6 @@ def mask_dj(
                     "" if s > j_evalue_threshold else c
                     for c, s in zip(dat["j_call"], dat["j_support_blastn"])
                 ]
-            # _write_airr(dat, filePath)
             write_airr(dat, filePath)
 
 
@@ -4599,7 +4592,6 @@ def change_file_location(
             ]
             for x in cols_to_merge:
                 tmp[x] = pd.Series(airr_output[x])
-            # _write_airr(tmp, filePath)
             write_airr(tmp, filePath)
             fp = Path(filePath)
             shutil.copyfile(fp, fp.parent.parent / fp.name)
@@ -4667,14 +4659,12 @@ def make_all(
         if filePath1 is not None:
             df1 = pd.read_csv(filePath1, sep="\t")
             df1 = check_complete(df1)
-            # _write_airr(df1, filePath1)
             write_airr(df1, filePath1)
             if filePath2 is not None:
                 df2 = pd.read_csv(filePath2, sep="\t")
                 df2 = check_complete(df2)
                 df = pd.concat([df1, df2])
                 if loci == "tr":
-                    # _write_airr(
                     write_airr(
                         df,
                         filePath1.parent
@@ -4684,17 +4674,14 @@ def make_all(
                         ),
                     )
                 else:
-                    # _write_airr(
                     write_airr(
                         df,
                         filePath1.parent
                         / (filePath1.name.rsplit(out_ex)[0] + "db-all.tsv"),
                     )
-                # _write_airr(df2, filePath2)
                 write_airr(df2, filePath2)
             else:
                 if loci == "tr":
-                    # _write_airr(
                     write_airr(
                         df1,
                         filePath1.parent
@@ -4704,7 +4691,6 @@ def make_all(
                         ),
                     )
                 else:
-                    # _write_airr(
                     write_airr(
                         df1,
                         filePath1.parent

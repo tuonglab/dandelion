@@ -3,13 +3,14 @@ import pandas as pd
 
 from unittest.mock import patch
 
-from dandelion.utilities import Dandelion, read_10x_vdj
-from dandelion.preprocessing import (
+from dandelion.base.core import Dandelion
+from dandelion.base.io import read_10x_vdj
+from dandelion.base.preprocessing import (
     quantify_mutations,
     calculate_threshold,
     create_germlines,
 )
-from dandelion.tools import define_clones
+from dandelion.base.tools import define_clones
 
 
 def require_r_package(pkg_name):

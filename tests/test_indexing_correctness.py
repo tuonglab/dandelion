@@ -7,13 +7,12 @@ to the correct cell_ids.
 import numpy as np
 import pandas as pd
 import polars as pl
-import pytest
 import tempfile
 
-from dandelion.tools._lazydistances import (
+from dandelion.base.tools._lazydistances import (
     calculate_distance_matrix_zarr as calculate_distance_matrix_zarr_pandas,
 )
-from dandelion.tools._lazydistances_polars import (
+from dandelion.polars.tools._lazydistances_polars import (
     calculate_distance_matrix_zarr as calculate_distance_matrix_zarr_polars,
 )
 from dandelion.utilities._distances import LevenshteinMetric

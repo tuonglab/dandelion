@@ -1,13 +1,11 @@
-import pytest
-import pandas as pd
 import polars as pl
+
+from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
+from dandelion.base.io import read_10x_vdj
 
 
 def test_locus_values_before_filter(annotation_10x_mouse):
     """Check locus values before remove_malformed filter"""
-    from dandelion.utilities._polars import read_10x_vdj_polars
-    from dandelion.utilities._io import read_10x_vdj
-
     missing_cells = ["AGCCTAAGTGTTTGTG-1", "GACGCGTCAGTAGAGC-1"]
 
     print("\n=== LOCUS VALUES BEFORE FILTERING ===")

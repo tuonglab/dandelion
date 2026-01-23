@@ -1,7 +1,9 @@
 import pytest
 
-import dandelion as ddl
 import numpy as np
+
+from dandelion.base.core import Dandelion
+from dandelion.base.tools import generate_network
 
 
 @pytest.mark.usefixtures(
@@ -35,7 +37,8 @@ def test_generate_network_clone(
     expected,
 ):
     """clonal membership"""
-    ddl.tl.generate_network(
+    vdj_small = Dandelion(vdj_small._data)
+    generate_network(
         vdj_small,
         key="junction",
         distance_mode="clone",
@@ -86,7 +89,8 @@ def test_generate_network_full(
     expected,
 ):
     """clonal membership"""
-    ddl.tl.generate_network(
+    vdj_smaller = Dandelion(vdj_smaller._data)
+    generate_network(
         vdj_smaller,
         key="junction",
         distance_mode="full",

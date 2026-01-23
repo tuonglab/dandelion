@@ -12,11 +12,11 @@ from dandelion.external.immcantation.changeo_polars import (
     define_clones,
     create_germlines,
 )
-from dandelion.utilities._polars import (
-    read_10x_vdj_polars,
+from dandelion.polars.core._core_polars import (
     DandelionPolars,
     load_polars,
 )
+from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
 
 
 def require_r_package(pkg_name):

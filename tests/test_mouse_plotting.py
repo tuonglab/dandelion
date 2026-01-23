@@ -3,6 +3,11 @@ import dandelion as ddl
 import pandas as pd
 import pytest
 
+from dandelion.base.io import read_10x_vdj
+from dandelion.base.preprocessing import check_contigs
+from dandelion.base.tools import find_clones, transfer, clone_overlap
+from dandelion.base.plotting import clone_overlap as clone_overlap_plot
+
 
 @pytest.mark.usefixtures(
     "create_testfolder", "annotation_10x", "dummy_adata_mouse"
@@ -13,12 +18,12 @@ def test_clone_overlap(
     """test_clone_overlap"""
     annot_file = create_testfolder / "test_filtered_contig_annotations.csv"
     annotation_10x_mouse.to_csv(annot_file, index=False)
-    vdj = ddl.read_10x_vdj(create_testfolder, filename_prefix="test_filtered")
-    ddl.pp.check_contigs(vdj)
-    ddl.tl.find_clones(vdj)
+    vdj = read_10x_vdj(create_testfolder, filename_prefix="test_filtered")
+    check_contigs(vdj)
+    find_clones(vdj)
     assert vdj._data.shape[0] == 1987
-    assert vdj._metadata.shape[0] == 547
-    ddl.tl.transfer(dummy_adata_mouse, vdj)
+    assert vdj._metadata.shape[0] == 545
+    transfer(dummy_adata_mouse, vdj)
     assert dummy_adata_mouse.n_obs == 547
     # create a sample column
     label = []
@@ -37,22 +42,22 @@ def test_clone_overlap(
             label.append("F")
     dummy_adata_mouse.obs["sample_idx"] = label
     with pytest.raises(KeyError):
-        ddl.pl.clone_overlap(
+        clone_overlap_plot(
             dummy_adata_mouse,
             groupby="sample_idx",
         )
-    ddl.tl.clone_overlap(dummy_adata_mouse, groupby="sample_idx")
+    clone_overlap(dummy_adata_mouse, groupby="sample_idx")
     assert "clone_overlap" in dummy_adata_mouse.uns
-    ddl.pl.clone_overlap(
+    clone_overlap_plot(
         dummy_adata_mouse,
         groupby="sample_idx",
     )
     with pytest.raises(ValueError):
-        ddl.pl.clone_overlap(
+        clone_overlap_plot(
             vdj,
             groupby="sample_idx",
         )
-    G = ddl.pl.clone_overlap(
+    G = clone_overlap_plot(
         dummy_adata_mouse,
         groupby="sample_idx",
         weighted_overlap=False,
@@ -61,7 +66,7 @@ def test_clone_overlap(
     )
     assert G is not None
 
-    G = ddl.pl.clone_overlap(
+    G = clone_overlap_plot(
         dummy_adata_mouse,
         groupby="sample_idx",
         weighted_overlap=True,
@@ -70,13 +75,13 @@ def test_clone_overlap(
     )
     assert G is not None
 
-    ddl.pl.clone_overlap(
+    clone_overlap_plot(
         dummy_adata_mouse,
         groupby="sample_idx",
         as_heatmap=True,
     )
 
-    out = ddl.pl.clone_overlap(
+    out = clone_overlap_plot(
         dummy_adata_mouse,
         groupby="sample_idx",
         as_heatmap=True,

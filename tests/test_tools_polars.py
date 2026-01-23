@@ -7,20 +7,20 @@ import scanpy as sc
 from unittest.mock import patch
 
 import dandelion as ddl
-from dandelion.utilities._polars import (
-    DandelionPolars,
-    check_contigs,
-    read_zipddl,
-    read_10x_vdj_polars,
-)
-from dandelion.tools._tools_polars import (
+from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.io._io import read_zipddl, read_10x_vdj
+from dandelion.polars.preprocessing._preprocessing_polars import check_contigs
+from dandelion.polars.tools._tools_polars import (
     find_clones,
     clone_size,
     transfer,
     to_scirpy,
 )
-from dandelion.tools._network_polars import generate_network
-from dandelion.tools._diversity_polars import clone_diversity, clone_rarefaction
+from dandelion.polars.tools._network_polars import generate_network
+from dandelion.polars.tools._diversity_polars import (
+    clone_diversity,
+    clone_rarefaction,
+)
 
 
 @pytest.fixture
@@ -267,7 +267,7 @@ def test_setup2(create_testfolder, json_10x_cr6, dummy_adata_cr6):
     json_file = create_testfolder / "test_all_contig_annotations.json"
     with open(json_file, "w") as outfile:
         json.dump(json_10x_cr6, outfile)
-    vdj = read_10x_vdj_polars(create_testfolder)
+    vdj = read_10x_vdj(create_testfolder)
     vdj, adata = check_contigs(vdj, dummy_adata_cr6)
     assert vdj.n_contigs == 19
     assert vdj.n_obs == 10

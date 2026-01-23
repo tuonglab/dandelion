@@ -25,11 +25,11 @@ from plotnine import (
     save_as_pdf_pages,
 )
 
-from dandelion.utilities._polars import (
+from dandelion.polars.core._core_polars import (
     DandelionPolars,
     load_polars,
     _sanitize_data_polars,
-    _write_airr,
+    write_airr,
 )
 
 
@@ -271,7 +271,7 @@ def quantify_mutations(
                 time=start,
                 deep=("saving DataFrame at {}\n".format(str(data))),
             )
-            _write_airr(out_df, data)
+            write_airr(out_df, data)
             return out_df
     return None
 

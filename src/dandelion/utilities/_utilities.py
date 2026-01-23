@@ -23,8 +23,10 @@ warnings.filterwarnings("ignore", category=pd.errors.DtypeWarning)
 F = TypeVar("F", bound=Callable)  # Define a TypeVar for any callable type
 
 RECEPTOR_SET = {"B", "abT", "gdT"}
-TRUES = ["T", "t", "True", "true", "TRUE", True, "1"]
-FALSES = ["F", "f", "False", "false", "FALSE", False, "0"]
+TRUES = ["T", "t", "True", "true", "TRUE", True, "1", 1]
+FALSES = ["F", "f", "False", "false", "FALSE", False, "0", 0]
+TRUES_STR = [str(x).upper() for x in TRUES]
+FALSES_STR = [str(x).upper() for x in FALSES]
 HEAVYLONG = ["IGH", "TRB", "TRD"]
 LIGHTSHORT = ["IGK", "IGL", "TRA", "TRG"]
 VCALL = "v_call"
@@ -63,6 +65,112 @@ EMPTIES = EMPTIES_STR + [
 
 DEFAULT_PREFIX = "all"
 BOOLEAN_LIKE_COLUMNS = ["extra", "ambiguous", "full_length", "complete_vdj"]
+CHECK_COLS = BOOLEAN_LIKE_COLUMNS + [
+    "rev_comp",
+    "productive",
+    "vj_in_frame",
+    "stop_codon",
+    "complete_vdj",
+    "v_frameshift",
+    "j_frameshift",
+]
+AIRR = [
+    "cell_id",
+    "sequence_id",
+    "sequence",
+    "sequence_aa",
+    "productive",
+    "complete_vdj",
+    "vj_in_frame",
+    "locus",
+    "v_call",
+    "d_call",
+    "j_call",
+    "c_call",
+    "junction",
+    "junction_aa",
+    "consensus_count",
+    "umi_count",
+    "cdr3_start",
+    "cdr3_end",
+    "sequence_length_10x",
+    "high_confidence_10x",
+    "is_cell_10x",
+    "fwr1_aa",
+    "fwr1",
+    "cdr1_aa",
+    "cdr1",
+    "fwr2_aa",
+    "fwr2",
+    "cdr2_aa",
+    "cdr2",
+    "fwr3_aa",
+    "fwr3",
+    "fwr4_aa",
+    "fwr4",
+    "clone_id",
+    "raw_consensus_id_10x",
+    "exact_subclonotype_id_10x",
+]
+CELLRANGER = [
+    "barcode",
+    "contig_id",
+    "sequence",
+    "aa_sequence",
+    "productive",
+    "full_length",
+    "frame",
+    "chain",
+    "v_gene",
+    "d_gene",
+    "j_gene",
+    "c_gene",
+    "cdr3_nt",
+    "cdr3",
+    "reads",
+    "umis",
+    "cdr3_start",
+    "cdr3_stop",
+    "length",
+    "high_confidence",
+    "is_cell",
+    "fwr1",
+    "fwr1_nt",
+    "cdr1",
+    "cdr1_nt",
+    "fwr2",
+    "fwr2_nt",
+    "cdr2",
+    "cdr2_nt",
+    "fwr3",
+    "fwr3_nt",
+    "fwr4",
+    "fwr4_nt",
+    "raw_clonotype_id",
+    "raw_consensus_id",
+    "exact_subclonotype_id",
+]
+
+
+def fasta_iterator(fh: str) -> tuple[str, str]:
+    """Read in a fasta file as an iterator."""
+    while True:
+        line = fh.readline()
+        if line.startswith(">"):
+            break
+    while True:
+        header = line[1:-1].rstrip()
+        sequence = fh.readline().rstrip()
+        while True:
+            line = fh.readline()
+            if not line:
+                break
+            if line.startswith(">"):
+                break
+            sequence += line.rstrip()
+        yield (header, sequence)
+        if not line:
+            return
 
 
 class Tree(defaultdict):
@@ -1234,3 +1342,34 @@ def get_vcall_key(data: dict, v_call_key: str) -> str:
         return v_call_key
     else:
         return "v_call"
+
+
+def write_fasta(
+    fasta_dict: dict[str, str], out_fasta: Path | str, overwrite=True
+) -> None:
+    """
+    Generic fasta writer using fasta_iterator
+
+    Parameters
+    ----------
+    fasta_dict : dict[str, str]
+        dictionary containing fasta headers and sequences as keys and records respectively.
+    out_fasta : Path | str
+        path to write fasta file to.
+    overwrite : bool, optional
+        whether or not to overwrite the output file (out_fasta).
+    """
+    if overwrite:
+        fh = open(out_fasta, "w")
+        fh.close()
+    out = ""
+    for l in fasta_dict:
+        out = ">" + l + "\n" + fasta_dict[l] + "\n"
+        _write_output(out, out_fasta)
+
+
+def _write_output(out: str, file: Path | str) -> None:
+    """General line writer."""
+    fh = open(file, "a")
+    fh.write(out)
+    fh.close()

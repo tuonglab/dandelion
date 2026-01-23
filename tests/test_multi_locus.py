@@ -1,12 +1,11 @@
-import pytest
-import pandas as pd
 import polars as pl
+
+from dandelion.base.io import read_10x_vdj
+from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
 
 
 def test_multi_locus_cells(annotation_10x_mouse):
     """Check if Multi locus cells are being filtered out"""
-    from dandelion.utilities._io import read_10x_vdj
-    from dandelion.utilities._polars import read_10x_vdj_polars
 
     # Load data
     vdj_pd = read_10x_vdj(annotation_10x_mouse)

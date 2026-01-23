@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 from dandelion.tools._tools_polars import vdj_sample
 from dandelion.tools._layout import generate_layout
-from dandelion.utilities._polars import DandelionPolars
+from dandelion.polars.core._core_polars import DandelionPolars
 from dandelion.utilities._core import Dandelion
 from dandelion.utilities._distances import (
     Metric,
@@ -36,7 +36,6 @@ from dandelion.utilities._distances import (
 )
 from dandelion.utilities._utilities import (
     flatten,
-    present,
     Tree,
     FALSES,
 )

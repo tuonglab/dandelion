@@ -10,11 +10,12 @@ from subprocess import run
 from typing import Literal
 
 from changeo.Gene import getGene
-from dandelion.utilities._core import Dandelion, load_data, write_fasta
-from dandelion.utilities._io import write_airr
+from dandelion.base.core._core import Dandelion, load_data
+from dandelion.base.utilities._io import write_airr
 from dandelion.utilities._utilities import (
     set_germline_env,
     set_igblast_env,
+    write_fasta,
     NO_DS,
 )
 

@@ -8,14 +8,14 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from dandelion.utilities._io import read_10x_vdj
-from dandelion.utilities._polars import read_10x_vdj_polars
-from dandelion.tools._network import (
+# from dandelion.base.io import read_10x_vdj
+from dandelion.base.tools._network import (
     calculate_distance_matrix_original as calc_dist_pandas,
     calculate_distance_matrix_original_full as calc_dist_full_pandas,
     calculate_distance_matrix_long as calc_dist_long_pandas,
 )
-from dandelion.tools._network_polars import (
+from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
+from dandelion.polars.tools._network_polars import (
     calculate_distance_matrix_original as calc_dist_polars,
     calculate_distance_matrix_original_full as calc_dist_full_polars,
     calculate_distance_matrix_long as calc_dist_long_polars,

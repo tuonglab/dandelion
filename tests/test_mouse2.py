@@ -2,12 +2,14 @@
 import pytest
 import dandelion as ddl
 
+from dandelion.utilities._utilities import write_fasta, makeblastdb
+
 
 @pytest.mark.usefixtures("create_testfolder", "fasta_10x_mouse")
 def test_write_fasta(create_testfolder, fasta_10x_mouse):
     """test_write_fasta"""
     out_fasta = create_testfolder / "filtered_contig.fasta"
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x_mouse, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x_mouse, out_fasta=out_fasta)
     assert len(list(create_testfolder.iterdir())) == 1
 
 
@@ -29,7 +31,7 @@ def test_formatfasta(create_testfolder):
 @pytest.mark.usefixtures("database_paths_mouse")
 def test_updateblastdb(database_paths_mouse):
     """test update blast"""
-    ddl.utl.makeblastdb(database_paths_mouse["blastdb_fasta"])
+    makeblastdb(database_paths_mouse["blastdb_fasta"])
 
 
 @pytest.mark.usefixtures("create_testfolder", "database_paths_mouse")

@@ -9,16 +9,10 @@ import numpy as np
 import polars as pl
 import pytest
 import tempfile
-import shutil
 from pathlib import Path
 
-from dandelion.tools._lazydistances_polars import (
+from dandelion.polars.tools._lazydistances_polars import (
     calculate_distance_matrix_zarr,
-)
-from dandelion.tools._network_polars import (
-    calculate_distance_matrix_original,
-    calculate_distance_matrix_original_full,
-    calculate_distance_matrix_long,
 )
 from dandelion.utilities._distances import LevenshteinMetric
 

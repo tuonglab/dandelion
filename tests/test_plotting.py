@@ -1,21 +1,31 @@
 #!/usr/bin/env python
 import pytest
-import dandelion as ddl
 import scanpy as sc
+
+from dandelion.base.preprocessing import check_contigs
+from dandelion.base.core import Dandelion
+from dandelion.base.tools import generate_network, transfer
+from dandelion.base.io import read_h5ddl
+from dandelion.base.plotting import (
+    clone_network,
+    barplot,
+    stackedbarplot,
+    spectratype,
+)
 
 
 @pytest.mark.usefixtures("create_testfolder", "airr_reannotated", "dummy_adata")
 def test_setup(create_testfolder, airr_reannotated, dummy_adata):
     """test_setup"""
-    vdj, adata = ddl.pp.check_contigs(airr_reannotated, dummy_adata)
+    vdj, adata = check_contigs(airr_reannotated, dummy_adata)
     assert airr_reannotated.shape[0] == 8
     assert vdj._data.shape[0] == 8
     assert vdj._metadata.shape[0] == 5
     assert adata.n_obs == 5
     vdj._data["clone_id"] = ["A", "A", "A", "A", "A", "A", "A", "A"]
-    vdj = ddl.Dandelion(vdj._data)
-    ddl.tl.generate_network(vdj, layout_method="mod_fr")
-    ddl.tl.transfer(adata, vdj)
+    vdj = Dandelion(vdj._data)
+    generate_network(vdj, layout_method="mod_fr")
+    transfer(adata, vdj)
     assert "clone_id" in adata.obs
     assert "X_vdj" in adata.obsm
     f1 = create_testfolder / "test.h5ddl"
@@ -29,7 +39,7 @@ def test_plot_network(create_testfolder):
     """test_plot_network"""
     f = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f)
-    ddl.pl.clone_network(adata, color=["isotype"], show=False, return_fig=False)
+    clone_network(adata, color=["isotype"], show=False, return_fig=False)
 
 
 @pytest.mark.usefixtures("create_testfolder")
@@ -45,12 +55,12 @@ def test_plot_network(create_testfolder):
 def test_plot_bar(create_testfolder, sort, norm):
     """test_plot_bar"""
     f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
-    ax = ddl.pl.barplot(vdj, color="v_call_VDJ")
+    vdj = read_h5ddl(f)
+    ax = barplot(vdj, color="v_call_VDJ")
     assert ax is not None
-    ax = ddl.pl.barplot(vdj, color="v_call_VDJ", sort_descending=sort)
+    ax = barplot(vdj, color="v_call_VDJ", sort_descending=sort)
     assert ax is not None
-    ax = ddl.pl.barplot(vdj, color="v_call_VDJ", normalize=norm)
+    ax = barplot(vdj, color="v_call_VDJ", normalize=norm)
     assert ax is not None
 
 
@@ -58,10 +68,10 @@ def test_plot_bar(create_testfolder, sort, norm):
 def test_plot_bar2(create_testfolder):
     """test_plot_bar2"""
     f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
+    vdj = read_h5ddl(f)
     f = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f)
-    ax = ddl.pl.barplot(
+    ax = barplot(
         vdj,
         color="v_call_VDJ",
         min_clone_size=2,
@@ -70,7 +80,7 @@ def test_plot_bar2(create_testfolder):
         xtick_rotation=90,
     )
     assert ax is not None
-    ax = ddl.pl.barplot(adata, color="v_call_VDJ")
+    ax = barplot(adata, color="v_call_VDJ")
     assert ax is not None
 
 
@@ -79,8 +89,8 @@ def test_plot_bar2(create_testfolder):
 def test_plot_stackedbar(create_testfolder, norm):
     """test_plot_stackedbar"""
     f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
-    ax = ddl.pl.stackedbarplot(
+    vdj = read_h5ddl(f)
+    ax = stackedbarplot(
         vdj, color="v_call_VDJ", groupby="isotype", normalize=norm
     )
     assert ax is not None
@@ -91,10 +101,10 @@ def test_plot_stackedbar(create_testfolder, norm):
 def test_plot_stackedbar2(create_testfolder, norm):
     """test_plot_stackedbar2"""
     f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
+    vdj = read_h5ddl(f)
     f = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f)
-    ax = ddl.pl.stackedbarplot(
+    ax = stackedbarplot(
         vdj,
         color="v_call_VDJ",
         groupby="isotype",
@@ -105,7 +115,7 @@ def test_plot_stackedbar2(create_testfolder, norm):
         normalize=norm,
     )
     assert ax is not None
-    ax = ddl.pl.stackedbarplot(
+    ax = stackedbarplot(
         adata,
         color="v_call_VDJ",
         groupby="isotype",
@@ -118,12 +128,12 @@ def test_plot_stackedbar2(create_testfolder, norm):
 def test_plot_spectratype(create_testfolder):
     """test_plot_spectratype"""
     f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
-    ax = ddl.pl.spectratype(
+    vdj = read_h5ddl(f)
+    ax = spectratype(
         vdj, color="junction_length", groupby="c_call", locus="IGH"
     )
     assert ax is not None
-    ax = ddl.pl.spectratype(
+    ax = spectratype(
         vdj,
         color="junction_length",
         groupby="c_call",

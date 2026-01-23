@@ -2,11 +2,11 @@
 
 import pytest
 import polars as pl
-import pandas as pd
-from dandelion.utilities._io import read_10x_vdj
-from dandelion.utilities._polars import read_10x_vdj_polars, load_polars
-from dandelion.utilities._core import load_data
-from dandelion.tools._tools import group_sequences
+from dandelion.base.core._core import load_data
+from dandelion.base.io import read_10x_vdj
+from dandelion.base.tools._tools import group_sequences
+from dandelion.polars.core._core_polars import load_polars
+from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
 
 
 @pytest.mark.usefixtures("annotation_10x_mouse")

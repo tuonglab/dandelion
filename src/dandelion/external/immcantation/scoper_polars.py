@@ -4,7 +4,10 @@ import polars as pl
 
 from typing import Literal
 
-from dandelion.utilities._polars import DandelionPolars, _sanitize_data_polars
+from dandelion.polars.core._core_polars import (
+    DandelionPolars,
+    _sanitize_data_polars,
+)
 
 
 def identical_clones(

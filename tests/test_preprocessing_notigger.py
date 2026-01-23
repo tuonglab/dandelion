@@ -11,12 +11,14 @@ try:
 except KeyError:
     pass
 
+from dandelion.utilities._utilities import write_fasta, makeblastdb
+
 
 @pytest.mark.usefixtures("create_testfolder", "fasta_10x")
 def test_write_fasta(create_testfolder, fasta_10x):
     """test_write_fasta"""
     fastafilename = str(create_testfolder / "all_contig.fasta")
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x, out_fasta=fastafilename)
+    write_fasta(fasta_dict=fasta_10x, out_fasta=fastafilename)
 
 
 @pytest.mark.usefixtures("create_testfolder", "annotation_10x")
@@ -49,7 +51,7 @@ def test_reannotategenes(create_testfolder, database_paths):
 @pytest.mark.usefixtures("database_paths")
 def test_updateblastdb(database_paths):
     """test_updateblastdb"""
-    ddl.utl.makeblastdb(database_paths["blastdb_fasta"])
+    makeblastdb(database_paths["blastdb_fasta"])
 
 
 @pytest.mark.usefixtures("create_testfolder", "database_paths")
