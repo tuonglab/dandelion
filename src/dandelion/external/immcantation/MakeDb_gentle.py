@@ -513,7 +513,7 @@ def writeDb(
     )
     log["PASS"] = pass_count
     log["FAIL"] = fail_count
-    log["END"] = "MakeDb"
+    log["END"] = "MakeDb_gentle"
     printLog(log)
 
     # Close file handles
@@ -561,7 +561,7 @@ def parseIMGT(
     """
     # Print parameter info
     log = OrderedDict()
-    log["START"] = "MakeDb"
+    log["START"] = "MakeDb_gentle"
     log["COMMAND"] = "imgt"
     log["ALIGNER_FILE"] = aligner_file
     log["SEQ_FILE"] = os.path.basename(seq_file) if seq_file else ""
@@ -904,7 +904,7 @@ def numberAIRR(
       str: output file name.
     """
     log = OrderedDict()
-    log["START"] = "MakeDb"
+    log["START"] = "MakeDb_gentle"
     log["COMMAND"] = "number"
     log["ALIGNER_FILE"] = os.path.basename(aligner_file)
     printLog(log)
@@ -1006,7 +1006,7 @@ def numberAIRR(
     log["RECORDS"] = rec_count
     log["PASS"] = pass_count
     log["FAIL"] = rec_count - pass_count
-    log["END"] = "MakeDb"
+    log["END"] = "MakeDb_gentle"
     printLog(log)
 
     # Close file handles
@@ -1492,7 +1492,7 @@ def getArgParser():
     return parser
 
 
-if __name__ == "__main__":
+def main():
     """
     Parses command line arguments and calls main
     """
@@ -1540,3 +1540,7 @@ if __name__ == "__main__":
                 else None
             )
         args.func(**args_dict)
+
+
+if __name__ == "__main__":
+    main()

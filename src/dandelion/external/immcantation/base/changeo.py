@@ -119,7 +119,7 @@ def makedb_igblast(
 
     if (org == "mouse") and (loci.lower() == "tr"):
         cmd = [
-            "MakeDb_gentle.py",
+            "MakeDb_gentle",
             "igblast",
             "-i",
             str(igbo),

@@ -1,4 +1,5 @@
 from pathlib import Path
+from importlib.resources import files
 from scanpy import logging as logg
 from subprocess import run
 from typing import Literal
@@ -84,8 +85,14 @@ def tigger_genotype(
         out_dir = Path(outdir)
     else:
         out_dir = airr_file.parent
+    r_script = files("dandelion").joinpath(
+        "external/immcantation/tigger-genotype.R"
+    )
+
     cmd = [
-        "tigger-genotype.R",
+        "Rscript",
+        # "tigger-genotype.R",
+        str(r_script),
         "-d",
         str(airr_file),
         "-r",
