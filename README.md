@@ -1,10 +1,10 @@
 [![](https://readthedocs.org/projects/sc-dandelion/badge/?version=latest)](https://sc-dandelion.readthedocs.io/en/latest/?badge=latest)
 [![](https://img.shields.io/pypi/v/sc-dandelion?logo=PyPI)](https://pypi.org/project/sc-dandelion/)
-[![](https://byob.yarr.is/zktuong/dandelion/master-version)](https://github.com/zktuong/dandelion/tree/master)
-[![master](https://github.com/zktuong/dandelion/actions/workflows/tests.yml/badge.svg?branch=master)]((https://github.com/zktuong/dandelion/actions/workflows/tests.yml))
-[![codecov](https://codecov.io/gh/zktuong/dandelion/branch/master/graph/badge.svg?token=661BMU1FBO)](https://codecov.io/gh/zktuong/dandelion)
+[![](https://byob.yarr.is/tuonglab/dandelion/master-version)](https://github.com/tuonglab/dandelion/tree/master)
+[![master](https://github.com/tuonglab/dandelion/actions/workflows/tests.yml/badge.svg?branch=master)]((https://github.com/tuonglab/dandelion/actions/workflows/tests.yml))
+[![codecov](https://codecov.io/gh/tuonglab/dandelion/branch/master/graph/badge.svg?token=661BMU1FBO)](https://codecov.io/gh/tuonglab/dandelion)
 [![](https://img.shields.io/static/v1?label=AIRR-C%20sw-tools%20v1&message=compliant&color=008AFF&labelColor=000000&style=plastic)](https://docs.airr-community.org/en/stable/swtools/airr_swtools_standard.html)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zktuong/dandelion/blob/master/container/dandelion_singularity.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb)
 
 ![](docs/notebooks/img/dandelion_logo_illustration.png)
 
@@ -17,7 +17,7 @@ Please cite the following if you use version 0.3.0 onwards:
 
 Suo, C., Polanski, K., Dann, E. et al. ***Dandelion uses the single-cell adaptive immune receptor repertoire to explore lymphocyte developmental origins***. Nat Biotechnol (2023). https://doi.org/10.1038/s41587-023-01734-7
 
-The data used in the Nature Biotechnology paper is available at a separate [repository](https://github.com/zktuong/dandelion-demo-files/tree/master/dandelion_manuscript).
+The data used in the Nature Biotechnology paper is available at a separate [repository](https://github.com/tuonglab/dandelion-demo-files/tree/master/dandelion_manuscript).
 
 This repository also includes a Git submodule for the dandelion_manuscript folder, which is stored in the dandelion-demo-files repository (click link above that says `dandelion_manuscript`)
 
@@ -85,7 +85,7 @@ echo 'export PATH=path/to/igblast/bin:$PATH' >> ~/.bash_profile
 echo 'export PATH=path/to/blast+/bin:$PATH' >> ~/.bash_profile
 ```
 
-You will need to download the database folder in this repository and place them somewhere accessible. There are [scripts](https://github.com/zktuong/dandelion/tree/master/container/scripts) in the `container` folder that will help you download the imgt/ogrdb databases and you can use them like this:
+You will need to download the database folder in this repository and place them somewhere accessible. There are [scripts](https://github.com/tuonglab/dandelion/tree/master/container/scripts) in the `container` folder that will help you download the imgt/ogrdb databases and you can use them like this:
 
 ```bash
 python prepare_imgt_database.py
@@ -123,9 +123,9 @@ and then lastly install dandelion:
 ```bash
 pip install sc-dandelion
 # or
-pip install git+https://github.com/zktuong/dandelion.git
+pip install git+https://github.com/tuonglab/dandelion.git
 # or  installing from a specific branch
-pip install git+https://github.com/zktuong/dandelion@branch_name
+pip install git+https://github.com/tuonglab/dandelion@branch_name
 ```
 
 ## Basic requirements

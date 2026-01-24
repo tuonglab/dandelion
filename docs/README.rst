@@ -27,7 +27,7 @@ Illustration of the ``Dandelion`` class slots
 Please refer to the
 `documentation <https://sc-dandelion.readthedocs.io/>`__ or the
 notebooks
-`here <https://nbviewer.jupyter.org/github/zktuong/dandelion/tree/latest/docs/notebooks/>`__:
+`here <https://nbviewer.jupyter.org/github/tuonglab/dandelion/tree/latest/docs/notebooks/>`__:
 
 The raw files for the examples can be downloaded from 10X's Single Cell
 Immune Profiling datasets
@@ -158,7 +158,7 @@ lymphocyte developmental origins**. Nature Biotechnology 2023.04.13; doi:
 https://doi.org/10.1038/s41587-023-01734-7*
 
 The data used in the Nature Biotechnology papers can be found at
-`a separate repository <https://github.com/zktuong/dandelion-demo-files>`__.
+`a separate repository <https://github.com/tuonglab/dandelion-demo-files>`__.
 
 ``dandelion`` was originally published in:
 
@@ -260,14 +260,14 @@ References
    :target: https://sc-dandelion.readthedocs.io/en/latest/?badge=latest
 .. |PyPI| image:: https://img.shields.io/pypi/v/sc-dandelion?logo=PyPI
    :target: https://pypi.org/project/sc-dandelion/
-.. |Master| image:: https://byob.yarr.is/zktuong/dandelion/master-version
-   :target: https://github.com/zktuong/dandelion/tree/master
-.. |MasterTest| image:: https://github.com/zktuong/dandelion/actions/workflows/tests.yml/badge.svg?branch=master
-   :target: https://github.com/zktuong/dandelion/actions/workflows/tests.yml
-.. |CodeCov| image:: https://codecov.io/gh/zktuong/dandelion/branch/master/graph/badge.svg?token=661BMU1FBO
-   :target: https://codecov.io/gh/zktuong/dandelion
+.. |Master| image:: https://byob.yarr.is/tuonglab/dandelion/master-version
+   :target: https://github.com/tuonglab/dandelion/tree/master
+.. |MasterTest| image:: https://github.com/tuonglab/dandelion/actions/workflows/tests.yml/badge.svg?branch=master
+   :target: https://github.com/tuonglab/dandelion/actions/workflows/tests.yml
+.. |CodeCov| image:: https://codecov.io/gh/tuonglab/dandelion/branch/master/graph/badge.svg?token=661BMU1FBO
+   :target: https://codecov.io/gh/tuonglab/dandelion
 .. |Colab| image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/zktuong/dandelion/blob/master/container/dandelion_singularity.ipynb
+   :target: https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb
 .. |logo| image:: notebooks/img/dandelion_logo_illustration.png
 .. |overview| image:: notebooks/img/dandelion_overview.png
 .. |class| image:: notebooks/img/dandelion_class2.png
