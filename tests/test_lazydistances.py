@@ -1,17 +1,17 @@
 """
-Tests for lazy distance matrix computation with polars DataFrames.
+Tests for lazy distance matrix computation with base DataFrames.
 
-This module tests the polars-friendly lazy distance computation functions
+This module tests the base-friendly lazy distance computation functions
 to ensure they produce valid distance matrices.
 """
 
 import numpy as np
-import polars as pl
+import pandas as pd
 import pytest
 import tempfile
 from pathlib import Path
 
-from dandelion.polars.tools._lazydistances_polars import (
+from dandelion.base.tools._lazydistances import (
     calculate_distance_matrix_zarr,
 )
 from dandelion.utilities._distances import LevenshteinMetric
@@ -22,7 +22,7 @@ def sample_sequence_data():
     """Create sample sequence data for testing."""
     sequences = {
         "cell_id": [f"cell_{i}" for i in range(10)],
-        "junction_VDJ": [
+        "junction_vdj": [
             "ATCGATCGATCG",
             "ATCGATCGATCG",
             "ATCGATCGATCC",
@@ -34,7 +34,7 @@ def sample_sequence_data():
             "CCCCGGGGAAAA",
             "CCCCGGGGAAAA",
         ],
-        "junction_VJ_0": [
+        "junction_vj_0": [
             "ATCGATCGATCG",
             "ATCGATCGATCG",
             "ATCGATCGATCG",
@@ -46,7 +46,7 @@ def sample_sequence_data():
             "ATCGATCGATCG",
             "ATCGATCGATCG",
         ],
-        "junction_VJ_1": [
+        "junction_vj_1": [
             "GCTAGCTAGCTA",
             "GCTAGCTAGCTA",
             "GCTAGCTAGCTA",
@@ -59,7 +59,7 @@ def sample_sequence_data():
             "GCTAGCTAGCTA",
         ],
     }
-    return pl.DataFrame(sequences)
+    return pd.DataFrame(sequences, index=sequences["cell_id"])
 
 
 @pytest.fixture
@@ -285,14 +285,11 @@ def test_lazydistances_empty_sequences(sample_sequence_data):
     """Test with some empty sequences."""
     metric = LevenshteinMetric()
 
-    data_with_empty = sample_sequence_data.clone()
-    data_with_empty = data_with_empty.with_columns(
-        [
-            pl.when(pl.col("cell_id") == "cell_0")
-            .then(pl.lit(""))
-            .otherwise(pl.col("junction_VDJ"))
-            .alias("junction_VDJ"),
-        ]
+    data_with_empty = sample_sequence_data.copy()
+    data_with_empty["v_call"] = np.where(
+        data_with_empty["cell_id"] == "cell_0",
+        "",
+        data_with_empty["junction_vdj"],
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:

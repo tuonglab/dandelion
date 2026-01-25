@@ -8,6 +8,7 @@ import tempfile
 import zarr
 
 import networkx as nx
+from packaging import version
 import pandas as pd
 import polars as pl
 
@@ -25,6 +26,27 @@ from dandelion.utilities._utilities import (
     fasta_iterator,
 )
 
+ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
+if ZARR_V3:
+    from zarr.storage import LocalStore, ZipStore
+
+    def open_zarr_group(store, mode="a"):
+        return zarr.open_group(store=store, mode=mode)
+
+else:
+    from zarr import DirectoryStore, ZipStore
+
+    def LocalStore(path):
+        return DirectoryStore(path)
+
+    def open_zarr_group(store, mode="a"):
+        import zarr
+
+        if mode == "w":
+            return zarr.group(store=store, overwrite=True)
+        else:
+            return zarr.group(store=store)
+
 
 def read_zipddl(
     filename: str,
@@ -37,8 +59,8 @@ def read_zipddl(
     Returns:
         Dandelion object
     """
-    store = zarr.storage.ZipStore(filename, mode="r")
-    root = zarr.open(store=store, mode="r")
+    store = ZipStore(filename, mode="r")
+    root = open_zarr_group(store, mode="r")
 
     constructor = {}
 

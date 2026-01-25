@@ -3,11 +3,11 @@ from __future__ import annotations
 import copy
 import h5py
 import os
+import shutil
 import tempfile
 import unicodedata
 import warnings
 import zarr
-import shutil
 
 import networkx as nx
 import numpy as np
@@ -20,6 +20,7 @@ with warnings.catch_warnings():
 from anndata import AnnData
 from changeo.IO import readGermlines
 from functools import cmp_to_key, reduce
+from packaging import version
 from pandas.api.types import infer_dtype
 from pathlib import Path
 from polars import ColumnNotFoundError
@@ -41,6 +42,40 @@ from dandelion.utilities._utilities import (
     Contig,
 )
 from dandelion.utilities._utilities import TRUES_STR, write_fasta
+
+ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
+if ZARR_V3:
+    from zarr.storage import LocalStore, ZipStore
+    from zarr.codecs import BloscCodec
+
+    def open_zarr_group(store, mode="a"):
+        return zarr.open_group(store=store, mode=mode)
+
+    def create_zarr_array(root, name, **kwargs):
+        return root.create_array(name, **kwargs)
+
+    def create_zarr_dataset(group, *args, **kwargs):
+        return group.create_dataset(*args, **kwargs)
+
+else:
+    from zarr import DirectoryStore, ZipStore
+    from zarr.codecs import Blosc as BloscCodec
+
+    def LocalStore(path):
+        return DirectoryStore(path)
+
+    def open_zarr_group(store, mode="a"):
+        if mode == "w":
+            return zarr.group(store=store, overwrite=True)
+        else:
+            return zarr.group(store=store)
+
+    def create_zarr_array(root, name, **kwargs):
+        return root.create(name, **kwargs)
+
+    def create_zarr_dataset(group, *args, **kwargs):
+        return group.create_dataset(*args, **kwargs)
+
 
 # Enable string cache for Polars to optimize repeated string operations
 pl.enable_string_cache()
@@ -2783,10 +2818,10 @@ class DandelionPolars:
         - graph, layout and germline → HDF5
         """
         # Create Zarr ZipStore container
-        store = zarr.storage.ZipStore(filename, mode="w")
-        root = zarr.group(store=store, overwrite=True)
+        store = ZipStore(filename, mode="w")
+        root = open_zarr_group(store, mode="w")
         comp = (
-            zarr.codecs.BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
+            BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle")
             if compress
             else None
         )
@@ -2830,17 +2865,15 @@ class DandelionPolars:
             if pending and zarr_src is not None:
                 # Open source zarr and target dataset inside ZipStore
                 try:
-                    src_root = zarr.open_group(
-                        zarr.storage.LocalStore(
-                            str(zarr_src) + "/distance_matrix.zarr"
-                        ),
+                    src_root = open_zarr_group(
+                        LocalStore(str(zarr_src) + "/distance_matrix.zarr"),
                         mode="r",
                     )
                     src_arr = src_root["distance_matrix"]
                 except Exception:
                     # Fallback to direct array path
                     src_arr = zarr.open_array(
-                        zarr.storage.LocalStore(str(zarr_src)), mode="r"
+                        LocalStore(str(zarr_src)), mode="r"
                     )
 
                 # Create destination dataset and copy
@@ -3405,7 +3438,8 @@ def _write_parquet_blob(
         df.write_parquet(tmp.name)
         tmp.seek(0)
         arr = np.frombuffer(tmp.read(), dtype=np.uint8)
-    zarr_group.create_dataset(
+    create_zarr_dataset(
+        zarr_group,
         name,
         shape=arr.shape,
         dtype=arr.dtype,

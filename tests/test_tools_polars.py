@@ -437,3 +437,50 @@ def test_diversity_anndata2(create_testfolder, method):
         adata, groupby="sample_id", method=method, n_boot=5
     )
     assert res
+
+
+@pytest.mark.usefixtures("create_testfolder")
+@pytest.mark.parametrize(
+    "resample,expected", [pytest.param(None, 8), pytest.param(16, 16)]
+)
+def test_generate_network_lazy(create_testfolder, resample, expected):
+    """test generate network"""
+    f = create_testfolder / "test.zipddl"
+    f2 = create_testfolder / "test2.zipddl"
+    vdj = read_zipddl(f)
+    vdj2 = read_zipddl(f2)
+    # create anndata from here
+    adata = to_scirpy(vdj, to_mudata=False)
+    if resample is not None:
+        vdj, adata = generate_network(
+            vdj,
+            adata=adata,
+            sample=resample,
+            layout_method="mod_fr",
+            lazy=True,
+            key="junction",
+        )
+        assert vdj.n_obs == expected
+        assert vdj.layout is not None
+        assert vdj.graph is not None
+    else:
+        generate_network(
+            vdj2, layout_method="mod_fr", lazy=True, key="junction"
+        )
+        assert vdj2.n_obs == expected
+        assert vdj2.layout is not None
+        assert vdj2.graph is not None
+    _data = vdj._data.with_columns(pl.lit("1").alias("clone_id"))
+    _data = _data.collect() if isinstance(_data, pl.LazyFrame) else _data
+    vdj = DandelionPolars(_data)
+    assert vdj._data.collect_schema()["clone_id"] == pl.String
+    generate_network(vdj, layout_method="mod_fr", lazy=True, key="junction")
+    assert vdj.layout is not None
+    # also test read/write lazy
+    f3 = create_testfolder / "test_lazy.zipddl"
+    vdj.write_zipddl(f3)
+    vdj4 = read_zipddl(f3)
+    assert vdj4.n_obs == vdj.n_obs
+    assert vdj4.layout is not None
+    assert vdj4.graph is not None
+    assert vdj4.distances is not None

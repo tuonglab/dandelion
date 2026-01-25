@@ -19,14 +19,41 @@ import zarr
 from dask import compute
 from dask.diagnostics import ProgressBar
 from dask.distributed import Client, progress
+from packaging import version
 from tqdm import tqdm
-from zarr.codecs import BloscCodec
 from scanpy import logging as logg
 
 from dandelion.utilities._distances import (
     Metric,
     _prepare_sequences_with_separator,
 )
+
+ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
+if ZARR_V3:
+    from zarr.storage import LocalStore
+    from zarr.codecs import BloscCodec
+
+    def open_zarr_group(store, mode="a"):
+        return zarr.open_group(store=store, mode=mode)
+
+    def create_zarr_array(root, name, **kwargs):
+        return root.create_array(name, **kwargs)
+
+else:
+    from zarr import DirectoryStore
+    from zarr.codecs import Blosc as BloscCodec
+
+    def LocalStore(path):
+        return DirectoryStore(path)
+
+    def open_zarr_group(store, mode="a"):
+        if mode == "w":
+            return zarr.group(store=store, overwrite=True)
+        else:
+            return zarr.group(store=store)
+
+    def create_zarr_array(root, name, **kwargs):
+        return root.create(name, **kwargs)
 
 
 def calculate_distance_matrix_zarr(
@@ -151,6 +178,9 @@ def calculate_distance_matrix_zarr(
             f"Auto-determined chunk size: {chunk_size} (for {m} sequences)"
         )
 
+    if verbose:
+        logg.info(f"\nCreated Zarr array at: {zarr_path}")
+
     # Setup Dask client
     client = _setup_dask_client(n_cpus=n_cpus, memory_limit_gb=memory_limit_gb)
 
@@ -159,10 +189,10 @@ def calculate_distance_matrix_zarr(
         zarr_path = zarr_path if zarr_path is not None else tempfile.mkdtemp()
 
     comp = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-    store = zarr.storage.LocalStore(zarr_path + "/distance_matrix.zarr")
-    root = zarr.open_group(store=store, mode="w")
-
-    z_array = root.create_array(
+    store = LocalStore(zarr_path + "/distance_matrix.zarr")
+    root = open_zarr_group(store, mode="w")
+    z_array = create_zarr_array(
+        root,
         "distance_matrix",
         shape=(m, m),
         chunks=(chunk_size, chunk_size),
@@ -466,8 +496,8 @@ def _compute_and_write_block(
         Path to temporary Zarr array
     """
     # Open Zarr array from path
-    store = zarr.storage.LocalStore(zarr_path)
-    root = zarr.open_group(store=store, mode="r")
+    store = LocalStore(zarr_path)
+    root = open_zarr_group(store, mode="r")
     z_array = root["distance_matrix"]
 
     block = _compute_block_multicol(chunk_i, chunk_j, metric)
@@ -697,7 +727,7 @@ def merge_tmp_arrays(
         disable=not verbose,
         bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
     ):
-        root = zarr.open_group(tmp_dir + "/tmp.zarr", mode="r")
+        root = open_zarr_group(tmp_dir + "/tmp.zarr", mode="r")
         tmp_array = root["distance_matrix"]
         # Iterate over chunks
         main_array[:] += tmp_array[:]
@@ -710,10 +740,10 @@ def create_tmp_zarr(z_array: zarr.Array, compress: bool = True) -> zarr.Array:
     """Assist function to create a temporary zarr array with same shape/chunks as input z_array."""
     tmp_dir = tempfile.mkdtemp()
     comp = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-    store = zarr.storage.LocalStore(tmp_dir + "/tmp.zarr")
-    root = zarr.open_group(store=store, mode="w")
-    # create temp Zarr array without compression for writing first
-    tmp_array = root.create_array(
+    store = LocalStore(tmp_dir + "/tmp.zarr")
+    root = open_zarr_group(store, mode="w")
+    tmp_array = create_zarr_array(
+        root,
         "distance_matrix",
         shape=z_array.shape,
         chunks=z_array.chunks,

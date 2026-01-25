@@ -98,8 +98,7 @@ dependencies = [
   "palettable>=3.3",
   "mizani>=0.8",
   "nxviz>=0.7",
-  "zarr",
-  "rapidfuzz",
+  "rapidfuzz>3.12.1",
 ]
 
 [project.urls]
@@ -125,8 +124,13 @@ docs = [
 scirpy = ["scirpy>=0.21", "awkward>=2.1", "mudata>=0.2"]
 scrublet = ["scrublet>=0.2", "annoy<1.17.0"]
 palantir = ["palantir>=0.2.3", "pertpy>=0.1.0", "jax>=0.3"]
-dask = ["dask>=2025.11.0", "distributed>=2025.11.0", "psutil>=6.1.0"]
-polars = ["polars>=1.34.0", "pyarrow>=21.0.0", "zarr>=3.0.8"]
+lazy = [
+  "dask>=2025.11.0",
+  "distributed>=2025.11.0",
+  "psutil>=6.1.0",
+  "zarr>=2.18.7",
+]
+polars = ["polars>=1.34.0", "pyarrow>=21.0.0", "zarr>=2.18.7"]
 
 [project.scripts]
 MakeDb_gentle = "dandelion.external.immcantation.MakeDb_gentle:main"
