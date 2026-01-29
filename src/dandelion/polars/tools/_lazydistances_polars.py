@@ -298,16 +298,16 @@ def calculate_distance_matrix_zarr(
                         )
                     )
 
-    logg.info(
-        f"Starting computation of {len(futures) if client else len(delayed_blocks)} chunks...",
-    )
-    # Compute blocks - they write to Zarr as they complete
-    if client is not None:
-        progress(futures)
-        tmp_results = client.gather(futures)
-    else:
-        with ProgressBar():
-            tmp_results = compute(*delayed_blocks, scheduler="threads")
+        logg.info(
+            f"Starting computation of {len(futures) if client else len(delayed_blocks)} chunks...",
+        )
+        # Compute blocks - they write to Zarr as they complete
+        if client is not None:
+            progress(futures)
+            tmp_results = client.gather(futures)
+        else:
+            with ProgressBar():
+                tmp_results = compute(*delayed_blocks, scheduler="threads")
 
     logg.info("Merging temporary results into final Zarr array...")
     # Merge all temporary arrays into the main array
