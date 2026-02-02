@@ -4280,14 +4280,18 @@ def check_contigs(
         # Merge flags back to original data
         flag_cols = ["extra", "ambiguous"]
         dat_flags = dat.select(["sequence_id"] + flag_cols)
-        dat_ = dat_.join(dat_flags, on="sequence_id", how="left", suffix="_new")
 
-        # Update columns
+        # Drop existing flag columns from dat_ if they exist
+        existing_flags = [col for col in flag_cols if col in dat_.columns]
+        if existing_flags:
+            dat_ = dat_.drop(*existing_flags)
+
+        # Join and fill nulls
+        dat_ = dat_.join(dat_flags, on="sequence_id", how="left")
+
+        # Fill nulls with True (mark non-productive contigs as ambiguous/extra)
         for col in flag_cols:
-            if f"{col}_new" in dat_.columns:
-                dat_ = dat_.with_columns(
-                    pl.col(f"{col}_new").fill_null(True).alias(col)
-                ).drop(f"{col}_new")
+            dat_ = dat_.with_columns(pl.col(col).fill_null(True).alias(col))
         dat = dat_
 
     # Filter by missing cells (works with DataFrame)
@@ -4410,68 +4414,96 @@ def mark_ambiguous_contigs_vec(
     df = resolve_duplicates(df)
 
     # Step 2: FULLY VECTORIZED dominance logic using window functions
-    # Determine ntop based on locus (no loop needed)
+    # CRITICAL: Group by locus_type (VDJ vs VJ), not individual locus
+    # This matches the original behavior where all light chains compete together
     df = df.with_columns(
         pl.when(pl.col("locus").is_in(["IGH", "TRB", "TRD"]))
+        .then(pl.lit("VDJ"))
+        .otherwise(pl.lit("VJ"))
+        .alias("locus_type")
+    )
+
+    # Determine ntop based on locus type
+    df = df.with_columns(
+        pl.when(pl.col("locus_type") == "VDJ")
         .then(pl.lit(ntop_vdj))
         .otherwise(pl.lit(ntop_vj))
         .alias("ntop_for_locus")
     )
 
-    # Calculate minimum values per cell/locus group
+    # Calculate minimum values per cell/locus_type group (NOT per individual locus)
     df = df.with_columns(
-        pl.col("umi_count").min().over(["cell_id", "locus"]).alias("min_umi"),
+        pl.col("umi_count")
+        .min()
+        .over(["cell_id", "locus_type"])
+        .alias("min_umi"),
         pl.col("consensus_count")
         .min()
-        .over(["cell_id", "locus"])
+        .over(["cell_id", "locus_type"])
         .alias("min_consensus"),
         pl.col("umi_count")
         .count()
-        .over(["cell_id", "locus"])
+        .over(["cell_id", "locus_type"])
         .alias("n_contigs_in_group"),
     )
 
     # Vectorized dominance tests
+    # Match base logic: use min(min_umi, 3) and min(min_consensus, 5)
     df = df.with_columns(
+        pl.when(pl.col("min_umi") < 3)
+        .then(pl.col("min_umi"))
+        .otherwise(pl.lit(3))
+        .alias("min_umi_floor"),
+        pl.when(pl.col("min_consensus") < 5)
+        .then(pl.col("min_consensus"))
+        .otherwise(pl.lit(5))
+        .alias("min_consensus_floor"),
+    ).with_columns(
         (
-            (pl.col("umi_count") / pl.col("min_umi") >= umi_foldchange_cutoff)
+            (
+                pl.col("umi_count") / pl.col("min_umi_floor")
+                >= umi_foldchange_cutoff
+            )
             & (pl.col("umi_count") >= 3)
         ).alias("umi_passes"),
         (
             (
-                pl.col("consensus_count") / pl.col("min_consensus")
+                pl.col("consensus_count") / pl.col("min_consensus_floor")
                 >= consensus_foldchange_cutoff
             )
             & (pl.col("consensus_count") >= 5)
         ).alias("consensus_passes"),
     )
 
-    # Rank by UMI within each cell/locus group
+    # Rank by UMI within each cell/locus_type group (NOT per individual locus)
     df = df.with_columns(
         pl.col("umi_count")
         .rank(method="ordinal", descending=True)
-        .over(["cell_id", "locus"])
+        .over(["cell_id", "locus_type"])
         .alias("umi_rank")
     )
 
     # Single contig: always keep (extra=False, ambiguous=False)
     # Multiple contigs: apply dominance logic
     df = df.with_columns(
-        # Ambiguous: failed dominance OR rank > ntop
+        # Ambiguous: failed dominance test (regardless of rank)
         pl.when(pl.col("n_contigs_in_group") == 1)
         .then(False)
         .when(~(pl.col("umi_passes") & pl.col("consensus_passes")))
         .then(True)
         .otherwise(False)
         .alias("ambiguous"),
-        # Extra: rank exceeds ntop threshold
+        # Extra: passed dominance BUT rank exceeds ntop threshold
         pl.when(pl.col("n_contigs_in_group") == 1)
         .then(False)
-        .when(pl.col("umi_rank") > pl.col("ntop_for_locus"))
+        .when(
+            (pl.col("umi_passes") & pl.col("consensus_passes"))
+            & (pl.col("umi_rank") > pl.col("ntop_for_locus"))
+        )
         .then(True)
         .otherwise(False)
         .alias("extra"),
-        # Ambig_hold: failed dominance but not extra (for chimeric check)
+        # Ambig_hold: failed dominance but within ntop (for chimeric check)
         pl.when(pl.col("n_contigs_in_group") == 1)
         .then(False)
         .when(
@@ -4485,9 +4517,12 @@ def mark_ambiguous_contigs_vec(
 
     # Clean up temporary columns
     df_ranked = df.drop(
+        "locus_type",
         "ntop_for_locus",
         "min_umi",
         "min_consensus",
+        "min_umi_floor",
+        "min_consensus_floor",
         "n_contigs_in_group",
         "umi_passes",
         "consensus_passes",
@@ -4498,23 +4533,20 @@ def mark_ambiguous_contigs_vec(
     df_with_chimeric = check_chimeric_genes_vec(df_ranked)
 
     # Step 4: Apply chimeric and ambig_hold logic (vectorized)
+    # The logic is:
+    # - ambig_hold contigs failed dominance but are within ntop
+    # - If they're chimeric, keep them as ambiguous
+    # - If they're NOT chimeric, they're still ambiguous (failed dominance!)
+    # - Chimeric contigs are always ambiguous
     df_final = df_with_chimeric.with_columns(
-        # Handle ambig_hold contigs
-        pl.when(pl.col("ambig_hold")).then(
-            pl.when(pl.col("is_chimeric"))
-            .then(pl.col("ambiguous"))  # Keep ambiguous=T for chimeric
-            .otherwise(False)  # Clear ambiguous=F for non-chimeric
-        )
-        # Mark all chimeric contigs as ambiguous (even if not ambig_hold)
-        .when(pl.col("is_chimeric"))
+        # Mark all chimeric contigs as ambiguous
+        # Keep ambiguous=T for contigs that already failed dominance
+        pl.when(pl.col("is_chimeric"))
         .then(True)
         .otherwise(pl.col("ambiguous"))
         .alias("ambiguous"),
-        # Mark non-chimeric ambig_hold as extra
-        pl.when(pl.col("ambig_hold") & ~pl.col("is_chimeric"))
-        .then(True)
-        .otherwise(pl.col("extra"))
-        .alias("extra"),
+        # Extra status doesn't change based on chimeric/ambig_hold
+        pl.col("extra"),
     ).drop("is_chimeric", "ambig_hold")
 
     return df_final
