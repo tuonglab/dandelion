@@ -1,4 +1,5 @@
 from __future__ import annotations
+import functools
 import math
 import re
 
@@ -523,18 +524,22 @@ def find_clones(
     for check in checks[1:]:
         is_empty_expr = is_empty_expr.otherwise(check)
 
+    has_ambiguous = "ambiguous" in df.collect_schema()
+
+    condition = (
+        (~pl.col("_is_key_empty"))
+        & (pl.col(v_col_common).is_not_null())
+        & (pl.col(v_col_common).ne(""))
+        & (pl.col(JCALL).is_not_null())
+        & (pl.col(JCALL).ne(""))
+    )
+    if has_ambiguous:
+        condition = condition & (~pl.col("ambiguous").is_in(TRUES_STR))
     df = (
         df.with_columns(pl.col("locus").replace(locus_to_col).alias("_key"))
         .with_columns(is_empty_expr.alias("_is_key_empty"))
         .with_columns(
-            pl.when(
-                (~pl.col("_is_key_empty"))
-                & (pl.col(v_col_common).is_not_null())
-                & (pl.col(v_col_common).ne(""))
-                & (pl.col(JCALL).is_not_null())
-                & (pl.col(JCALL).ne(""))
-                & (~pl.col("ambiguous").is_in(TRUES_STR))
-            )
+            pl.when(condition)
             .then(pl.col(key_added))
             .otherwise(None)
             .alias(key_added)
@@ -1394,6 +1399,30 @@ def tabulate_clone_sizes(
     )
 
 
+def _categorize_clone_size(size: int | float, max_size: int) -> str | float:
+    """
+    Categorize clone size into bins or clip at maximum.
+
+    Parameters
+    ----------
+    size : int | float
+        Clone size value
+    max_size : int
+        Maximum size for categorization
+
+    Returns
+    -------
+    str | float
+        String category if size is valid, otherwise NaN
+    """
+    if pd.isna(size):
+        return np.nan
+    if size < max_size:
+        return str(int(size))
+    else:
+        return f">= {max_size}"
+
+
 def clone_size(
     vdj: DandelionPolars | AnnData | MuData,
     groupby: str | None = None,
@@ -1484,16 +1513,13 @@ def clone_size(
 
     # --- Create max_size categories if specified
     if max_size is not None:
+        # Use partial to bind max_size to the helper function
+        categorize_fn = functools.partial(
+            _categorize_clone_size,
+            max_size=max_size
+        )
 
-        def categorize_size(size):
-            if pd.isna(size):
-                return np.nan
-            if size < max_size:
-                return str(int(size))
-            else:
-                return f">= {max_size}"
-
-        clonesize_cat = clonesize.apply(categorize_size)
+        clonesize_cat = clonesize.apply(categorize_fn)
         clonesize_cat_map = clonesize_cat.to_dict()
 
     # --- Define clone frequency bins

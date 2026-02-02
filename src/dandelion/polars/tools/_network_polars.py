@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import multiprocessing
 import re
 import time
@@ -479,27 +480,18 @@ def generate_network(
             )
 
             # For each overlap group, get the positions by joining with meta_exploded
-            def get_positions_for_group(cells_list):
-                cells_df = pl.DataFrame({"cell_id": cells_list})
-                positions = (
-                    cells_df.join(
-                        meta_exploded.select(["cell_id", "pos"]),
-                        on="cell_id",
-                        how="inner",
-                    )
-                    .select("pos")
-                    .unique()
-                    .to_series()
-                    .to_list()
-                )
-                return positions
+            # Use partial to bind meta_exploded to the helper function
+            get_positions_fn = functools.partial(
+                _get_positions_for_group,
+                meta_exploded=meta_exploded
+            )
 
             # Add positions
             overlap_groups = overlap_groups.with_columns(
                 [
                     pl.col("cells_in_group")
                     .map_elements(
-                        get_positions_for_group, return_dtype=pl.List(pl.Int64)
+                        get_positions_fn, return_dtype=pl.List(pl.Int64)
                     )
                     .alias("_overlap_positions"),
                     pl.col("_overlap_group").alias("_full_group"),
@@ -628,55 +620,19 @@ def generate_network(
             # ===================================================================
             # MST COMPUTATION
             # ===================================================================
-            def create_mst_edges(
-                total_dist: np.ndarray,
-                positions: list[int],
-                cell_ids: list[str],
-                lazy: bool = False,
-            ):
-                if len(positions) < 2:
-                    return None
-
-                if lazy:
-                    submat = dask_safe_slice_square(
-                        total_dist, positions
-                    ).compute()
-                else:
-                    submat = total_dist[np.ix_(positions, positions)]
-
-                if submat.shape[0] < 2 or submat.shape[1] < 2:
-                    return None
-
-                # Compute MST directly using scipy
-                values = submat.astype(float)
-                shifted = values + 1.0
-                shifted[np.isnan(shifted)] = 0.0
-
-                mst_sparse = scipy_mst(shifted)
-                coo = mst_sparse.tocoo()
-
-                if coo.nnz == 0:
-                    return None
-
-                # Undo the +1 shift, clamp at 0
-                weights = np.maximum(coo.data - 1.0, 0.0)
-
-                return pd.DataFrame(
-                    {
-                        "source": [cell_ids[i] for i in coo.row],
-                        "target": [cell_ids[j] for j in coo.col],
-                        "weight": weights,
-                    }
-                )
+            # Use partial to bind total_dist and lazy to the helper function
+            create_mst_fn = functools.partial(
+                _create_mst_edges,
+                total_dist=total_dist,
+                lazy=lazy
+            )
 
             mst_groups = mst_groups.with_columns(
                 pl.struct(["positions", "cell_ids"])
                 .map_elements(
-                    lambda x: create_mst_edges(
-                        total_dist,
+                    lambda x: create_mst_fn(
                         positions=x["positions"],
                         cell_ids=x["cell_ids"],
-                        lazy=lazy,
                     ),
                     return_dtype=pl.Object,
                 )
@@ -686,48 +642,19 @@ def generate_network(
             # ===================================================================
             # ZERO-DISTANCE EDGES
             # ===================================================================
-
-            def find_zero_dist_edges(
-                total_dist: np.ndarray,
-                positions: list[int],
-                cell_ids: list[str],
-                lazy: bool = False,
-            ):
-                if len(positions) < 2:
-                    return None
-
-                # Slice the distance matrix
-                if lazy:
-                    submat = dask_safe_slice_square(
-                        total_dist, positions
-                    ).compute()
-                else:
-                    submat = total_dist[np.ix_(positions, positions)]
-
-                # Find all pairs in lower triangle with distance == 0
-                n = len(cell_ids)
-                row_idx, col_idx = np.tril_indices(n, k=-1)
-                mask = submat[row_idx, col_idx] == 0
-
-                if not mask.any():
-                    return None
-
-                return pd.DataFrame(
-                    {
-                        "source": [cell_ids[i] for i in row_idx[mask]],
-                        "target": [cell_ids[j] for j in col_idx[mask]],
-                        "weight": 0.0,
-                    }
-                )
+            # Use partial to bind total_dist and lazy to the helper function
+            find_zero_fn = functools.partial(
+                _find_zero_dist_edges,
+                total_dist=total_dist,
+                lazy=lazy
+            )
 
             zero_groups = zero_groups.with_columns(
                 pl.struct(["positions", "cell_ids"])
                 .map_elements(
-                    lambda x: find_zero_dist_edges(
-                        total_dist,
+                    lambda x: find_zero_fn(
                         positions=x["positions"],
                         cell_ids=x["cell_ids"],
-                        lazy=lazy,
                     ),
                     return_dtype=pl.Object,
                 )
@@ -753,16 +680,9 @@ def generate_network(
             # MERGE MST AND ZERO-DISTANCE EDGES
             # ===================================================================
             try:
-                # Helper function to add sorted pair index
-                def add_sorted_index(df):
-                    pairs = np.sort(df[["source", "target"]].values, axis=1)
-                    df = df.copy()
-                    df.index = [f"{a}|{b}" for a, b in pairs]
-                    return df
-
                 # Concat all MST edges
                 if mst_edge_dict:
-                    edge_listx = add_sorted_index(
+                    edge_listx = _add_sorted_index(
                         pd.concat(
                             list(mst_edge_dict.values()), ignore_index=True
                         )
@@ -774,7 +694,7 @@ def generate_network(
 
                 # Concat all zero-distance edges
                 if zero_edge_dict:
-                    tmp_edge_listx = add_sorted_index(
+                    tmp_edge_listx = _add_sorted_index(
                         pd.concat(
                             list(zero_edge_dict.values()), ignore_index=True
                         )
@@ -890,6 +810,171 @@ def generate_network(
             germline=germline,
             reinitialize=False,
         )
+
+
+def _get_positions_for_group(cells_list: list, meta_exploded: pl.DataFrame) -> list[int]:
+    """
+    Get positions for a group of cells by joining with metadata.
+
+    Parameters
+    ----------
+    cells_list : list
+        List of cell IDs
+    meta_exploded : pl.DataFrame
+        Exploded metadata DataFrame with cell_id and pos columns
+
+    Returns
+    -------
+    list[int]
+        List of unique positions for the cells
+    """
+    cells_df = pl.DataFrame({"cell_id": cells_list})
+    positions = (
+        cells_df.join(
+            meta_exploded.select(["cell_id", "pos"]),
+            on="cell_id",
+            how="inner",
+        )
+        .select("pos")
+        .unique()
+        .to_series()
+        .to_list()
+    )
+    return positions
+
+
+def _create_mst_edges(
+    total_dist: np.ndarray,
+    positions: list[int],
+    cell_ids: list[str],
+    lazy: bool = False,
+) -> pd.DataFrame | None:
+    """
+    Create minimum spanning tree edges for a group.
+
+    Parameters
+    ----------
+    total_dist : np.ndarray
+        Distance matrix
+    positions : list[int]
+        Positions to slice from the distance matrix
+    cell_ids : list[str]
+        Cell IDs corresponding to positions
+    lazy : bool
+        Whether using lazy/Dask arrays
+
+    Returns
+    -------
+    pd.DataFrame | None
+        DataFrame with source, target, weight columns, or None if insufficient data
+    """
+    if len(positions) < 2:
+        return None
+
+    if lazy:
+        from dandelion.polars.tools._lazydistances_polars import dask_safe_slice_square
+        submat = dask_safe_slice_square(total_dist, positions).compute()
+    else:
+        submat = total_dist[np.ix_(positions, positions)]
+
+    if submat.shape[0] < 2 or submat.shape[1] < 2:
+        return None
+
+    # Compute MST directly using scipy
+    values = submat.astype(float)
+    shifted = values + 1.0
+    shifted[np.isnan(shifted)] = 0.0
+
+    mst_sparse = scipy_mst(shifted)
+    coo = mst_sparse.tocoo()
+
+    if coo.nnz == 0:
+        return None
+
+    # Undo the +1 shift, clamp at 0
+    weights = np.maximum(coo.data - 1.0, 0.0)
+
+    return pd.DataFrame(
+        {
+            "source": [cell_ids[i] for i in coo.row],
+            "target": [cell_ids[j] for j in coo.col],
+            "weight": weights,
+        }
+    )
+
+
+def _find_zero_dist_edges(
+    total_dist: np.ndarray,
+    positions: list[int],
+    cell_ids: list[str],
+    lazy: bool = False,
+) -> pd.DataFrame | None:
+    """
+    Find edges with zero distance between cells.
+
+    Parameters
+    ----------
+    total_dist : np.ndarray
+        Distance matrix
+    positions : list[int]
+        Positions to slice from the distance matrix
+    cell_ids : list[str]
+        Cell IDs corresponding to positions
+    lazy : bool
+        Whether using lazy/Dask arrays
+
+    Returns
+    -------
+    pd.DataFrame | None
+        DataFrame with source, target, weight columns (weight=0), or None if no zero distances
+    """
+    if len(positions) < 2:
+        return None
+
+    # Slice the distance matrix
+    if lazy:
+        from dandelion.polars.tools._lazydistances_polars import dask_safe_slice_square
+        submat = dask_safe_slice_square(total_dist, positions).compute()
+    else:
+        submat = total_dist[np.ix_(positions, positions)]
+
+    # Find all pairs in lower triangle with distance == 0
+    n = len(cell_ids)
+    row_idx, col_idx = np.tril_indices(n, k=-1)
+    mask = submat[row_idx, col_idx] == 0
+
+    if not mask.any():
+        return None
+
+    return pd.DataFrame(
+        {
+            "source": [cell_ids[i] for i in row_idx[mask]],
+            "target": [cell_ids[j] for j in col_idx[mask]],
+            "weight": 0.0,
+        }
+    )
+
+
+def _add_sorted_index(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add sorted pair index to edge DataFrame.
+
+    Creates an index from sorted (source, target) pairs in format "a|b".
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with source and target columns
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of DataFrame with sorted pair index
+    """
+    pairs = np.sort(df[["source", "target"]].values, axis=1)
+    df = df.copy()
+    df.index = [f"{a}|{b}" for a, b in pairs]
+    return df
 
 
 def mst(
