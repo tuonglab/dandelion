@@ -14,8 +14,7 @@ from joblib import Parallel, delayed
 from pathlib import Path
 from polyleven import levenshtein
 from scanpy import logging as logg
-
-from scipy.sparse.csgraph import csgraph_from_dense
+from scipy.sparse.csgraph import minimum_spanning_tree as scipy_mst
 
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
@@ -34,7 +33,6 @@ from dandelion.utilities._distances import (
     resolve_metric,
 )
 from dandelion.utilities._utilities import (
-    flatten,
     Tree,
     FALSES,
 )
@@ -438,10 +436,6 @@ def generate_network(
                         verbose=verbose,
                     )
         if compute_graph:
-            tmp_clusterdist = Tree()
-            cluster_dist = {}
-            overlap = []
-
             # Normalize metadata to Polars DataFrame if lazy
             if isinstance(vdj._metadata, pl.LazyFrame):
                 meta_df = vdj._metadata.collect(engine="streaming")
@@ -450,9 +444,6 @@ def generate_network(
             else:
                 meta_df = pl.from_pandas(vdj._metadata)
 
-            # Add row index to preserve original positions
-            meta_df = meta_df.with_row_index("_orig_idx")
-
             # Vectorized split and overlap detection
             meta_df_split = meta_df.with_columns(
                 pl.col(str(clone_key)).str.split("|").alias("_clone_list")
@@ -460,260 +451,380 @@ def generate_network(
                 pl.col("_clone_list").list.len().gt(1).alias("_is_overlap")
             )
 
-            # Collect overlaps efficiently
-            overlap = [
-                [c for c in row["_clone_list"] if c != "None"]
-                for row in meta_df_split.filter(pl.col("_is_overlap"))
-                .select("_clone_list")
-                .iter_rows(named=True)
-            ]
-
-            # Explode and populate tmp_clusterdist in one vectorized operation
-            # Use cell_id for mapping to distance matrix positions
+            # Explode and add positions
             meta_exploded = (
                 meta_df_split.select(["cell_id", "_clone_list"])
                 .explode("_clone_list")
                 .filter(pl.col("_clone_list") != "None")
                 .rename({"_clone_list": "clone_id"})
-            )
-
-            # Single iteration on the exploded (pre-filtered) data
-            for row in meta_exploded.iter_rows(named=True):
-                tmp_clusterdist[row["clone_id"]][row["cell_id"]].value = 1
-            tmp_clusterdist2 = {}
-            for x in tmp_clusterdist:
-                tmp_clusterdist2[x] = list(tmp_clusterdist[x])
-
-            # Get valid row count for index filtering
-            # n_rows = meta_df.height
-            cluster_dist = {}
-            # NOTE: dist_mat_ is kept as pandas DataFrame because:
-            # 1. NetworkX (used in mst() and nx.to_pandas_edgelist()) requires pandas
-            # 2. These are small per-clone submatrices, not the full distance matrix
-            # 3. All downstream operations (MST, graph construction) use pandas
-            for c_ in tqdm(
-                tmp_clusterdist2,
-                desc="Sorting into clusters ",
-                disable=not verbose,
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-            ):
-                idxs = [i for i in tmp_clusterdist2[c_] if i in cell_id_to_pos]
-                if c_ in list(flatten(overlap)):
-                    for ol in overlap:
-                        if c_ in ol:
-                            idx = list(
-                                set(
-                                    flatten(
-                                        [tmp_clusterdist2[c_x] for c_x in ol]
-                                    )
-                                )
-                            )
-                            if len(list(set(idx))) > 1:
-                                # Mirror pandas: slice using the current clone's members (idxs)
-                                # even when overlapping clones exist.
-                                pos = [cell_id_to_pos[i] for i in idxs]
-                                if lazy:
-                                    dist_mat_ = pd.DataFrame(
-                                        dask_safe_slice_square(
-                                            total_dist, pos
-                                        ).compute(),
-                                        index=idxs,
-                                        columns=idxs,
-                                    )
-                                else:
-                                    dist_mat_ = pd.DataFrame(
-                                        total_dist[np.ix_(pos, pos)],
-                                        index=idxs,
-                                        columns=idxs,
-                                    )
-                                s1, s2 = dist_mat_.shape
-                                if s1 > 1 and s2 > 1:
-                                    cluster_dist["|".join(ol)] = dist_mat_
-                else:
-                    pos = [cell_id_to_pos[i] for i in idxs]
-                    if lazy:
-                        dist_mat_ = pd.DataFrame(
-                            dask_safe_slice_square(total_dist, pos).compute(),
-                            index=idxs,
-                            columns=idxs,
-                        )
-                    else:
-                        dist_mat_ = pd.DataFrame(
-                            total_dist[np.ix_(pos, pos)],
-                            index=idxs,
-                            columns=idxs,
-                        )
-                    s1, s2 = dist_mat_.shape
-                    if s1 > 1 and s2 > 1:
-                        cluster_dist[c_] = dist_mat_
-            # Minimum spanning trees (unchanged)
-            # mst_tree = mst(cluster_dist, n_cpus=n_cpus, verbose=verbose)
-            mst_tree = mst(cluster_dist, n_cpus=1, verbose=verbose)
-            # generate edge list
-            edge_list = Tree()
-            for c in tqdm(
-                mst_tree,
-                desc="Generating edge list ",
-                disable=not verbose,
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-            ):
-                edge_list[c] = nx.to_pandas_edgelist(mst_tree[c])
-                if edge_list[c].shape[0] > 0:
-                    edge_list[c]["weight"] = edge_list[c]["weight"] - 1
-                    edge_list[c].loc[edge_list[c]["weight"] < 0, "weight"] = 0
-
-            # Normalize metadata to pandas for downstream operations
-            meta_pd = meta_df.to_pandas()
-            clone_ref = dict(zip(meta_pd["cell_id"], meta_pd[clone_key]))
-            clone_ref = {k: r for k, r in clone_ref.items() if r != "None"}
-            tmp_clone_tree = Tree()
-            for x in meta_pd["cell_id"].tolist():
-                if x in clone_ref:
-                    if "|" in clone_ref[x]:
-                        for x_ in clone_ref[x].split("|"):
-                            if x_ != "None":
-                                tmp_clone_tree[x_][x].value = 1
-                    else:
-                        tmp_clone_tree[clone_ref[x]][x].value = 1
-            tmp_clone_tree2 = Tree()
-            for x in tmp_clone_tree:
-                tmp_clone_tree2[x] = list(tmp_clone_tree[x])
-
-            tmp_clone_tree3 = Tree()
-            tmp_clone_tree3_overlap = Tree()
-            for x in tqdm(
-                tmp_clone_tree2,
-                desc="Computing overlap ",
-                disable=not verbose,
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-            ):
-                # this is to catch all possible cells that may potentially match up with this clone that's joined together
-                if x in list(flatten(overlap)):
-                    for ol in overlap:
-                        if x in ol:
-                            if len(tmp_clone_tree2[x]) > 1:
-                                for x_ in tmp_clone_tree2[x]:
-                                    tmp_clone_tree3_overlap["|".join(ol)][
-                                        "".join(x_)
-                                    ].value = 1
-                            else:
-                                tmp_clone_tree3_overlap["|".join(ol)][
-                                    "".join(tmp_clone_tree2[x])
-                                ].value = 1
-                else:
-                    tmp_ = pd.DataFrame(
-                        index=tmp_clone_tree2[x], columns=tmp_clone_tree2[x]
-                    )
-                    tmp_ = pd.DataFrame(
-                        np.tril(tmp_) + 1,
-                        index=tmp_clone_tree2[x],
-                        columns=tmp_clone_tree2[x],
-                    )
-                    tmp_ = tmp_.astype(float).fillna(0)
-                    tmp_clone_tree3[x] = tmp_
-
-            for x in tqdm(
-                tmp_clone_tree3_overlap,
-                desc="Adjust overlap ",
-                disable=not verbose,
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-            ):  # repeat for the overlap clones
-                tmp_ = pd.DataFrame(
-                    index=tmp_clone_tree3_overlap[x],
-                    columns=tmp_clone_tree3_overlap[x],
+                .with_columns(
+                    pl.col("cell_id")
+                    .replace(cell_id_to_pos)
+                    .cast(pl.Int64)
+                    .alias("pos")
                 )
-                tmp_ = pd.DataFrame(
-                    np.tril(tmp_) + 1,
-                    index=tmp_clone_tree3_overlap[x],
-                    columns=tmp_clone_tree3_overlap[x],
+            )
+
+            # Get unique overlap groups with their cells
+            overlap_groups = (
+                meta_df_split.filter(pl.col("_is_overlap"))
+                .select(["cell_id", "_clone_list"])
+                .with_columns(
+                    pl.col("_clone_list")
+                    .list.eval(pl.element().filter(pl.element() != "None"))
+                    .alias("_overlap_group")
                 )
-                tmp_ = tmp_.astype(float).fillna(0)
-                tmp_clone_tree3[x] = tmp_
-
-            # free up memory
-            del tmp_clone_tree2
-
-            # convert total_dist to sparse graph
-            tmp_g = csgraph_from_dense(
-                total_dist.compute() + 1
-                if lazy
-                else total_dist + 1  # +1 to keep zeros as infinite distance
+                .group_by("_overlap_group", maintain_order=True)
+                .agg(pl.col("cell_id").alias("cells_in_group"))
             )
-            # construct edge list as a dictionary
-            Gcoo = tmp_g.tocoo()
-            # remove self-loops
-            mask = Gcoo.row != Gcoo.col
-            rows = Gcoo.row[mask]
-            cols = Gcoo.col[mask]
-            weights = (
-                Gcoo.data[mask] - 1
-            )  # -1 to revert back to original distance
-            # Ensure cell ordering matches the distance matrix rows (dat_seq order)
-            meta_cells = dat_seq_indexed["cell_id"].to_list()
-            tmp_totaldiststack = {
-                meta_cells[r] + "|" + meta_cells[c]: w
-                for r, c, w in zip(rows, cols, weights)
-            }
-            tmp_totaldiststack = pd.DataFrame(
-                pd.Series(tmp_totaldiststack, name="weight")
-            )
-            # convert tmp_totaldist to edge list and rename the index
-            tmp_edge_list = Tree()
-            for c in tqdm(
-                tmp_clone_tree3,
-                desc="Linking edges ",
-                disable=not verbose,
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-            ):
-                if len(tmp_clone_tree3[c]) > 1:
-                    G = create_networkx_graph(
-                        tmp_clone_tree3[c],
-                        drop_zero=True,
-                    )
-                    G.remove_edges_from(nx.selfloop_edges(G))
-                    tmp_edge_list[c] = nx.to_pandas_edgelist(G)
-                    set_edge_list_index(tmp_edge_list[c])
 
-                    tmp_edge_list[c].update(
-                        {"weight": tmp_totaldiststack["weight"]}
+            # For each overlap group, get the positions by joining with meta_exploded
+            def get_positions_for_group(cells_list):
+                cells_df = pl.DataFrame({"cell_id": cells_list})
+                positions = (
+                    cells_df.join(
+                        meta_exploded.select(["cell_id", "pos"]),
+                        on="cell_id",
+                        how="inner",
                     )
-                    # keep only edges when there is 100% identity, to minimise crowding
-                    tmp_edge_list[c] = tmp_edge_list[c][
-                        tmp_edge_list[c]["weight"] == 0
+                    .select("pos")
+                    .unique()
+                    .to_series()
+                    .to_list()
+                )
+                return positions
+
+            # Add positions
+            overlap_groups = overlap_groups.with_columns(
+                [
+                    pl.col("cells_in_group")
+                    .map_elements(
+                        get_positions_for_group, return_dtype=pl.List(pl.Int64)
+                    )
+                    .alias("_overlap_positions"),
+                    pl.col("_overlap_group").alias("_full_group"),
+                ]
+            )
+
+            # Explode to get one row per clone_id
+            _overlap_info = (
+                overlap_groups.explode("_overlap_group")
+                .rename({"_overlap_group": "clone_id"})
+                .group_by("clone_id")
+                .agg(
+                    [
+                        pl.col("_full_group").alias("_overlap_keys"),
+                        pl.col("_overlap_positions").alias(
+                            "_overlap_positions_list"
+                        ),
                     ]
-                    tmp_edge_list[c].reset_index(inplace=True)
-
-            # try to catch situations where there's no edge (only singletons)
-            try:
-                edge_listx = pd.concat([edge_list[x] for x in edge_list])
-                set_edge_list_index(edge_listx)
-                tmp_edge_listx = pd.concat(
-                    [tmp_edge_list[x] for x in tmp_edge_list]
                 )
-                tmp_edge_listx = tmp_edge_listx.drop("index", axis=1)
-                set_edge_list_index(tmp_edge_listx)
+            )
 
+            # Join onto meta_exploded
+            meta_exploded = meta_exploded.join(
+                _overlap_info, on="clone_id", how="left"
+            )
+
+            # ===================================================================
+            # CREATE TWO SEPARATE GROUPINGS: MST vs ZERO-DISTANCE
+            # ===================================================================
+
+            # 1. MST GROUPS: For overlaps, use one representative clone's cells (last one)
+            meta_for_mst = meta_exploded.with_columns(
+                pl.when(pl.col("_overlap_keys").is_not_null())
+                .then(pl.col("_overlap_keys").list.first().list.join("|"))
+                .otherwise(pl.col("clone_id"))
+                .alias("mst_key")
+            )
+
+            mst_groups = (
+                meta_for_mst.group_by(
+                    ["mst_key", "clone_id"]
+                )  # Keep clones separate initially
+                .agg(
+                    [
+                        pl.col("cell_id").alias("cell_ids"),
+                        pl.col("pos").alias("positions"),
+                    ]
+                )
+                .filter(pl.col("positions").list.len() >= 2)
+            )
+
+            # For each mst_key, take last clone (mimics overwrite behavior)
+            mst_groups = (
+                mst_groups.group_by("mst_key")
+                .agg(
+                    [
+                        pl.col("cell_ids").last().alias("cell_ids"),
+                        pl.col("positions").last().alias("positions"),
+                    ]
+                )
+                .rename({"mst_key": "group_key"})
+            )
+
+            # 2. ZERO-DISTANCE GROUPS: For overlaps, use UNION of all cells
+            meta_for_zero = meta_exploded.filter(
+                pl.col("_overlap_keys").is_not_null()
+            )
+            meta_no_overlap_zero = meta_exploded.filter(
+                pl.col("_overlap_keys").is_null()
+            )
+
+            if len(meta_for_zero) > 0:
+                zero_overlap_exploded = (
+                    meta_for_zero.explode("_overlap_keys")
+                    .with_columns(
+                        pl.col("_overlap_keys").list.join("|").alias("zero_key")
+                    )
+                    .select(["cell_id", "pos", "zero_key"])
+                )
+
+                zero_overlap_groups = (
+                    zero_overlap_exploded.group_by("zero_key")
+                    .agg(
+                        [
+                            pl.col("cell_id").unique().alias("cell_ids"),
+                            pl.col("pos").unique().alias("positions"),
+                        ]
+                    )
+                    .filter(pl.col("positions").list.len() >= 2)
+                    .rename({"zero_key": "group_key"})
+                )
+            else:
+                zero_overlap_groups = pl.DataFrame(
+                    schema={
+                        "group_key": pl.String,
+                        "cell_ids": pl.List(pl.String),
+                        "positions": pl.List(pl.Int64),
+                    }
+                )
+
+            if len(meta_no_overlap_zero) > 0:
+                zero_no_overlap_groups = (
+                    meta_no_overlap_zero.group_by("clone_id")
+                    .agg(
+                        [
+                            pl.col("cell_id").alias("cell_ids"),
+                            pl.col("pos").alias("positions"),
+                        ]
+                    )
+                    .filter(pl.col("positions").list.len() >= 2)
+                    .rename({"clone_id": "group_key"})
+                )
+            else:
+                zero_no_overlap_groups = pl.DataFrame(
+                    schema={
+                        "group_key": pl.String,
+                        "cell_ids": pl.List(pl.String),
+                        "positions": pl.List(pl.Int64),
+                    }
+                )
+
+            zero_groups = pl.concat(
+                [zero_overlap_groups, zero_no_overlap_groups]
+            )
+
+            # ===================================================================
+            # MST COMPUTATION
+            # ===================================================================
+            def create_mst_edges(
+                total_dist: np.ndarray,
+                positions: list[int],
+                cell_ids: list[str],
+                lazy: bool = False,
+            ):
+                if len(positions) < 2:
+                    return None
+
+                if lazy:
+                    submat = dask_safe_slice_square(
+                        total_dist, positions
+                    ).compute()
+                else:
+                    submat = total_dist[np.ix_(positions, positions)]
+
+                if submat.shape[0] < 2 or submat.shape[1] < 2:
+                    return None
+
+                # Compute MST directly using scipy
+                values = submat.astype(float)
+                shifted = values + 1.0
+                shifted[np.isnan(shifted)] = 0.0
+
+                mst_sparse = scipy_mst(shifted)
+                coo = mst_sparse.tocoo()
+
+                if coo.nnz == 0:
+                    return None
+
+                # Undo the +1 shift, clamp at 0
+                weights = np.maximum(coo.data - 1.0, 0.0)
+
+                return pd.DataFrame(
+                    {
+                        "source": [cell_ids[i] for i in coo.row],
+                        "target": [cell_ids[j] for j in coo.col],
+                        "weight": weights,
+                    }
+                )
+
+            mst_groups = mst_groups.with_columns(
+                pl.struct(["positions", "cell_ids"])
+                .map_elements(
+                    lambda x: create_mst_edges(
+                        total_dist,
+                        positions=x["positions"],
+                        cell_ids=x["cell_ids"],
+                        lazy=lazy,
+                    ),
+                    return_dtype=pl.Object,
+                )
+                .alias("mst_edges")
+            ).filter(pl.col("mst_edges").is_not_null())
+
+            # ===================================================================
+            # ZERO-DISTANCE EDGES
+            # ===================================================================
+
+            def find_zero_dist_edges(
+                total_dist: np.ndarray,
+                positions: list[int],
+                cell_ids: list[str],
+                lazy: bool = False,
+            ):
+                if len(positions) < 2:
+                    return None
+
+                # Slice the distance matrix
+                if lazy:
+                    submat = dask_safe_slice_square(
+                        total_dist, positions
+                    ).compute()
+                else:
+                    submat = total_dist[np.ix_(positions, positions)]
+
+                # Find all pairs in lower triangle with distance == 0
+                n = len(cell_ids)
+                row_idx, col_idx = np.tril_indices(n, k=-1)
+                mask = submat[row_idx, col_idx] == 0
+
+                if not mask.any():
+                    return None
+
+                return pd.DataFrame(
+                    {
+                        "source": [cell_ids[i] for i in row_idx[mask]],
+                        "target": [cell_ids[j] for j in col_idx[mask]],
+                        "weight": 0.0,
+                    }
+                )
+
+            zero_groups = zero_groups.with_columns(
+                pl.struct(["positions", "cell_ids"])
+                .map_elements(
+                    lambda x: find_zero_dist_edges(
+                        total_dist,
+                        positions=x["positions"],
+                        cell_ids=x["cell_ids"],
+                        lazy=lazy,
+                    ),
+                    return_dtype=pl.Object,
+                )
+                .alias("zero_edges")
+            )
+
+            # ===================================================================
+            # COLLECT EDGES BY KEY
+            # ===================================================================
+            mst_edge_dict = dict(
+                zip(
+                    mst_groups["group_key"].to_list(),
+                    mst_groups["mst_edges"].to_list(),
+                )
+            )
+
+            zero_edge_dict = {}
+            for row in zero_groups.iter_rows(named=True):
+                if row["zero_edges"] is not None:
+                    zero_edge_dict[row["group_key"]] = row["zero_edges"]
+
+            # ===================================================================
+            # MERGE MST AND ZERO-DISTANCE EDGES
+            # ===================================================================
+            try:
+                # Helper function to add sorted pair index
+                def add_sorted_index(df):
+                    pairs = np.sort(df[["source", "target"]].values, axis=1)
+                    df = df.copy()
+                    df.index = [f"{a}|{b}" for a, b in pairs]
+                    return df
+
+                # Concat all MST edges
+                if mst_edge_dict:
+                    edge_listx = add_sorted_index(
+                        pd.concat(
+                            list(mst_edge_dict.values()), ignore_index=True
+                        )
+                    )
+                else:
+                    edge_listx = pd.DataFrame(
+                        columns=["source", "target", "weight"]
+                    )
+
+                # Concat all zero-distance edges
+                if zero_edge_dict:
+                    tmp_edge_listx = add_sorted_index(
+                        pd.concat(
+                            list(zero_edge_dict.values()), ignore_index=True
+                        )
+                    )
+                else:
+                    tmp_edge_listx = pd.DataFrame(
+                        columns=["source", "target", "weight"]
+                    )
+
+                # Combine: MST edges take priority
                 edge_list_final = edge_listx.combine_first(tmp_edge_listx)
 
-                common_idx = edge_list_final.index.intersection(
-                    tmp_totaldiststack.index
-                )
-                edge_list_final.loc[common_idx, "weight"] = (
-                    tmp_totaldiststack.loc[common_idx, "weight"]
-                )
+                # Vectorized weight lookup from total_dist
+                if len(edge_list_final) > 0:
+                    sources = edge_list_final["source"].tolist()
+                    targets = edge_list_final["target"].tolist()
 
-                # for i, row in tmp_totaldiststack.iterrows():
-                #     if i in edge_list_final.index:
-                #         edge_list_final.at[i, "weight"] = row["weight"]
+                    # Build reverse lookup: cell_id -> position
+                    cell_to_pos = (
+                        meta_exploded.select(["cell_id", "pos"])
+                        .unique()
+                        .to_dict(as_series=False)
+                    )
+                    cell_to_pos = dict(
+                        zip(cell_to_pos["cell_id"], cell_to_pos["pos"])
+                    )
 
-                # return the edge list
-                edge_list_final = edge_list_final.reset_index(drop=True)
+                    src_pos = np.array([cell_to_pos[s] for s in sources])
+                    tgt_pos = np.array([cell_to_pos[t] for t in targets])
+
+                    if lazy:
+                        # Dask: extract pairs individually
+                        actual_weights = da.stack(
+                            [
+                                total_dist[src_pos[i], tgt_pos[i]]
+                                for i in range(len(src_pos))
+                            ]
+                        ).compute()
+                    else:
+                        actual_weights = total_dist[src_pos, tgt_pos]
+
+                    edge_list_final["weight"] = actual_weights
+                    edge_list_final = edge_list_final.reset_index(drop=True)
+
             except Exception:
                 edge_list_final = None
 
             # final layout + graph creation (unchanged)
             g, g_, lyt, lyt_ = generate_layout(
-                vertices=meta_pd["cell_id"].tolist(),
+                vertices=meta_df["cell_id"].to_list(),
                 edges=edge_list_final,
                 min_size=min_size,
                 weight=None,

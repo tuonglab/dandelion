@@ -533,6 +533,7 @@ def find_clones(
                 & (pl.col(v_col_common).ne(""))
                 & (pl.col(JCALL).is_not_null())
                 & (pl.col(JCALL).ne(""))
+                & (~pl.col("ambiguous").is_in(TRUES_STR))
             )
             .then(pl.col(key_added))
             .otherwise(None)

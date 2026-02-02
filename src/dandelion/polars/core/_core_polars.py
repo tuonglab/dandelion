@@ -348,21 +348,61 @@ class DandelionPolars:
                 _metadata = None  # Will be synced below
             elif isinstance(filter_expr, pl.Series):
                 # Boolean mask provided
-                if isinstance(data, pl.LazyFrame):
-                    # LazyFrame cannot directly use an eager boolean Series; fallback to index-based filter
-                    _data = (
-                        data.with_row_index("__row_idx__")
-                        .filter(
-                            pl.col("__row_idx__").is_in(
-                                [i for i, v in enumerate(filter_expr) if v]
-                            )
-                        )
-                        .drop("__row_idx__")
-                    )
+                # Check if the mask length matches metadata (cell-level) or data (contig-level)
+                if metadata is not None:
+                    if isinstance(metadata, pl.LazyFrame):
+                        metadata_len = metadata.collect(engine="streaming").height
+                    else:
+                        metadata_len = metadata.height
                 else:
-                    # Eager DataFrame: filter directly with the boolean Series to avoid large Python lists
-                    _data = data.filter(filter_expr)
-                _metadata = None  # Will be synced below
+                    metadata_len = 0
+
+                mask_len = len(filter_expr)
+
+                # If mask length matches metadata, it's a cell-level mask
+                # Apply to metadata first, then filter data by resulting cell_ids
+                if metadata is not None and mask_len == metadata_len:
+                    # Apply mask to metadata to get cell_ids
+                    if isinstance(metadata, pl.LazyFrame):
+                        _metadata = (
+                            metadata.with_row_index("__row_idx__")
+                            .filter(
+                                pl.col("__row_idx__").is_in(
+                                    [i for i, v in enumerate(filter_expr) if v]
+                                )
+                            )
+                            .drop("__row_idx__")
+                        )
+                        filtered_cell_ids = (
+                            _metadata.select("cell_id")
+                            .collect(engine="streaming")
+                            .to_series()
+                            .unique()
+                        )
+                    else:
+                        _metadata = metadata.filter(filter_expr)
+                        filtered_cell_ids = _metadata.select("cell_id").to_series().unique()
+
+                    # Now filter data by those cell_ids
+                    _data = data.filter(pl.col("cell_id").is_in(filtered_cell_ids))
+                    cell_ids = filtered_cell_ids
+                else:
+                    # Mask length matches data (contig-level), apply directly
+                    if isinstance(data, pl.LazyFrame):
+                        # LazyFrame cannot directly use an eager boolean Series; fallback to index-based filter
+                        _data = (
+                            data.with_row_index("__row_idx__")
+                            .filter(
+                                pl.col("__row_idx__").is_in(
+                                    [i for i, v in enumerate(filter_expr) if v]
+                                )
+                            )
+                            .drop("__row_idx__")
+                        )
+                    else:
+                        # Eager DataFrame: filter directly with the boolean Series to avoid large Python lists
+                        _data = data.filter(filter_expr)
+                    _metadata = None  # Will be synced below
             else:
                 # Assume it's an Expression
                 # For now, create the filter and we'll handle metadata-only columns
@@ -472,20 +512,33 @@ class DandelionPolars:
 
         # ---- Distances matrix sync -----------------------------------
         if self.distances is not None:
-            # Get metadata cell_ids for distance matrix indexing
-            if isinstance(_metadata, pl.LazyFrame):
-                meta_cells = (
-                    _metadata.select("cell_id")
+            # Get ORIGINAL metadata cell_ids for distance matrix indexing
+            # Use matrix shape as source of truth since _index_names may be outdated
+            dist_size = self.distances.shape[0]
+
+            # Get the first dist_size cells from original metadata
+            if isinstance(self._metadata, pl.LazyFrame):
+                original_cells = (
+                    self._metadata.select("cell_id")
+                    .head(dist_size)
                     .collect(engine="streaming")
                     .to_series()
                     .to_list()
                 )
+            elif isinstance(self._metadata, pl.DataFrame):
+                original_cells = (
+                    self._metadata.select("cell_id")
+                    .head(dist_size)
+                    .to_series()
+                    .to_list()
+                )
             else:
-                meta_cells = _metadata.select("cell_id").to_series().to_list()
+                # pandas DataFrame
+                original_cells = self._metadata.head(dist_size).index.to_list()
 
             keep_set = set(cell_ids.to_list())
             keep = np.array(
-                [i for i, c in enumerate(meta_cells) if c in keep_set]
+                [i for i, c in enumerate(original_cells) if c in keep_set]
             )
             _distances = self.distances[keep, :][:, keep]
             if isinstance(_distances, csr_matrix):
