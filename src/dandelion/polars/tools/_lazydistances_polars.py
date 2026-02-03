@@ -437,14 +437,46 @@ def _compute_block_multicol(
     # Extract prepared sequences (already concatenated with separators and padded)
     seqs_i_flat = seqs_i.flatten().tolist()
     seqs_j_flat = seqs_j.flatten().tolist()
-    all_seqs = seqs_i_flat + seqs_j_flat
 
-    # Vectorized computation on already-prepared sequences
-    n_i = len(seqs_i_flat)
-    full_dist = metric.compute_vectorized(all_seqs)
+    # Deduplicate within each chunk
+    unique_i = []
+    i_to_unique = {}
+    for seq in seqs_i_flat:
+        if seq not in i_to_unique:
+            i_to_unique[seq] = len(unique_i)
+            unique_i.append(seq)
 
-    # Extract the i×j block (cross-distances between chunks)
-    return full_dist[:n_i, n_i:]
+    unique_j = []
+    j_to_unique = {}
+    for seq in seqs_j_flat:
+        if seq not in j_to_unique:
+            j_to_unique[seq] = len(unique_j)
+            unique_j.append(seq)
+
+    # Check if deduplication provides benefit
+    if len(unique_i) < len(seqs_i_flat) or len(unique_j) < len(seqs_j_flat):
+        # Compute distances for unique sequences only
+        all_unique = unique_i + unique_j
+        n_unique_i = len(unique_i)
+        full_dist_unique = metric.compute_vectorized(all_unique)
+        unique_block = full_dist_unique[:n_unique_i, n_unique_i:]
+
+        # Map back to full i×j block
+        n_i = len(seqs_i_flat)
+        n_j = len(seqs_j_flat)
+        result = np.zeros((n_i, n_j), dtype=np.float64)
+        for i, seq_i in enumerate(seqs_i_flat):
+            unique_i_idx = i_to_unique[seq_i]
+            for j, seq_j in enumerate(seqs_j_flat):
+                unique_j_idx = j_to_unique[seq_j]
+                result[i, j] = unique_block[unique_i_idx, unique_j_idx]
+        return result
+    else:
+        # No duplicates, compute normally
+        all_seqs = seqs_i_flat + seqs_j_flat
+        n_i = len(seqs_i_flat)
+        full_dist = metric.compute_vectorized(all_seqs)
+        return full_dist[:n_i, n_i:]
 
 
 def dask_safe_slice_square(arr: da.Array, pos: list) -> da.Array:
@@ -788,8 +820,30 @@ def _compute_group_distances_sequential(
     array_indices = group_df["_original_order"].to_numpy()
     seqs_flat = group_df["_prepared_seq"].to_list()
 
-    # Vectorized pairwise distance computation
-    dist_block = metric.compute_vectorized(seqs_flat)
+    # Deduplicate sequences within this group for faster computation
+    unique_seqs = []
+    seq_to_unique_idx = {}
+    for seq in seqs_flat:
+        if seq not in seq_to_unique_idx:
+            seq_to_unique_idx[seq] = len(unique_seqs)
+            unique_seqs.append(seq)
+
+    # Only compute distances if we have duplicates (speedup opportunity)
+    if len(unique_seqs) < len(seqs_flat):
+        # Compute distances only for unique sequences
+        dist_block_unique = metric.compute_vectorized(unique_seqs)
+
+        # Map back to full distance matrix
+        n = len(seqs_flat)
+        dist_block = np.zeros((n, n), dtype=np.float64)
+        for i, seq_i in enumerate(seqs_flat):
+            unique_i = seq_to_unique_idx[seq_i]
+            for j, seq_j in enumerate(seqs_flat):
+                unique_j = seq_to_unique_idx[seq_j]
+                dist_block[i, j] = dist_block_unique[unique_i, unique_j]
+    else:
+        # No duplicates, compute normally
+        dist_block = metric.compute_vectorized(seqs_flat)
 
     # Write directly to Zarr
     z_array[np.ix_(array_indices, array_indices)] = dist_block
@@ -820,8 +874,30 @@ def _process_group_parallel(
     array_indices = group_df["_original_order"].to_numpy()
     seqs_flat = group_df["_prepared_seq"].to_list()
 
-    # Compute distances
-    dist_block = metric.compute_vectorized(seqs_flat)
+    # Deduplicate sequences within this group for faster computation
+    unique_seqs = []
+    seq_to_unique_idx = {}
+    for seq in seqs_flat:
+        if seq not in seq_to_unique_idx:
+            seq_to_unique_idx[seq] = len(unique_seqs)
+            unique_seqs.append(seq)
+
+    # Only compute distances if we have duplicates (speedup opportunity)
+    if len(unique_seqs) < len(seqs_flat):
+        # Compute distances only for unique sequences
+        dist_block_unique = metric.compute_vectorized(unique_seqs)
+
+        # Map back to full distance matrix
+        n = len(seqs_flat)
+        dist_block = np.zeros((n, n), dtype=np.float64)
+        for i, seq_i in enumerate(seqs_flat):
+            unique_i = seq_to_unique_idx[seq_i]
+            for j, seq_j in enumerate(seqs_flat):
+                unique_j = seq_to_unique_idx[seq_j]
+                dist_block[i, j] = dist_block_unique[unique_i, unique_j]
+    else:
+        # No duplicates, compute normally
+        dist_block = metric.compute_vectorized(seqs_flat)
 
     # Write to Zarr (Zarr handles thread-safe writes)
     z_array[np.ix_(array_indices, array_indices)] = dist_block

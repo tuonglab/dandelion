@@ -201,11 +201,6 @@ def generate_network(
         if key_ not in vdj._data:
             raise ValueError(f"key {key_} not found in data.")
 
-        if lazy:
-            from dandelion.polars.tools._lazydistances_polars import (
-                dask_safe_slice_square,
-            )
-
         if sample is not None:
             if adata is not None:
                 vdj, adata = vdj_sample(
@@ -247,7 +242,18 @@ def generate_network(
                 if col.startswith(f"{key_}_")
             }
         )
+
+        # Align dat_seq to vdj._metadata order to ensure indices match
+        # pre-computed distances from find_clones (which are indexed by metadata position)
+        meta_cell_ids = vdj._metadata.select("cell_id")
+        if isinstance(meta_cell_ids, pl.LazyFrame):
+            meta_cell_ids = meta_cell_ids.collect(engine="streaming")
+
+        # Left join to preserve metadata order, missing cells get null sequences
+        dat_seq = meta_cell_ids.join(dat_seq, on="cell_id", how="left")
+
         # Build a mapping of cell_id to row position using explicit row indexing
+        # Now positions match metadata indices
         dat_seq_indexed = (
             dat_seq.with_row_index("_row_pos")
             if isinstance(dat_seq, pl.DataFrame)
@@ -298,144 +304,152 @@ def generate_network(
                             if cell_name not in membership[clone_id]:
                                 membership[clone_id].append(cell_name)
 
-        # compute total_dist using chosen mode (original uses membership)
-        logg.info(
-            f"Calculating distance matrix {'lazily' if lazy else ''} with distance_mode = '{distance_mode}'\n"
-        )
-        if distance_mode == "clone":
-            if lazy:
-                from dandelion.polars.tools._lazydistances_polars import (
-                    calculate_distance_matrix_zarr,
-                )
-
-                # Determine Zarr destination and mark embedding intent
-                if zarr_path is None:
-                    import tempfile
-
-                    zarr_tmp = tempfile.mkdtemp()
-                    # Flags on object to indicate pending embed on write
-                    try:
-                        setattr(vdj, "_distance_zarr_path", zarr_tmp)
-                        setattr(vdj, "_distance_embed_pending", True)
-                    except Exception:
-                        pass
-                else:
-                    # External Zarr mode
-                    try:
-                        setattr(vdj, "_distance_zarr_path", str(zarr_path))
-                        setattr(vdj, "_distance_embed_pending", False)
-                    except Exception:
-                        pass
-
-                _ = calculate_distance_matrix_zarr(
-                    dat_seq,
-                    metric=metric,
-                    pad_to_max=pad_to_max,
-                    membership=membership,
-                    zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
-                    chunk_size=chunk_size,
-                    n_cpus=n_cpus,
-                    memory_limit_gb=memory_limit_gb,
-                    memory_safety_fraction=memory_safety_fraction,
-                    compress=compress,
-                    verbose=verbose,
-                )
-                # Create a Dask view of the on-disk distances
-                import dask.array as da
-
-                zpath = zarr_tmp if zarr_path is None else zarr_path
-                try:
-                    total_dist = da.from_zarr(
-                        str(zpath) + "/distance_matrix.zarr/distance_matrix"
+        # Check if pre-computed distances are available
+        if hasattr(vdj, "distances") and vdj.distances is not None:
+            logg.info("Using pre-computed distances from .distances\n")
+            total_dist = vdj.distances
+            # Convert sparse matrix to dense if needed for graph computation
+            if hasattr(total_dist, "toarray"):
+                total_dist = total_dist.toarray()
+        else:
+            # compute total_dist using chosen mode (original uses membership)
+            logg.info(
+                f"Calculating distance matrix {'lazily' if lazy else ''} with distance_mode = '{distance_mode}'\n"
+            )
+            if distance_mode == "clone":
+                if lazy:
+                    from dandelion.polars.tools._lazydistances_polars import (
+                        calculate_distance_matrix_zarr,
                     )
-                except Exception:
-                    total_dist = da.from_zarr(
-                        str(zpath) + "/distance_matrix.zarr"
-                    )
-            else:
-                if sequential_chain:
-                    total_dist = calculate_distance_matrix_original(
+
+                    # Determine Zarr destination and mark embedding intent
+                    if zarr_path is None:
+                        import tempfile
+
+                        zarr_tmp = tempfile.mkdtemp()
+                        # Flags on object to indicate pending embed on write
+                        try:
+                            setattr(vdj, "_distance_zarr_path", zarr_tmp)
+                            setattr(vdj, "_distance_embed_pending", True)
+                        except Exception:
+                            pass
+                    else:
+                        # External Zarr mode
+                        try:
+                            setattr(vdj, "_distance_zarr_path", str(zarr_path))
+                            setattr(vdj, "_distance_embed_pending", False)
+                        except Exception:
+                            pass
+
+                    _ = calculate_distance_matrix_zarr(
                         dat_seq,
-                        membership,
                         metric=metric,
                         pad_to_max=pad_to_max,
-                        verbose=verbose,
-                    )
-                else:
-                    total_dist = calculate_distance_matrix_long(
-                        dat_seq,
                         membership=membership,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
+                        zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
+                        chunk_size=chunk_size,
                         n_cpus=n_cpus,
+                        memory_limit_gb=memory_limit_gb,
+                        memory_safety_fraction=memory_safety_fraction,
+                        compress=compress,
                         verbose=verbose,
                     )
-        elif distance_mode == "full":
-            if lazy:
-                from dandelion.polars.tools._lazydistances_polars import (
-                    calculate_distance_matrix_zarr,
-                )
+                    # Create a Dask view of the on-disk distances
+                    import dask.array as da
 
-                # Determine Zarr destination and mark embedding intent
-                if zarr_path is None:
-                    import tempfile
-
-                    zarr_tmp = tempfile.mkdtemp()
+                    zpath = zarr_tmp if zarr_path is None else zarr_path
                     try:
-                        setattr(vdj, "_distance_zarr_path", zarr_tmp)
-                        setattr(vdj, "_distance_embed_pending", True)
+                        total_dist = da.from_zarr(
+                            str(zpath) + "/distance_matrix.zarr/distance_matrix"
+                        )
                     except Exception:
-                        pass
+                        total_dist = da.from_zarr(
+                            str(zpath) + "/distance_matrix.zarr"
+                        )
                 else:
-                    try:
-                        setattr(vdj, "_distance_zarr_path", str(zarr_path))
-                        setattr(vdj, "_distance_embed_pending", False)
-                    except Exception:
-                        pass
-
-                _ = calculate_distance_matrix_zarr(
-                    dat_seq,
-                    metric=metric,
-                    pad_to_max=pad_to_max,
-                    membership=None,
-                    zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
-                    chunk_size=chunk_size,
-                    n_cpus=n_cpus,
-                    memory_limit_gb=memory_limit_gb,
-                    memory_safety_fraction=memory_safety_fraction,
-                    compress=compress,
-                    verbose=verbose,
-                )
-                # Create a Dask view of the on-disk distances
-                import dask.array as da
-
-                zpath = zarr_tmp if zarr_path is None else zarr_path
-                try:
-                    total_dist = da.from_zarr(
-                        str(zpath) + "/distance_matrix.zarr/distance_matrix"
+                    if sequential_chain:
+                        total_dist = calculate_distance_matrix_original(
+                            dat_seq,
+                            membership,
+                            metric=metric,
+                            pad_to_max=pad_to_max,
+                            verbose=verbose,
+                        )
+                    else:
+                        total_dist = calculate_distance_matrix_long(
+                            dat_seq,
+                            membership=membership,
+                            metric=metric,
+                            pad_to_max=pad_to_max,
+                            n_cpus=n_cpus,
+                            verbose=verbose,
+                        )
+            elif distance_mode == "full":
+                if lazy:
+                    from dandelion.polars.tools._lazydistances_polars import (
+                        calculate_distance_matrix_zarr,
                     )
-                except Exception:
-                    total_dist = da.from_zarr(
-                        str(zpath) + "/distance_matrix.zarr"
-                    )
-            else:
-                if sequential_chain:
-                    total_dist = calculate_distance_matrix_original_full(
+
+                    # Determine Zarr destination and mark embedding intent
+                    if zarr_path is None:
+                        import tempfile
+
+                        zarr_tmp = tempfile.mkdtemp()
+                        try:
+                            setattr(vdj, "_distance_zarr_path", zarr_tmp)
+                            setattr(vdj, "_distance_embed_pending", True)
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            setattr(vdj, "_distance_zarr_path", str(zarr_path))
+                            setattr(vdj, "_distance_embed_pending", False)
+                        except Exception:
+                            pass
+
+                    _ = calculate_distance_matrix_zarr(
                         dat_seq,
                         metric=metric,
                         pad_to_max=pad_to_max,
-                        n_cpus=n_cpus,
-                        verbose=verbose,
-                    )
-                else:
-                    total_dist = calculate_distance_matrix_long(
-                        dat_seq,
                         membership=None,
-                        metric=metric,
-                        pad_to_max=pad_to_max,
+                        zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
+                        chunk_size=chunk_size,
                         n_cpus=n_cpus,
+                        memory_limit_gb=memory_limit_gb,
+                        memory_safety_fraction=memory_safety_fraction,
+                        compress=compress,
                         verbose=verbose,
                     )
+                    # Create a Dask view of the on-disk distances
+                    import dask.array as da
+
+                    zpath = zarr_tmp if zarr_path is None else zarr_path
+                    try:
+                        total_dist = da.from_zarr(
+                            str(zpath) + "/distance_matrix.zarr/distance_matrix"
+                        )
+                    except Exception:
+                        total_dist = da.from_zarr(
+                            str(zpath) + "/distance_matrix.zarr"
+                        )
+                else:
+                    if sequential_chain:
+                        total_dist = calculate_distance_matrix_original_full(
+                            dat_seq,
+                            metric=metric,
+                            pad_to_max=pad_to_max,
+                            n_cpus=n_cpus,
+                            verbose=verbose,
+                        )
+                    else:
+                        total_dist = calculate_distance_matrix_long(
+                            dat_seq,
+                            membership=None,
+                            metric=metric,
+                            pad_to_max=pad_to_max,
+                            n_cpus=n_cpus,
+                            verbose=verbose,
+                        )
         if compute_graph:
             # Normalize metadata to Polars DataFrame if lazy
             if isinstance(vdj._metadata, pl.LazyFrame):
@@ -1281,8 +1295,31 @@ def calculate_distance_matrix_original(
                     pad_to_max=pad_to_max,
                     sep="" if not pad_to_max else "#",
                 )
+
+                # Deduplicate sequences for faster computation
+                unique_seqs = []
+                seq_to_unique_idx = {}
+                for seq in prepared_seqs:
+                    if seq not in seq_to_unique_idx:
+                        seq_to_unique_idx[seq] = len(unique_seqs)
+                        unique_seqs.append(seq)
+
                 # Vectorized computation
-                d_mat_tmp = metric.compute_vectorized(prepared_seqs)
+                if len(unique_seqs) < len(prepared_seqs):
+                    # Compute distances only for unique sequences
+                    d_mat_unique = metric.compute_vectorized(unique_seqs)
+
+                    # Map back to full distance matrix
+                    n = len(prepared_seqs)
+                    d_mat_tmp = np.zeros((n, n), dtype=np.float64)
+                    for i, seq_i in enumerate(prepared_seqs):
+                        unique_i = seq_to_unique_idx[seq_i]
+                        for j, seq_j in enumerate(prepared_seqs):
+                            unique_j = seq_to_unique_idx[seq_j]
+                            d_mat_tmp[i, j] = d_mat_unique[unique_i, unique_j]
+                else:
+                    # No duplicates, compute normally
+                    d_mat_tmp = metric.compute_vectorized(prepared_seqs)
 
                 df_block = pd.DataFrame(
                     d_mat_tmp, index=tmp_cell_ids, columns=tmp_cell_ids
@@ -1374,8 +1411,31 @@ def calculate_distance_matrix_original_full(
             sep="" if not pad_to_max else "#",
         )
 
+        # Deduplicate sequences for faster computation
+        unique_seqs = []
+        seq_to_unique_idx = {}
+        for seq in prepared_seqs:
+            if seq not in seq_to_unique_idx:
+                seq_to_unique_idx[seq] = len(unique_seqs)
+                unique_seqs.append(seq)
+
         # Compute distance matrix using vectorized metric
-        results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
+        if len(unique_seqs) < len(prepared_seqs):
+            # Compute distances only for unique sequences
+            results_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
+
+            # Map back to full distance matrix
+            n = len(prepared_seqs)
+            results = np.zeros((n, n), dtype=np.float64)
+            for i, seq_i in enumerate(prepared_seqs):
+                unique_i = seq_to_unique_idx[seq_i]
+                for j, seq_j in enumerate(prepared_seqs):
+                    unique_j = seq_to_unique_idx[seq_j]
+                    results[i, j] = results_unique[unique_i, unique_j]
+        else:
+            # No duplicates, compute normally
+            results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
+
         total_dist += results
 
     np.fill_diagonal(total_dist, np.nan)
@@ -1488,8 +1548,30 @@ def calculate_distance_matrix_long(
                 # Extract prepared sequences for this clone
                 clone_seqs = [prepared_seqs[i] for i in indices]
 
+                # Deduplicate sequences for faster computation
+                unique_seqs = []
+                seq_to_unique_idx = {}
+                for seq in clone_seqs:
+                    if seq not in seq_to_unique_idx:
+                        seq_to_unique_idx[seq] = len(unique_seqs)
+                        unique_seqs.append(seq)
+
                 # Compute distance matrix using vectorized metric
-                d_mat_tmp = metric.compute_vectorized(clone_seqs, n_cpus=n_cpus)
+                if len(unique_seqs) < len(clone_seqs):
+                    # Compute distances only for unique sequences
+                    d_mat_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
+
+                    # Map back to full distance matrix
+                    n = len(clone_seqs)
+                    d_mat_tmp = np.zeros((n, n), dtype=np.float64)
+                    for i, seq_i in enumerate(clone_seqs):
+                        unique_i = seq_to_unique_idx[seq_i]
+                        for j, seq_j in enumerate(clone_seqs):
+                            unique_j = seq_to_unique_idx[seq_j]
+                            d_mat_tmp[i, j] = d_mat_unique[unique_i, unique_j]
+                else:
+                    # No duplicates, compute normally
+                    d_mat_tmp = metric.compute_vectorized(clone_seqs, n_cpus=n_cpus)
 
                 total_dist[np.ix_(indices, indices)] += d_mat_tmp
 
