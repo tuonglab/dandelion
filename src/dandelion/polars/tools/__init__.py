@@ -22,7 +22,7 @@ from dandelion.polars.tools._diversity_polars import (
     clone_rarefaction,
 )
 from dandelion.tools._layout import extract_edge_weights
-from dandelion.tools._trajectory import (
+from dandelion.polars.tools._trajectory import (
     project_pseudotime_to_cell,
     pseudobulk_gex,
     pseudotime_transfer,
