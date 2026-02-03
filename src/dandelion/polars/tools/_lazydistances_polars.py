@@ -237,6 +237,7 @@ def calculate_distance_matrix_zarr(
             metric=metric,
             z_array=z_array,
             n_jobs=n_cpus,
+            verbose=verbose,
         )
 
     else:
@@ -833,6 +834,7 @@ def _compute_distances_polars_native(
     metric: Metric,
     z_array: zarr.Array,
     n_jobs: int = 1,
+    verbose: bool = True,
 ) -> list[str]:
     """
     Compute distances using fully vectorized Polars operations.
@@ -852,9 +854,11 @@ def _compute_distances_polars_native(
         Distance metric
     z_array : zarr.Array
         Zarr array to write to
-    n_jobs : int
+    n_jobs : int, optional
         Number of parallel jobs for group processing. Default 1 (no parallelization).
         Use -1 to use all available CPUs.
+    verbose: bool, optional
+        Whether to print progress bar.
 
     Returns
     -------
@@ -927,7 +931,14 @@ def _compute_distances_polars_native(
         # Process groups in parallel
         # Use threading backend since we're doing I/O (Zarr writes)
         Parallel(n_jobs=n_jobs, backend="threading")(
-            delayed(process_fn)(group_df) for group_df in groups.values()
+            delayed(process_fn)(group_df)
+            for group_df in tqdm(
+                groups.values(),
+                total=len(groups),
+                desc="Processing clone groups",
+                disable=not verbose,
+                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+            )
         )
 
     # Return empty list since we write directly to z_array
