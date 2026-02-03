@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import multiprocessing
 import re
+import tempfile
 import time
 
 import networkx as nx
@@ -196,15 +197,17 @@ def generate_network(
     if regenerate:
         start = logg.info("Generating network")
 
+        # Check if distances already exist - if so, we can skip distance calculation
+        use_precomputed_distances = (
+            hasattr(vdj, "distances")
+            and vdj.distances is not None
+            and distance_mode == "clone"
+        )
+
         key_ = key if key is not None else "sequence_alignment_aa"
 
         if key_ not in vdj._data:
             raise ValueError(f"key {key_} not found in data.")
-
-        if lazy:
-            from dandelion.polars.tools._lazydistances_polars import (
-                dask_safe_slice_square,
-            )
 
         if sample is not None:
             if adata is not None:
@@ -299,19 +302,18 @@ def generate_network(
                                 membership[clone_id].append(cell_name)
 
         # compute total_dist using chosen mode (original uses membership)
-        logg.info(
-            f"Calculating distance matrix {'lazily' if lazy else ''} with distance_mode = '{distance_mode}'\n"
-        )
-        if distance_mode == "clone":
+        if use_precomputed_distances:
+            logg.info("Using pre-computed distances from vdj.distances\n")
+            total_dist = vdj.distances
+        elif distance_mode == "clone":
             if lazy:
                 from dandelion.polars.tools._lazydistances_polars import (
                     calculate_distance_matrix_zarr,
                 )
+                import dask.array as da
 
-                # Determine Zarr destination and mark embedding intent
+                # Determine Zarr destination
                 if zarr_path is None:
-                    import tempfile
-
                     zarr_tmp = tempfile.mkdtemp()
                     # Flags on object to indicate pending embed on write
                     try:
@@ -321,6 +323,7 @@ def generate_network(
                         pass
                 else:
                     # External Zarr mode
+                    zarr_tmp = zarr_path
                     try:
                         setattr(vdj, "_distance_zarr_path", str(zarr_path))
                         setattr(vdj, "_distance_embed_pending", False)
@@ -332,7 +335,7 @@ def generate_network(
                     metric=metric,
                     pad_to_max=pad_to_max,
                     membership=membership,
-                    zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
+                    zarr_path=zarr_tmp,
                     chunk_size=chunk_size,
                     n_cpus=n_cpus,
                     memory_limit_gb=memory_limit_gb,
@@ -340,18 +343,23 @@ def generate_network(
                     compress=compress,
                     verbose=verbose,
                 )
-                # Create a Dask view of the on-disk distances
-                import dask.array as da
 
-                zpath = zarr_tmp if zarr_path is None else zarr_path
+                # Create a Dask view of the on-disk distances (whether reused or newly computed)
+                zpath = zarr_tmp
                 try:
+                    # Try standard format (stored at /distance_matrix.zarr/distance_matrix)
                     total_dist = da.from_zarr(
                         str(zpath) + "/distance_matrix.zarr/distance_matrix"
                     )
                 except Exception:
-                    total_dist = da.from_zarr(
-                        str(zpath) + "/distance_matrix.zarr"
-                    )
+                    try:
+                        # Try alternative path
+                        total_dist = da.from_zarr(
+                            str(zpath) + "/distance_matrix.zarr"
+                        )
+                    except Exception:
+                        # Fallback to direct path
+                        total_dist = da.from_zarr(str(zpath))
             else:
                 if sequential_chain:
                     total_dist = calculate_distance_matrix_original(
@@ -378,8 +386,6 @@ def generate_network(
 
                 # Determine Zarr destination and mark embedding intent
                 if zarr_path is None:
-                    import tempfile
-
                     zarr_tmp = tempfile.mkdtemp()
                     try:
                         setattr(vdj, "_distance_zarr_path", zarr_tmp)
@@ -482,8 +488,7 @@ def generate_network(
             # For each overlap group, get the positions by joining with meta_exploded
             # Use partial to bind meta_exploded to the helper function
             get_positions_fn = functools.partial(
-                _get_positions_for_group,
-                meta_exploded=meta_exploded
+                _get_positions_for_group, meta_exploded=meta_exploded
             )
 
             # Add positions
@@ -622,9 +627,7 @@ def generate_network(
             # ===================================================================
             # Use partial to bind total_dist and lazy to the helper function
             create_mst_fn = functools.partial(
-                _create_mst_edges,
-                total_dist=total_dist,
-                lazy=lazy
+                _create_mst_edges, total_dist=total_dist, lazy=lazy
             )
 
             mst_groups = mst_groups.with_columns(
@@ -644,9 +647,7 @@ def generate_network(
             # ===================================================================
             # Use partial to bind total_dist and lazy to the helper function
             find_zero_fn = functools.partial(
-                _find_zero_dist_edges,
-                total_dist=total_dist,
-                lazy=lazy
+                _find_zero_dist_edges, total_dist=total_dist, lazy=lazy
             )
 
             zero_groups = zero_groups.with_columns(
@@ -812,7 +813,9 @@ def generate_network(
         )
 
 
-def _get_positions_for_group(cells_list: list, meta_exploded: pl.DataFrame) -> list[int]:
+def _get_positions_for_group(
+    cells_list: list, meta_exploded: pl.DataFrame
+) -> list[int]:
     """
     Get positions for a group of cells by joining with metadata.
 
@@ -872,7 +875,10 @@ def _create_mst_edges(
         return None
 
     if lazy:
-        from dandelion.polars.tools._lazydistances_polars import dask_safe_slice_square
+        from dandelion.polars.tools._lazydistances_polars import (
+            dask_safe_slice_square,
+        )
+
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
         submat = total_dist[np.ix_(positions, positions)]
@@ -933,7 +939,10 @@ def _find_zero_dist_edges(
 
     # Slice the distance matrix
     if lazy:
-        from dandelion.polars.tools._lazydistances_polars import dask_safe_slice_square
+        from dandelion.polars.tools._lazydistances_polars import (
+            dask_safe_slice_square,
+        )
+
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
         submat = total_dist[np.ix_(positions, positions)]

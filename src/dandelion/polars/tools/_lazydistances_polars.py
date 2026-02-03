@@ -5,7 +5,6 @@ This module provides streaming computation of distance matrices using Zarr stora
 and Dask for parallelization, adapted to work with native polars DataFrames.
 """
 
-import functools
 import math
 import multiprocessing
 import os
@@ -798,12 +797,14 @@ def _compute_group_distances_sequential(
 
 
 def _process_group_parallel(
-    group_df: pl.DataFrame, metric: Metric, z_array: zarr.Array
-) -> None:
+    group_df: pl.DataFrame, metric: Metric, zarr_path: str
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Process a single group - write to Zarr array (parallel version).
+    Process a single group - compute distances and return indices + distances.
 
-    Used with joblib for parallel processing.
+    Used with joblib for parallel processing. Returns results instead of
+    writing directly to Zarr to enable multiprocessing (Zarr arrays
+    cannot be pickled across processes).
 
     Parameters
     ----------
@@ -811,11 +812,16 @@ def _process_group_parallel(
         DataFrame for a single group/clone
     metric : Metric
         Distance metric to use
-    z_array : zarr.Array
-        Zarr array to write distances to (thread-safe)
+    zarr_path : str
+        Path to Zarr array (for reopening in process)
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Tuple of (array_indices, dist_block) for later writing
     """
     if group_df.height < 2:
-        return
+        return None, None
 
     array_indices = group_df["_original_order"].to_numpy()
     seqs_flat = group_df["_prepared_seq"].to_list()
@@ -823,8 +829,42 @@ def _process_group_parallel(
     # Compute distances
     dist_block = metric.compute_vectorized(seqs_flat)
 
-    # Write to Zarr (Zarr handles thread-safe writes)
-    z_array[np.ix_(array_indices, array_indices)] = dist_block
+    return array_indices, dist_block
+
+
+def _process_group_batch(
+    group_dfs: list[pl.DataFrame], metric: Metric, zarr_path: str
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """
+    Process a batch of small groups together to reduce overhead.
+
+    Instead of processing each small group individually, this function
+    processes multiple groups in sequence within a single worker call,
+    reducing the overhead of task scheduling and IPC.
+
+    Parameters
+    ----------
+    group_dfs : list[pl.DataFrame]
+        List of DataFrames for multiple groups
+    metric : Metric
+        Distance metric to use
+    zarr_path : str
+        Path to Zarr array
+
+    Returns
+    -------
+    list[tuple[np.ndarray, np.ndarray]]
+        List of (array_indices, dist_block) tuples for each group
+    """
+    results = []
+    for group_df in group_dfs:
+        if group_df.height < 2:
+            continue
+        array_indices = group_df["_original_order"].to_numpy()
+        seqs_flat = group_df["_prepared_seq"].to_list()
+        dist_block = metric.compute_vectorized(seqs_flat)
+        results.append((array_indices, dist_block))
+    return results
 
 
 def _compute_distances_polars_native(
@@ -835,12 +875,13 @@ def _compute_distances_polars_native(
     z_array: zarr.Array,
     n_jobs: int = 1,
     verbose: bool = True,
+    batch_size_threshold: int = 50,
 ) -> list[str]:
     """
-    Compute distances using fully vectorized Polars operations.
+    Compute distances using vectorized Polars operations with intelligent batching.
 
-    Uses group_by to partition data and applies vectorized distance computation
-    within each group. Optimized with vectorized joins and optional parallelization.
+    Uses group_by to partition data, then batches multiple small groups together
+    for vectorized computation. Large groups are processed individually.
 
     Parameters
     ----------
@@ -859,6 +900,9 @@ def _compute_distances_polars_native(
         Use -1 to use all available CPUs.
     verbose: bool, optional
         Whether to print progress bar.
+    batch_size_threshold : int, optional
+        Groups with <= this many sequences will be batched together.
+        Larger groups are processed individually. Default 50.
 
     Returns
     -------
@@ -899,47 +943,131 @@ def _compute_distances_polars_native(
         .filter(pl.col("clone_id").is_not_null())
     )
 
+    # Filter out clone_size=1 upfront using Polars aggregation (much faster)
+    clone_sizes = df_with_clone.group_by("clone_id").agg(pl.len().alias("clone_size"))
+    valid_clones = clone_sizes.filter(pl.col("clone_size") >= 2)["clone_id"]
+
+    df_with_clone = df_with_clone.filter(pl.col("clone_id").is_in(valid_clones))
+
+    if df_with_clone.height == 0:
+        logg.info("No clones with size >= 2 found, skipping distance computation")
+        return []
+
+    # Partition by group and collect groups as list of DataFrames
+    groups = df_with_clone.partition_by("clone_id", as_dict=True)
+
+    # Split groups into small (for batching) and large (process individually)
+    small_groups = []
+    large_groups = []
+
+    for group_df in groups.values():
+        if group_df.height < 2:
+            continue  # Skip singleton groups
+        elif group_df.height <= batch_size_threshold:
+            small_groups.append(group_df)
+        else:
+            large_groups.append(group_df)
+
+    if not small_groups and not large_groups:
+        return []
+
+    logg.info(
+        f"Processing {len(small_groups)} small groups (will be batched) and "
+        f"{len(large_groups)} large groups individually"
+    )
+
     # Determine parallelization strategy
+    if n_jobs == -1:
+        n_jobs = multiprocessing.cpu_count()
+
+    # Get zarr_path as string for pickling
+    zarr_path_str = z_array.store.path if hasattr(z_array.store, 'path') else str(z_array.store)
+
+    # Create batches of small groups for vectorized processing
+    # Aim for ~1000 total sequences per batch for efficiency
+    target_batch_size = 1000
+    small_group_batches = []
+    current_batch = []
+    current_batch_size = 0
+
+    for group_df in small_groups:
+        current_batch.append(group_df)
+        current_batch_size += group_df.height
+        if current_batch_size >= target_batch_size:
+            small_group_batches.append(current_batch)
+            current_batch = []
+            current_batch_size = 0
+
+    if current_batch:
+        small_group_batches.append(current_batch)
+
+    logg.info(
+        f"Created {len(small_group_batches)} batches from {len(small_groups)} small groups"
+    )
+
+    all_tasks = []
+
+    # Add batched small groups
+    for batch in small_group_batches:
+        all_tasks.append(('batch', batch))
+
+    # Add large groups
+    for group_df in large_groups:
+        all_tasks.append(('single', group_df))
+
     if n_jobs == 1:
-        # Sequential processing - use Polars map_groups (original approach)
-        # Use partial to bind metric and z_array to the helper function
-        compute_fn = functools.partial(
-            _compute_group_distances_sequential, metric=metric, z_array=z_array
-        )
-
-        # Apply sequentially to each group
-        _ = (
-            df_with_clone.lazy()
-            .group_by("clone_id", maintain_order=True)
-            .map_groups(compute_fn, schema={})
-            .collect(engine="streaming")
-        )
+        # Sequential processing
+        results = []
+        for task_type, task_data in tqdm(
+            all_tasks,
+            total=len(all_tasks),
+            desc="Processing groups",
+            disable=not verbose,
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        ):
+            if task_type == 'batch':
+                batch_results = _process_group_batch(task_data, metric, zarr_path_str)
+                results.extend(batch_results)
+            else:
+                result = _process_group_parallel(task_data, metric, zarr_path_str)
+                if result[0] is not None:
+                    results.append(result)
     else:
-        # Parallel processing using joblib
-        # Determine actual number of jobs
-        if n_jobs == -1:
-            n_jobs = multiprocessing.cpu_count()
+        # Parallel processing using multiprocessing (avoids GIL)
+        def process_task(task):
+            task_type, task_data = task
+            if task_type == 'batch':
+                return _process_group_batch(task_data, metric, zarr_path_str)
+            else:
+                result = _process_group_parallel(task_data, metric, zarr_path_str)
+                return [result] if result[0] is not None else []
 
-        # Partition by group and collect groups as list of DataFrames
-        groups = df_with_clone.partition_by("clone_id", as_dict=True)
-
-        # Use partial to bind metric and z_array to the helper function
-        process_fn = functools.partial(
-            _process_group_parallel, metric=metric, z_array=z_array
-        )
-
-        # Process groups in parallel
-        # Use threading backend since we're doing I/O (Zarr writes)
-        Parallel(n_jobs=n_jobs, backend="threading")(
-            delayed(process_fn)(group_df)
-            for group_df in tqdm(
-                groups.values(),
-                total=len(groups),
-                desc="Processing clone groups",
+        results_nested = Parallel(n_jobs=n_jobs, backend="multiprocessing", batch_size=1)(
+            delayed(process_task)(task)
+            for task in tqdm(
+                all_tasks,
+                total=len(all_tasks),
+                desc="Processing groups",
                 disable=not verbose,
                 bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
             )
         )
+
+        # Flatten results
+        results = []
+        for batch_results in results_nested:
+            results.extend(batch_results)
+
+    # Write results to Zarr in main process (avoids race conditions)
+    logg.info("Writing results to Zarr array...")
+    for array_indices, dist_block in tqdm(
+        results,
+        disable=not verbose,
+        desc="Writing to Zarr",
+        bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+    ):
+        if array_indices is not None and dist_block is not None:
+            z_array[np.ix_(array_indices, array_indices)] = dist_block
 
     # Return empty list since we write directly to z_array
     return []
