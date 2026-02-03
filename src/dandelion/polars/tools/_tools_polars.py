@@ -2,22 +2,18 @@ from __future__ import annotations
 import functools
 import math
 import re
-import tempfile
-
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import polars as pl
 import scanpy as sc
-import zarr
 
 from anndata import AnnData
 from collections import defaultdict, Counter
 from contextlib import contextmanager
 from distance import hamming
 from itertools import product
-from packaging import version
 from scanpy import logging as logg
 from scipy.sparse import csr_matrix, lil_matrix
 from scipy.sparse.csgraph import connected_components
@@ -52,34 +48,6 @@ from dandelion.utilities._distances import (
     resolve_metric,
 )
 
-# Zarr version compatibility helpers
-ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
-if ZARR_V3:
-    from zarr.storage import LocalStore
-    from zarr.codecs import BloscCodec
-
-    def open_zarr_group(store, mode="a"):
-        return zarr.open_group(store=store, mode=mode)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create_array(name, **kwargs)
-
-else:
-    from zarr import DirectoryStore
-    from zarr.codecs import Blosc as BloscCodec
-
-    def LocalStore(path):
-        return DirectoryStore(path)
-
-    def open_zarr_group(store, mode="a"):
-        if mode == "w":
-            return zarr.group(store=store, overwrite=True)
-        else:
-            return zarr.group(store=store)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create(name, **kwargs)
-
 
 def find_clones(
     vdj: DandelionPolars,
@@ -95,8 +63,6 @@ def find_clones(
     key_added: str | None = None,
     recalculate_length: bool = True,
     verbose: bool = True,
-    store_distances: bool = True,
-    zarr_path: str | None = None,
 ) -> DandelionPolars:
     """
     Find clones based on VDJ chain and VJ chain CDR3 junction hamming distance.
@@ -134,13 +100,6 @@ def find_clones(
         wrong). Default is True
     verbose : bool, optional
         whether or not to print progress.
-    store_distances : bool, optional
-        whether to store computed distances in a Zarr array for reuse in generate_network.
-        If True, distances will be stored and the path saved in vdj._distance_zarr_path.
-        Default is True.
-    zarr_path : str | None, optional
-        Path to store the Zarr distance array. If None and store_distances=True, a temporary
-        directory will be created. Default is None.
 
     Returns
     -------
@@ -208,50 +167,6 @@ def find_clones(
 
     # Store results from each locus
     locus_results = {}
-
-    # Initialize distance storage if requested
-    zarr_distances = None
-    cell_id_to_meta_idx = None
-    final_zarr_path = None
-    distance_results = (
-        []
-    )  # Collect (cell_indices, d_mat) tuples for batch writing
-
-    if store_distances:
-        # Get metadata and create cell_id to index mapping upfront
-        metadata_for_count = vdj._metadata
-        if isinstance(metadata_for_count, pl.LazyFrame):
-            metadata_for_count = metadata_for_count.collect(engine="streaming")
-
-        all_cell_ids = metadata_for_count["cell_id"].to_list()
-        n_cells = len(all_cell_ids)
-        cell_id_to_meta_idx = {
-            cell_id: i for i, cell_id in enumerate(all_cell_ids)
-        }
-
-        # Determine zarr path
-        if zarr_path is None:
-            zarr_path = tempfile.mkdtemp()
-
-        logg.info(
-            f"Initializing distance storage for {n_cells} cells at: {zarr_path}"
-        )
-
-        # Create single zarr array in metadata order (will accumulate VDJ + VJ directly)
-        comp = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-        final_zarr_path = zarr_path + "/distance_matrix.zarr"
-        store = LocalStore(final_zarr_path)
-        root = open_zarr_group(store, mode="w")
-
-        zarr_distances = create_zarr_array(
-            root,
-            "distance_matrix",
-            shape=(n_cells, n_cells),
-            chunks=(min(1000, n_cells), min(1000, n_cells)),
-            dtype=np.float64,
-            fill_value=0.0,
-            compressors=[comp],
-        )
 
     # Process each locus
     for locus, (vdj_loci, vj_loci) in locus_dict.items():
@@ -341,61 +256,7 @@ def find_clones(
                 seqs_empty = [s for s in seqs if not s]
 
                 if seqs_non_empty:
-                    # Deduplicate sequences for faster distance computation
-                    unique_seqs = []
-                    seq_to_unique_idx = {}
-                    seq_to_indices = (
-                        {}
-                    )  # Maps unique seq to list of original indices
-
-                    for i, seq in enumerate(seqs_non_empty):
-                        if seq not in seq_to_unique_idx:
-                            seq_to_unique_idx[seq] = len(unique_seqs)
-                            seq_to_indices[seq] = []
-                            unique_seqs.append(seq)
-                        seq_to_indices[seq].append(i)
-
-                    # Compute distances only for unique sequences
-                    if len(unique_seqs) < len(seqs_non_empty):
-                        d_mat_unique = metric.compute_vectorized(unique_seqs)
-
-                        # Expand distance matrix to full size
-                        n = len(seqs_non_empty)
-                        d_mat = np.zeros((n, n), dtype=np.float64)
-
-                        for i, seq_i in enumerate(seqs_non_empty):
-                            unique_i = seq_to_unique_idx[seq_i]
-                            for j, seq_j in enumerate(seqs_non_empty):
-                                unique_j = seq_to_unique_idx[seq_j]
-                                d_mat[i, j] = d_mat_unique[unique_i, unique_j]
-                    else:
-                        # All sequences are unique, compute normally
-                        d_mat = metric.compute_vectorized(seqs_non_empty)
-
-                    # Collect distances if requested (VDJ chain)
-                    if store_distances and cell_id_to_meta_idx is not None:
-                        # Map contig indices to cell IDs
-                        orig_orders_non_empty = [
-                            orig_orders[i] for i, s in enumerate(seqs) if s
-                        ]
-                        cell_ids_for_seqs = df_vdj.filter(
-                            pl.col("_original_order").is_in(
-                                orig_orders_non_empty
-                            )
-                        )["cell_id"].to_list()
-
-                        # Map cell_ids directly to metadata indices
-                        cell_indices = np.array(
-                            [
-                                cell_id_to_meta_idx[cell_id]
-                                for cell_id in cell_ids_for_seqs
-                                if cell_id in cell_id_to_meta_idx
-                            ]
-                        )
-
-                        # Append to results list for batch writing later
-                        if len(cell_indices) > 0:
-                            distance_results.append((cell_indices, d_mat))
+                    d_mat = metric.compute_vectorized(seqs_non_empty)
 
                     if d_mat.shape[0] > 1:
                         seq_tmp_dict = _clustering_scipy(
@@ -502,61 +363,7 @@ def find_clones(
                 seqs_empty = [s for s in seqs if not s]
 
                 if seqs_non_empty:
-                    # Deduplicate sequences for faster distance computation
-                    unique_seqs = []
-                    seq_to_unique_idx = {}
-                    seq_to_indices = (
-                        {}
-                    )  # Maps unique seq to list of original indices
-
-                    for i, seq in enumerate(seqs_non_empty):
-                        if seq not in seq_to_unique_idx:
-                            seq_to_unique_idx[seq] = len(unique_seqs)
-                            seq_to_indices[seq] = []
-                            unique_seqs.append(seq)
-                        seq_to_indices[seq].append(i)
-
-                    # Compute distances only for unique sequences
-                    if len(unique_seqs) < len(seqs_non_empty):
-                        d_mat_unique = metric.compute_vectorized(unique_seqs)
-
-                        # Expand distance matrix to full size
-                        n = len(seqs_non_empty)
-                        d_mat = np.zeros((n, n), dtype=np.float64)
-
-                        for i, seq_i in enumerate(seqs_non_empty):
-                            unique_i = seq_to_unique_idx[seq_i]
-                            for j, seq_j in enumerate(seqs_non_empty):
-                                unique_j = seq_to_unique_idx[seq_j]
-                                d_mat[i, j] = d_mat_unique[unique_i, unique_j]
-                    else:
-                        # All sequences are unique, compute normally
-                        d_mat = metric.compute_vectorized(seqs_non_empty)
-
-                    # Collect distances if requested (VJ chain)
-                    if store_distances and cell_id_to_meta_idx is not None:
-                        # Map contig indices to cell IDs
-                        orig_orders_non_empty = [
-                            orig_orders[i] for i, s in enumerate(seqs) if s
-                        ]
-                        cell_ids_for_seqs = df_vj.filter(
-                            pl.col("_original_order").is_in(
-                                orig_orders_non_empty
-                            )
-                        )["cell_id"].to_list()
-
-                        # Map cell_ids directly to metadata indices
-                        cell_indices = np.array(
-                            [
-                                cell_id_to_meta_idx[cell_id]
-                                for cell_id in cell_ids_for_seqs
-                                if cell_id in cell_id_to_meta_idx
-                            ]
-                        )
-
-                        # Append to results list for batch writing later
-                        if len(cell_indices) > 0:
-                            distance_results.append((cell_indices, d_mat))
+                    d_mat = metric.compute_vectorized(seqs_non_empty)
 
                     if d_mat.shape[0] > 1:
                         seq_tmp_dict = _clustering_scipy(
@@ -745,40 +552,6 @@ def find_clones(
     vdj.update_metadata(clone_key=str(key_added))
     # offload memory
     vdj._cache_data()
-
-    # Finalize distance storage if requested
-    if store_distances and zarr_distances is not None:
-        logg.info(f"Writing {len(distance_results)} distance blocks to zarr...")
-
-        # Batch write all collected distances to zarr
-        for cell_indices, d_mat in tqdm(
-            distance_results,
-            desc="Writing distances",
-            disable=not verbose,
-            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-        ):
-            zarr_distances[np.ix_(cell_indices, cell_indices)] += d_mat
-
-        # Set vdj.distances to dask array backed by zarr
-        import dask.array as da
-
-        vdj.distances = da.from_zarr(zarr_distances)
-
-        # Store path and metadata on vdj object
-        try:
-            setattr(vdj, "_distance_zarr_path", final_zarr_path)
-            setattr(
-                vdj, "_distance_key", key if isinstance(key, str) else str(key)
-            )
-            setattr(vdj, "_distance_metric", dist_func)
-            setattr(vdj, "_distance_embed_pending", True)
-            logg.info(f"Stored distances at: {final_zarr_path}")
-            logg.info(
-                "Distance matrix will be embedded in .zipddl file on save()"
-            )
-        except Exception as e:
-            logg.warning(f"Failed to store distance path on vdj object: {e}")
-
     logg.info(
         " finished",
         time=start,
@@ -1742,7 +1515,8 @@ def clone_size(
     if max_size is not None:
         # Use partial to bind max_size to the helper function
         categorize_fn = functools.partial(
-            _categorize_clone_size, max_size=max_size
+            _categorize_clone_size,
+            max_size=max_size
         )
 
         clonesize_cat = clonesize.apply(categorize_fn)

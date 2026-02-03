@@ -2916,25 +2916,18 @@ class DandelionPolars:
             except Exception:
                 pending, zarr_src = False, None
             if pending and zarr_src is not None:
-                # Open source zarr - standard format (zarr_src/distance_matrix)
+                # Open source zarr and target dataset inside ZipStore
                 try:
                     src_root = open_zarr_group(
-                        LocalStore(str(zarr_src)), mode="r"
+                        LocalStore(str(zarr_src) + "/distance_matrix.zarr"),
+                        mode="r",
                     )
                     src_arr = src_root["distance_matrix"]
                 except Exception:
                     # Fallback to direct array path
-                    try:
-                        src_arr = zarr.open_array(
-                            LocalStore(str(zarr_src)), mode="r"
-                        )
-                    except Exception:
-                        # Last resort: try nested structure
-                        src_root = open_zarr_group(
-                            LocalStore(str(zarr_src) + "/distance_matrix.zarr"),
-                            mode="r",
-                        )
-                        src_arr = src_root["distance_matrix"]
+                    src_arr = zarr.open_array(
+                        LocalStore(str(zarr_src)), mode="r"
+                    )
 
                 # Create destination dataset and copy
                 dst = arrays_grp.create_dataset(
