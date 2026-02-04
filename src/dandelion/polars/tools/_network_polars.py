@@ -39,7 +39,9 @@ from dandelion.utilities._utilities import (
 )
 
 
-def _merge_overlapping_clones(membership: pl.DataFrame, clone_col: str) -> pl.DataFrame:
+def _merge_overlapping_clones(
+    membership: pl.DataFrame, clone_col: str
+) -> pl.DataFrame:
     """
     Merge overlapping clones into single membership groups using Polars.
 
@@ -60,8 +62,9 @@ def _merge_overlapping_clones(membership: pl.DataFrame, clone_col: str) -> pl.Da
     """
     # Explode "|"-separated clones to get one row per cell-clone pair
     exploded = (
-        membership
-        .with_columns(pl.col(clone_col).str.split("|").alias("_clones"))
+        membership.with_columns(
+            pl.col(clone_col).str.split("|").alias("_clones")
+        )
         .explode("_clones")
         .with_columns(pl.col("_clones").str.strip_chars().alias("_clone"))
         .filter(
@@ -73,29 +76,30 @@ def _merge_overlapping_clones(membership: pl.DataFrame, clone_col: str) -> pl.Da
     )
 
     if exploded.height == 0:
-        return pl.DataFrame({"cell_id": membership["cell_id"], "membership_id": [None] * membership.height})
+        return pl.DataFrame(
+            {
+                "cell_id": membership["cell_id"],
+                "membership_id": [None] * membership.height,
+            }
+        )
 
     # Assign initial group_id as minimum clone per cell
-    cell_groups = (
-        exploded
-        .group_by("cell_id")
-        .agg(pl.col("_clone").min().alias("group_id"))
+    cell_groups = exploded.group_by("cell_id").agg(
+        pl.col("_clone").min().alias("group_id")
     )
 
     # Iteratively propagate minimum group_id through shared clones
     for _ in range(100):  # Max iterations
         # Get minimum group_id for each clone
         clone_min_group = (
-            exploded
-            .join(cell_groups, on="cell_id")
+            exploded.join(cell_groups, on="cell_id")
             .group_by("_clone")
             .agg(pl.col("group_id").min().alias("new_group"))
         )
 
         # Update cell group_id to minimum of all its clones' groups
         new_cell_groups = (
-            exploded
-            .join(clone_min_group, on="_clone")
+            exploded.join(clone_min_group, on="_clone")
             .group_by("cell_id")
             .agg(pl.col("new_group").min().alias("group_id"))
         )
@@ -107,8 +111,7 @@ def _merge_overlapping_clones(membership: pl.DataFrame, clone_col: str) -> pl.Da
 
     # Join back to original membership
     result = (
-        membership
-        .select("cell_id")
+        membership.select("cell_id")
         .join(cell_groups, on="cell_id", how="left")
         .rename({"group_id": "membership_id"})
     )
@@ -357,10 +360,15 @@ def generate_network(
             # Convert sparse matrix to dense if needed for graph computation
             if hasattr(total_dist, "toarray"):
                 total_dist = total_dist.toarray()
+            if lazy:
+                import dask.array as da
+
+                if not isinstance(total_dist, da.Array):
+                    total_dist = da.from_array(total_dist, chunks="auto")
         else:
             # compute total_dist using chosen mode (original uses membership)
             logg.info(
-                f"Calculating distance matrix {'lazily' if lazy else ''} with distance_mode = '{distance_mode}'\n"
+                f"Calculating distance matrix {'lazily ' if lazy else ' '}with distance_mode = '{distance_mode}'\n"
             )
             if distance_mode == "clone":
                 if lazy:
@@ -392,7 +400,9 @@ def generate_network(
                         metric=metric,
                         pad_to_max=pad_to_max,
                         membership=membership,
-                        zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
+                        zarr_path=(
+                            zarr_tmp if zarr_path is None else zarr_path
+                        ),
                         chunk_size=chunk_size,
                         n_cpus=n_cpus,
                         memory_limit_gb=memory_limit_gb,
@@ -458,7 +468,9 @@ def generate_network(
                         metric=metric,
                         pad_to_max=pad_to_max,
                         membership=None,
-                        zarr_path=(zarr_tmp if zarr_path is None else zarr_path),
+                        zarr_path=(
+                            zarr_tmp if zarr_path is None else zarr_path
+                        ),
                         chunk_size=chunk_size,
                         n_cpus=n_cpus,
                         memory_limit_gb=memory_limit_gb,
@@ -542,8 +554,7 @@ def generate_network(
             # For each overlap group, get the positions by joining with meta_exploded
             # Use partial to bind meta_exploded to the helper function
             get_positions_fn = functools.partial(
-                _get_positions_for_group,
-                meta_exploded=meta_exploded
+                _get_positions_for_group, meta_exploded=meta_exploded
             )
 
             # Add positions
@@ -682,9 +693,7 @@ def generate_network(
             # ===================================================================
             # Use partial to bind total_dist and lazy to the helper function
             create_mst_fn = functools.partial(
-                _create_mst_edges,
-                total_dist=total_dist,
-                lazy=lazy
+                _create_mst_edges, total_dist=total_dist, lazy=lazy
             )
 
             mst_groups = mst_groups.with_columns(
@@ -704,9 +713,7 @@ def generate_network(
             # ===================================================================
             # Use partial to bind total_dist and lazy to the helper function
             find_zero_fn = functools.partial(
-                _find_zero_dist_edges,
-                total_dist=total_dist,
-                lazy=lazy
+                _find_zero_dist_edges, total_dist=total_dist, lazy=lazy
             )
 
             zero_groups = zero_groups.with_columns(
@@ -872,7 +879,9 @@ def generate_network(
         )
 
 
-def _get_positions_for_group(cells_list: list, meta_exploded: pl.DataFrame) -> list[int]:
+def _get_positions_for_group(
+    cells_list: list, meta_exploded: pl.DataFrame
+) -> list[int]:
     """
     Get positions for a group of cells by joining with metadata.
 
@@ -932,7 +941,10 @@ def _create_mst_edges(
         return None
 
     if lazy:
-        from dandelion.polars.tools._lazydistances_polars import dask_safe_slice_square
+        from dandelion.polars.tools._lazydistances_polars import (
+            dask_safe_slice_square,
+        )
+
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
         submat = total_dist[np.ix_(positions, positions)]
@@ -993,7 +1005,10 @@ def _find_zero_dist_edges(
 
     # Slice the distance matrix
     if lazy:
-        from dandelion.polars.tools._lazydistances_polars import dask_safe_slice_square
+        from dandelion.polars.tools._lazydistances_polars import (
+            dask_safe_slice_square,
+        )
+
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
         submat = total_dist[np.ix_(positions, positions)]
@@ -1325,7 +1340,8 @@ def calculate_distance_matrix_original(
             tmp_cell_ids = group_df["cell_id"].to_list()
 
             seq_cols = [
-                col for col in group_df.collect_schema().names()
+                col
+                for col in group_df.collect_schema().names()
                 if col not in ("cell_id", "membership_id")
             ]
 
@@ -1348,13 +1364,17 @@ def calculate_distance_matrix_original(
 
                 # Deduplicate sequences for faster computation
                 unique_seqs = list(set(prepared_seqs))
-                seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
+                seq_to_unique_idx = {
+                    seq: i for i, seq in enumerate(unique_seqs)
+                }
 
                 # Compute distances only for unique sequences
                 d_mat_unique = metric.compute_vectorized(unique_seqs)
 
                 # Use vectorized indexing to expand to full matrix
-                unique_indices = np.array([seq_to_unique_idx[seq] for seq in prepared_seqs])
+                unique_indices = np.array(
+                    [seq_to_unique_idx[seq] for seq in prepared_seqs]
+                )
                 d_mat_tmp = d_mat_unique[np.ix_(unique_indices, unique_indices)]
 
                 df_block = pd.DataFrame(
@@ -1455,7 +1475,9 @@ def calculate_distance_matrix_original_full(
         results_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
 
         # Use vectorized indexing to expand to full matrix
-        unique_indices = np.array([seq_to_unique_idx[seq] for seq in prepared_seqs])
+        unique_indices = np.array(
+            [seq_to_unique_idx[seq] for seq in prepared_seqs]
+        )
         results = results_unique[np.ix_(unique_indices, unique_indices)]
 
         total_dist += results
@@ -1555,7 +1577,9 @@ def calculate_distance_matrix_long(
         dat_seq_with_membership = dat_seq_clean.join(
             membership, on="cell_id", how="inner"
         )
-        groups = dat_seq_with_membership.partition_by("membership_id", as_dict=True)
+        groups = dat_seq_with_membership.partition_by(
+            "membership_id", as_dict=True
+        )
 
         for group_df in tqdm(
             groups.values(),
@@ -1573,13 +1597,19 @@ def calculate_distance_matrix_long(
 
                 # Deduplicate sequences for faster computation
                 unique_seqs = list(set(clone_seqs))
-                seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
+                seq_to_unique_idx = {
+                    seq: i for i, seq in enumerate(unique_seqs)
+                }
 
                 # Compute distances only for unique sequences
-                d_mat_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
+                d_mat_unique = metric.compute_vectorized(
+                    unique_seqs, n_cpus=n_cpus
+                )
 
                 # Use vectorized indexing to expand to full matrix
-                unique_indices = np.array([seq_to_unique_idx[seq] for seq in clone_seqs])
+                unique_indices = np.array(
+                    [seq_to_unique_idx[seq] for seq in clone_seqs]
+                )
                 d_mat_tmp = d_mat_unique[np.ix_(unique_indices, unique_indices)]
 
                 total_dist[np.ix_(indices, indices)] += d_mat_tmp
