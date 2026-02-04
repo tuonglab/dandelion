@@ -348,7 +348,9 @@ def find_clones(
                                 # Collect COO components for in-memory assembly
                                 n_local = len(meta_indices)
                                 rows, cols = np.meshgrid(
-                                    range(n_local), range(n_local), indexing="ij"
+                                    range(n_local),
+                                    range(n_local),
+                                    indexing="ij",
                                 )
                                 rows_flat = rows.ravel()
                                 cols_flat = cols.ravel()
@@ -507,7 +509,9 @@ def find_clones(
                                 # Collect COO components for in-memory assembly
                                 n_local = len(meta_indices)
                                 rows, cols = np.meshgrid(
-                                    range(n_local), range(n_local), indexing="ij"
+                                    range(n_local),
+                                    range(n_local),
+                                    indexing="ij",
                                 )
                                 rows_flat = rows.ravel()
                                 cols_flat = cols.ravel()
@@ -737,7 +741,7 @@ def find_clones(
         if zarr_writer is not None:
             # Finalize Zarr store
             logg.info("Finalizing distance matrix Zarr store...")
-            zarr_store_path = zarr_writer.finalize()
+            zarr_store_path = zarr_writer.finalize(verbose=verbose)
 
             # Store lazy reference in vdj (same pattern as _network_polars.py)
             vdj._distance_zarr_path = zarr_store_path
@@ -3724,7 +3728,7 @@ class _ZarrDistanceWriter:
         self._pending_writes.append((indices.copy(), submatrix.copy()))
         self._nnz += len(indices) ** 2
 
-    def finalize(self):
+    def finalize(self, verbose: bool = True) -> str:
         """
         Write all collected submatrices to Zarr and finalize.
 
@@ -3756,7 +3760,12 @@ class _ZarrDistanceWriter:
         )
 
         # Write all pending submatrices
-        for indices, submatrix in self._pending_writes:
+        for indices, submatrix in tqdm(
+            self._pending_writes,
+            disable=not verbose,
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+            total=len(self._pending_writes),
+        ):
             dist_arr[np.ix_(indices, indices)] = submatrix
 
         # Clear pending writes to free memory
