@@ -692,72 +692,48 @@ def find_clones(
 
     # Build sparse distance matrix from collected COO tiles
     if distance_results:
+        import gc
+
         logg.info("Storing distance matrix...")
         nnz = sum(len(d) for r, c, d in distance_results)
         # pre-allocate
-        all_rows = np.empty(nnz)
-        # Concatenate all COO tiles
-        all_rows = np.concatenate([r for r, c, d in distance_results])
-        all_cols = np.concatenate([c for r, c, d in distance_results])
-        all_data = np.concatenate([d for r, c, d in distance_results])
+        all_rows = np.empty(nnz, dtype=np.int32)
+        print(1)
+        all_cols = np.empty(nnz, dtype=np.int32)
+        print(2)
+        all_data = np.empty(nnz, dtype=np.float32)
+        print(3)
+        offset = 0
+        for row, cols, data in tqdm(distance_results):
+            length = len(data)
+            all_rows[offset : offset + length] = rows
+            all_cols[offset : offset + length] = cols
+            all_data[offset : offset + length] = data
+            offset += length
+        # # Concatenate all COO tiles
+        # all_rows = np.concatenate([r for r, c, d in distance_results])
+        # all_cols = np.concatenate([c for r, c, d in distance_results])
+        # all_data = np.concatenate([d for r, c, d in distance_results])
 
         # Get matrix dimensions
-        n_cells = len(all_cell_ids)
+        # n_cells = len(all_cell_ids)
 
         # Create COO matrix and convert to CSR
         coo_dist = coo_matrix(
             (all_data, (all_rows, all_cols)), shape=(n_cells, n_cells)
         )
+        # cleanup
+        del all_rows, all_cols, all_data, distance_results
+        gc.collect()
         csr_dist = coo_dist.tocsr()
+        del coo_dist
+        gc.collect()
 
         # Store in vdj.distances
         vdj.distances = csr_dist
         logg.info(
             f"Stored distances as CSR sparse matrix: {csr_dist.shape}, density={csr_dist.nnz / (n_cells**2):.2%}"
         )
-    # store sparse matrix component-wise to save memory
-    # pass
-
-    # Handle Zarr-based or in-memory distance storage
-    # if store_distances:
-    #     if zarr_writer is not None:
-    #         # Finalize Zarr store
-    #         logg.info("Finalizing distance matrix Zarr store...")
-    #         zarr_store_path = zarr_writer.finalize(verbose=verbose)
-
-    #         # Store lazy reference in vdj (same pattern as _network_polars.py)
-    #         vdj._distance_zarr_path = zarr_store_path
-    #         vdj._distance_embed_pending = _embed_pending
-
-    #         # Create Dask array view of distances (same as _lazydistances_polars.py)
-    #         import dask.array as da
-
-    #         vdj.distances = da.from_zarr(zarr_store_path + "/distance_matrix")
-
-    #         logg.info(
-    #             f"Stored distances lazily in Zarr: {zarr_store_path}, "
-    #             f"nnz={zarr_writer.nnz}, "
-    #             f"density={zarr_writer.nnz / (n_cells**2):.2%}"
-    #         )
-    #     elif distance_results:
-    #         logg.info("Storing distance matrix in memory...")
-    #         # Concatenate all COO tiles
-    #         all_rows = np.concatenate([r for r, c, d in distance_results])
-    #         all_cols = np.concatenate([c for r, c, d in distance_results])
-    #         all_data = np.concatenate([d for r, c, d in distance_results])
-
-    #         # Create COO matrix and convert to CSR
-    #         coo_dist = coo_matrix(
-    #             (all_data, (all_rows, all_cols)), shape=(n_cells, n_cells)
-    #         )
-    #         csr_dist = coo_dist.tocsr()
-
-    #         # Store in vdj.distances
-    #         vdj.distances = csr_dist
-    #         logg.info(
-    #             f"Stored distances as CSR sparse matrix: {csr_dist.shape}, "
-    #             f"density={csr_dist.nnz / (n_cells**2):.2%}"
-    #         )
 
     logg.info(
         " finished",
