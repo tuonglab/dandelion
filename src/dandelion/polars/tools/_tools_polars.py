@@ -696,43 +696,96 @@ def find_clones(
 
         logg.info("Storing distance matrix...")
 
-        # First pass: calculate total size to pre-allocate arrays
-        # This avoids memory doubling from np.concatenate
-        total_size = sum(len(r) for r, _, _ in distance_results)
+        # Estimate memory usage and set batch size dynamically
+        if distance_results:
+            # Sample first few chunks to estimate average size
+            sample_size = min(10, len(distance_results))
+            avg_chunk_size = (
+                sum(len(distance_results[i][0]) for i in range(sample_size))
+                / sample_size
+            )
 
-        # Pre-allocate final arrays
-        all_rows = np.empty(total_size, dtype=np.int32)
-        all_cols = np.empty(total_size, dtype=np.int32)
-        all_data = np.empty(total_size, dtype=np.float32)
+            # Estimate total memory needed (in bytes)
+            # Each entry needs: 2 int32 (8 bytes) + 1 float32 (4 bytes) = 12 bytes
+            bytes_per_entry = 12
+            estimated_total_bytes = (
+                len(distance_results) * avg_chunk_size * bytes_per_entry
+            )
 
-        # Second pass: copy data in place and free memory incrementally
-        offset = 0
-        for i in tqdm(
-            range(len(distance_results)),
+            # Try to use max 25% of available memory for batch processing
+            try:
+                import psutil
+
+                available_memory = psutil.virtual_memory().available
+                target_batch_memory = available_memory * 0.25
+            except ImportError:
+                # Fallback: assume 16GB available, use 4GB for batches
+                target_batch_memory = 4 * 1024**3
+
+            # Calculate batch size
+            entries_per_batch = int(target_batch_memory / bytes_per_entry)
+            batch_size = max(10, int(entries_per_batch / avg_chunk_size))
+            batch_size = min(
+                batch_size, len(distance_results)
+            )  # Don't exceed total chunks
+
+            logg.info(
+                f"Processing {len(distance_results)} chunks in batches of {batch_size}"
+            )
+
+        n_batches = (len(distance_results) + batch_size - 1) // batch_size
+        csr_matrices = []
+
+        for batch_idx in tqdm(
+            range(n_batches),
             desc="Assembling distance matrix",
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
         ):
-            r, c, d = distance_results[i]
-            n = len(r)
-            all_rows[offset : offset + n] = r
-            all_cols[offset : offset + n] = c
-            all_data[offset : offset + n] = d
-            offset += n
-            # Free this chunk's memory immediately
-            distance_results[i] = None
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(distance_results))
+
+            # Collect batch
+            batch_rows = []
+            batch_cols = []
+            batch_data = []
+
+            for i in range(start_idx, end_idx):
+                r, c, d = distance_results[i]
+                batch_rows.append(r)
+                batch_cols.append(c)
+                batch_data.append(d)
+                distance_results[i] = None  # Free immediately
+
+            # Concatenate batch
+            batch_rows = np.concatenate(batch_rows)
+            batch_cols = np.concatenate(batch_cols)
+            batch_data = np.concatenate(batch_data)
+
+            # Create COO and convert to CSR
+            batch_coo = coo_matrix(
+                (batch_data, (batch_rows, batch_cols)), shape=(n_cells, n_cells)
+            )
+            csr_matrices.append(batch_coo.tocsr())
+
+            del batch_rows, batch_cols, batch_data, batch_coo
+            gc.collect()
 
         del distance_results
         gc.collect()
 
-        # Create COO matrix and convert to CSR
-        coo_dist = coo_matrix(
-            (all_data, (all_rows, all_cols)), shape=(n_cells, n_cells)
-        )
-        # cleanup
-        del all_rows, all_cols, all_data
-        gc.collect()
-        csr_dist = coo_dist.tocsr()
-        del coo_dist
+        # Sum all CSR matrices
+        if len(csr_matrices) > 1:
+            logg.info("Merging batches...")
+            csr_dist = csr_matrices[0]
+            for i in range(1, len(csr_matrices)):
+                csr_dist = csr_dist + csr_matrices[i]
+                csr_matrices[i] = None
+                if i % 10 == 0:
+                    gc.collect()
+        else:
+            csr_dist = csr_matrices[0]
+
+        del csr_matrices
         gc.collect()
 
         # Store in vdj.distances
