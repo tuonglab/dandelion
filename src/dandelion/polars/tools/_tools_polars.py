@@ -205,9 +205,7 @@ def find_clones(
     # Separate memmaps for VDJ and VJ chains
     if store_distances and dist_memmap:
         # TemporaryDirectory with delete=True auto-cleans on GC, exit, or interrupt
-        _temp_dir_handle = tempfile.TemporaryDirectory(
-            prefix="dandelion_dist_", delete=True
-        )
+        _temp_dir_handle = tempfile.TemporaryDirectory(prefix="dandelion_dist_")
         _temp_dir = _temp_dir_handle.name
         # Estimate max entries per chain type - can grow if needed
         _max_nnz_vdj = n_cells * 500
