@@ -197,8 +197,6 @@ def calculate_distance_matrix_zarr(
         compressors=[comp] if compress else None,
     )
 
-    logg.info(f"Created Zarr array at: {zarr_path}")
-
     # Scatter the DataFrame to workers once to avoid graph bloat
     # This sends the data once instead of embedding it in every task
     if client is not None:
@@ -758,8 +756,16 @@ def _compute_distances_polars_native(
     verbose: bool, optional
         Whether to print progress bar.
     """
-    # Filter to rows with valid membership_id and partition by clone
+    # Filter to rows with valid membership_id
     df_with_clone = dat_seq_clean.filter(pl.col("membership_id").is_not_null())
+
+    if df_with_clone.height == 0:
+        return
+
+    # Pre-filter to only include groups with >= 2 cells (no point computing distances for singletons)
+    group_counts = df_with_clone.group_by("membership_id").len()
+    valid_groups = group_counts.filter(pl.col("len") >= 2).select("membership_id")
+    df_with_clone = df_with_clone.join(valid_groups, on="membership_id", how="inner")
 
     if df_with_clone.height == 0:
         return
