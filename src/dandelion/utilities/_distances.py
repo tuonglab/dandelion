@@ -1,6 +1,7 @@
 from __future__ import annotations
 import hashlib
 import inspect
+import tempfile
 
 import numpy as np
 
@@ -9,6 +10,26 @@ from Bio.Align.substitution_matrices import load
 from rapidfuzz.distance import Levenshtein
 from rapidfuzz import process
 from typing import Callable, Protocol, runtime_checkable
+
+
+def _create_memmap_matrix(n: int, dtype=np.float32) -> np.memmap:
+    """
+    Create a temporary memory-mapped array for distance matrix storage.
+
+    Parameters
+    ----------
+    n : int
+        Size of the square matrix (n x n).
+    dtype : numpy dtype, optional
+        Data type for the matrix. Default is np.float32.
+
+    Returns
+    -------
+    np.memmap
+        Memory-mapped array of shape (n, n).
+    """
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".dat")
+    return np.memmap(temp_file.name, dtype=dtype, mode="w+", shape=(n, n))
 
 
 def _prepare_sequences_with_separator(
@@ -130,7 +151,7 @@ class Metric(Protocol):
     def compute(self, s1: str, s2: str, n_cpus: int = 1) -> float: ...
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1
+        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
     ) -> np.ndarray: ...
 
 
@@ -194,7 +215,7 @@ class CallableMetric:
             return float(result[0, 1])
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1
+        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
     ) -> np.ndarray:
         """
         Use provided vectorized function.
@@ -204,14 +225,24 @@ class CallableMetric:
         """
         # Use custom vectorized implementation if provided
         if self._vectorized_func is not None:
-            return self._vectorized_func(seqs)
+            result = self._vectorized_func(seqs)
+            if memmap:
+                n = len(seqs)
+                mmap_matrix = _create_memmap_matrix(n, dtype=result.dtype)
+                mmap_matrix[:] = result
+                return mmap_matrix
+            return result
 
         # Fall back to loop using pairwise function
         n = len(seqs)
         if n == 0:
             return np.empty((0, 0), dtype=float)
 
-        dist_matrix = np.zeros((n, n))
+        if memmap:
+            dist_matrix = _create_memmap_matrix(n, dtype=np.float64)
+        else:
+            dist_matrix = np.zeros((n, n))
+
         for i in range(n):
             for j in range(i + 1, n):
                 d = self.compute(seqs[i], seqs[j])
@@ -228,18 +259,26 @@ class LevenshteinMetric:
         return float(Levenshtein.distance(s1, s2))
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1
+        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
     ) -> np.ndarray:
         if not seqs:
             return np.empty((0, 0), dtype=float)
 
-        return process.cdist(
+        result = process.cdist(
             seqs,
             seqs,
             scorer=Levenshtein.distance,
             dtype=np.int32,
             workers=n_cpus if n_cpus > 1 else 1,
-        ).astype(float)
+        ).astype(np.float32)
+
+        if memmap:
+            n = len(seqs)
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix[:] = result
+            return mmap_matrix
+
+        return result
 
 
 class HammingMetric:
@@ -315,7 +354,7 @@ class HammingMetric:
         return float(sum(c1 != c2 for c1, c2 in zip(s1, s2)))
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1
+        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
     ) -> np.ndarray:
         """
         Compute pairwise Hamming distances using the best available backend.
@@ -326,6 +365,8 @@ class HammingMetric:
             List of sequences to compare.
         n_cpus : int, optional
             Number of CPUs to use (currently not utilized for GPU backends).
+        memmap : bool, optional
+            Whether to use memory-mapped storage. Default is False.
 
         Returns
         -------
@@ -339,11 +380,18 @@ class HammingMetric:
 
         # Route to appropriate backend
         if self.backend_name == "cupy":
-            return self._compute_cupy(seqs, n)
+            result = self._compute_cupy(seqs, n)
         elif self.backend_name == "torch":
-            return self._compute_torch(seqs, n)
+            result = self._compute_torch(seqs, n)
         else:  # numpy
-            return self._compute_numpy(seqs, n)
+            result = self._compute_numpy(seqs, n)
+
+        if memmap:
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix[:] = result
+            return mmap_matrix
+
+        return result
 
     def _compute_cupy(self, seqs: list[str], n: int) -> np.ndarray:
         """CuPy implementation."""
@@ -473,7 +521,7 @@ class IdentityMetric:
         return 0.0 if s1 == s2 else 1.0
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1
+        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
     ) -> np.ndarray:
         """
         Compute pairwise identity distance matrix.
@@ -484,6 +532,8 @@ class IdentityMetric:
             List of sequences to compare.
         n_cpus : int, optional
             Number of CPUs to use (currently not utilized for GPU backends).
+        memmap : bool, optional
+            Whether to use memory-mapped storage. Default is False.
 
         Returns
         -------
@@ -499,11 +549,18 @@ class IdentityMetric:
         hashes = self._hash_sequences(seqs)
 
         if self.backend_name == "cupy":
-            return self._compute_cupy(hashes)
+            result = self._compute_cupy(hashes)
         elif self.backend_name == "torch":
-            return self._compute_torch(hashes)
+            result = self._compute_torch(hashes)
         else:
-            return self._compute_numpy(hashes)
+            result = self._compute_numpy(hashes)
+
+        if memmap:
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix[:] = result
+            return mmap_matrix
+
+        return result
 
     def _compute_numpy(self, hashes: np.ndarray) -> np.ndarray:
         """NumPy backend."""
@@ -593,7 +650,7 @@ class SubstitutionMatrixMetric:
         return max(0.0, max_score - score_12)
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1
+        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
     ) -> np.ndarray:
         """
         Vectorized pairwise distance computation using substitution matrices.
@@ -607,6 +664,8 @@ class SubstitutionMatrixMetric:
             List of sequences to compare (can have different lengths).
         n_cpus : int, optional
             Number of CPUs to use (currently not utilized).
+        memmap : bool, optional
+            Whether to use memory-mapped storage. Default is False.
 
         Returns
         -------
@@ -648,9 +707,15 @@ class SubstitutionMatrixMetric:
         ].sum(axis=2)
         # Distance matrix from min of self scores
         max_scores = np.minimum(self_scores[:, None], self_scores[None, :])
-        dist_matrix = np.maximum(max_scores - pair_scores, 0.0)
+        dist_matrix = np.maximum(max_scores - pair_scores, 0.0).astype(np.float32)
         # Ensure diagonal is exactly zero
         np.fill_diagonal(dist_matrix, 0.0)
+
+        if memmap:
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix[:] = dist_matrix
+            return mmap_matrix
+
         return dist_matrix
 
 
