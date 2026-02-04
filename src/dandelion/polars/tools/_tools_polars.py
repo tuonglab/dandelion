@@ -695,35 +695,41 @@ def find_clones(
         import gc
 
         logg.info("Storing distance matrix...")
-        nnz = sum(len(d) for r, c, d in distance_results)
-        # pre-allocate
-        all_rows = np.empty(nnz, dtype=np.int32)
-        print(1)
-        all_cols = np.empty(nnz, dtype=np.int32)
-        print(2)
-        all_data = np.empty(nnz, dtype=np.float32)
-        print(3)
-        offset = 0
-        for row, cols, data in tqdm(distance_results):
-            length = len(data)
-            all_rows[offset : offset + length] = rows
-            all_cols[offset : offset + length] = cols
-            all_data[offset : offset + length] = data
-            offset += length
-        # # Concatenate all COO tiles
-        # all_rows = np.concatenate([r for r, c, d in distance_results])
-        # all_cols = np.concatenate([c for r, c, d in distance_results])
-        # all_data = np.concatenate([d for r, c, d in distance_results])
 
-        # Get matrix dimensions
-        # n_cells = len(all_cell_ids)
+        # First pass: calculate total size to pre-allocate arrays
+        # This avoids memory doubling from np.concatenate
+        total_size = sum(len(r) for r, _, _ in distance_results)
+
+        # Pre-allocate final arrays
+        all_rows = np.empty(total_size, dtype=np.int32)
+        all_cols = np.empty(total_size, dtype=np.int32)
+        all_data = np.empty(total_size, dtype=np.float32)
+
+        # Second pass: copy data in place and free memory incrementally
+        offset = 0
+        for i in tqdm(
+            range(len(distance_results)),
+            desc="Assembling distance matrix",
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        ):
+            r, c, d = distance_results[i]
+            n = len(r)
+            all_rows[offset : offset + n] = r
+            all_cols[offset : offset + n] = c
+            all_data[offset : offset + n] = d
+            offset += n
+            # Free this chunk's memory immediately
+            distance_results[i] = None
+
+        del distance_results
+        gc.collect()
 
         # Create COO matrix and convert to CSR
         coo_dist = coo_matrix(
             (all_data, (all_rows, all_cols)), shape=(n_cells, n_cells)
         )
         # cleanup
-        del all_rows, all_cols, all_data, distance_results
+        del all_rows, all_cols, all_data
         gc.collect()
         csr_dist = coo_dist.tocsr()
         del coo_dist
