@@ -272,30 +272,12 @@ def find_clones(
                 ]
 
                 if seqs_non_empty:
-                    # Deduplicate sequences within this group for faster computation
-                    unique_seqs = []
-                    seq_to_unique_idx = {}
-                    for seq in seqs_non_empty:
-                        if seq not in seq_to_unique_idx:
-                            seq_to_unique_idx[seq] = len(unique_seqs)
-                            unique_seqs.append(seq)
+                    # Deduplicate sequences for faster computation
+                    unique_seqs = list(set(seqs_non_empty))
+                    seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
 
-                    # Only compute distances if we have duplicates (speedup opportunity)
-                    if len(unique_seqs) < len(seqs_non_empty):
-                        # Compute distances only for unique sequences
-                        d_mat_unique = metric.compute_vectorized(unique_seqs)
-
-                        # Map back to full distance matrix
-                        n = len(seqs_non_empty)
-                        d_mat = np.zeros((n, n), dtype=np.float64)
-                        for i, seq_i in enumerate(seqs_non_empty):
-                            unique_i = seq_to_unique_idx[seq_i]
-                            for j, seq_j in enumerate(seqs_non_empty):
-                                unique_j = seq_to_unique_idx[seq_j]
-                                d_mat[i, j] = d_mat_unique[unique_i, unique_j]
-                    else:
-                        # No duplicates, compute normally
-                        d_mat = metric.compute_vectorized(seqs_non_empty)
+                    # Compute distances only for unique sequences
+                    d_mat_unique = metric.compute_vectorized(unique_seqs)
 
                     # Convert to COO sparse matrix for efficient concatenation
                     # Get metadata indices for these cells
@@ -307,9 +289,12 @@ def find_clones(
                         ]
                     )
 
-                    if len(meta_indices) > 0 and d_mat.size > 0:
+                    if len(meta_indices) > 0 and d_mat_unique.size > 0:
+                        # Use vectorized indexing to expand unique distances to full matrix
+                        unique_indices = np.array([seq_to_unique_idx[seq] for seq in seqs_non_empty])
+                        d_mat = d_mat_unique[np.ix_(unique_indices, unique_indices)]
+
                         # Get row, col, data for COO format
-                        # Map local indices to global metadata indices
                         n_local = len(meta_indices)
                         rows, cols = np.meshgrid(
                             range(n_local), range(n_local), indexing="ij"
@@ -327,15 +312,16 @@ def find_clones(
                             (global_rows, global_cols, data_flat)
                         )
 
-                    if d_mat.shape[0] > 1:
+                    # Cluster on unique sequences only, then map back
+                    if len(unique_seqs) > 1:
                         seq_tmp_dict = _clustering_scipy(
-                            d_mat,
+                            d_mat_unique,
                             threshold=threshold,
-                            sequences=seqs_non_empty,
+                            sequences=unique_seqs,
                             hard_threshold=hard_cutoff,
                         )
                     else:
-                        seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
+                        seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
                 else:
                     # All sequences in this membership are empty - assign them together
                     if seqs_empty:
@@ -438,30 +424,12 @@ def find_clones(
                 ]
 
                 if seqs_non_empty:
-                    # Deduplicate sequences within this group for faster computation
-                    unique_seqs = []
-                    seq_to_unique_idx = {}
-                    for seq in seqs_non_empty:
-                        if seq not in seq_to_unique_idx:
-                            seq_to_unique_idx[seq] = len(unique_seqs)
-                            unique_seqs.append(seq)
+                    # Deduplicate sequences for faster computation
+                    unique_seqs = list(set(seqs_non_empty))
+                    seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
 
-                    # Only compute distances if we have duplicates (speedup opportunity)
-                    if len(unique_seqs) < len(seqs_non_empty):
-                        # Compute distances only for unique sequences
-                        d_mat_unique = metric.compute_vectorized(unique_seqs)
-
-                        # Map back to full distance matrix
-                        n = len(seqs_non_empty)
-                        d_mat = np.zeros((n, n), dtype=np.float64)
-                        for i, seq_i in enumerate(seqs_non_empty):
-                            unique_i = seq_to_unique_idx[seq_i]
-                            for j, seq_j in enumerate(seqs_non_empty):
-                                unique_j = seq_to_unique_idx[seq_j]
-                                d_mat[i, j] = d_mat_unique[unique_i, unique_j]
-                    else:
-                        # No duplicates, compute normally
-                        d_mat = metric.compute_vectorized(seqs_non_empty)
+                    # Compute distances only for unique sequences
+                    d_mat_unique = metric.compute_vectorized(unique_seqs)
 
                     # Convert to COO sparse matrix for efficient concatenation
                     # Get metadata indices for these cells
@@ -473,9 +441,12 @@ def find_clones(
                         ]
                     )
 
-                    if len(meta_indices) > 0 and d_mat.size > 0:
+                    if len(meta_indices) > 0 and d_mat_unique.size > 0:
+                        # Use vectorized indexing to expand unique distances to full matrix
+                        unique_indices = np.array([seq_to_unique_idx[seq] for seq in seqs_non_empty])
+                        d_mat = d_mat_unique[np.ix_(unique_indices, unique_indices)]
+
                         # Get row, col, data for COO format
-                        # Map local indices to global metadata indices
                         n_local = len(meta_indices)
                         rows, cols = np.meshgrid(
                             range(n_local), range(n_local), indexing="ij"
@@ -493,15 +464,16 @@ def find_clones(
                             (global_rows, global_cols, data_flat)
                         )
 
-                    if d_mat.shape[0] > 1:
+                    # Cluster on unique sequences only, then map back
+                    if len(unique_seqs) > 1:
                         seq_tmp_dict = _clustering_scipy(
-                            d_mat,
+                            d_mat_unique,
                             threshold=threshold,
-                            sequences=seqs_non_empty,
+                            sequences=unique_seqs,
                             hard_threshold=hard_cutoff,
                         )
                     else:
-                        seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
+                        seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
                 else:
                     # All sequences in this membership are empty - assign them together
                     if seqs_empty:

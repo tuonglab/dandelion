@@ -494,15 +494,21 @@ class DandelionPolars:
                 else None
             )
 
-        # Keep lazy if original was lazy; avoid eager collect to reduce spikes
-        if isinstance(self._data, pl.LazyFrame) and isinstance(
-            _data, pl.DataFrame
-        ):
-            _data = _data.lazy()
-        if isinstance(self._metadata, pl.LazyFrame) and isinstance(
-            _metadata, pl.DataFrame
-        ):
-            _metadata = _metadata.lazy()
+        # Keep lazy if original was lazy; but always collect first to materialize
+        # the data in memory. This ensures the result doesn't reference temp files
+        # that may be deleted (e.g., from check_contigs).
+        if isinstance(self._data, pl.LazyFrame):
+            if isinstance(_data, pl.LazyFrame):
+                # Collect to materialize, then re-lazy backed by in-memory data
+                _data = _data.collect(engine="streaming").lazy()
+            elif isinstance(_data, pl.DataFrame):
+                _data = _data.lazy()
+        if isinstance(self._metadata, pl.LazyFrame):
+            if isinstance(_metadata, pl.LazyFrame):
+                # Collect to materialize, then re-lazy backed by in-memory data
+                _metadata = _metadata.collect(engine="streaming").lazy()
+            elif isinstance(_metadata, pl.DataFrame):
+                _metadata = _metadata.lazy()
 
         # If eager, compact memory so the slice does not retain large original buffers
         if isinstance(_data, pl.DataFrame):

@@ -14,7 +14,18 @@ from pathlib import Path
 from dandelion.polars.tools._lazydistances_polars import (
     calculate_distance_matrix_zarr,
 )
+from dandelion.polars.tools._network_polars import _merge_overlapping_clones
 from dandelion.utilities._distances import LevenshteinMetric
+
+
+def _dict_to_dataframe_membership(membership: dict) -> pl.DataFrame:
+    """Convert dict membership to DataFrame format using same process as real code."""
+    rows = []
+    for clone_id, cell_ids in membership.items():
+        for cell_id in cell_ids:
+            rows.append({"cell_id": cell_id, "clone_id": str(clone_id)})
+    clone_df = pl.DataFrame(rows)
+    return _merge_overlapping_clones(clone_df, "clone_id")
 
 
 @pytest.fixture
@@ -85,7 +96,7 @@ def test_lazydistances_original_vs_eager(
         lazy_result = calculate_distance_matrix_zarr(
             sample_sequence_data,
             metric=metric,
-            membership=sample_membership_data,
+            membership=_dict_to_dataframe_membership(sample_membership_data),
             pad_to_max=True,
             zarr_path=tmpdir,
             chunk_size=5,
@@ -116,7 +127,7 @@ def test_lazydistances_original_with_membership(
         lazy_result = calculate_distance_matrix_zarr(
             sample_sequence_data,
             metric=metric,
-            membership=sample_membership_data,
+            membership=_dict_to_dataframe_membership(sample_membership_data),
             pad_to_max=True,
             zarr_path=tmpdir,
             chunk_size=5,
@@ -263,7 +274,7 @@ def test_lazydistances_membership_partial(sample_sequence_data):
         result = calculate_distance_matrix_zarr(
             sample_sequence_data,
             metric=metric,
-            membership=partial_membership,
+            membership=_dict_to_dataframe_membership(partial_membership),
             pad_to_max=True,
             zarr_path=tmpdir,
             chunk_size=5,

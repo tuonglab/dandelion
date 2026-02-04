@@ -39,6 +39,83 @@ from dandelion.utilities._utilities import (
 )
 
 
+def _merge_overlapping_clones(membership: pl.DataFrame, clone_col: str) -> pl.DataFrame:
+    """
+    Merge overlapping clones into single membership groups using Polars.
+
+    For cells with multiple clones ("|"-separated), this finds all cells that share
+    any clone and assigns them to the same group.
+
+    Parameters
+    ----------
+    membership : pl.DataFrame
+        DataFrame with 'cell_id' and clone column ("|"-separated values)
+    clone_col : str
+        Name of the clone column
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with 'cell_id' and 'membership_id' where overlapping clones are merged
+    """
+    # Explode "|"-separated clones to get one row per cell-clone pair
+    exploded = (
+        membership
+        .with_columns(pl.col(clone_col).str.split("|").alias("_clones"))
+        .explode("_clones")
+        .with_columns(pl.col("_clones").str.strip_chars().alias("_clone"))
+        .filter(
+            pl.col("_clone").is_not_null()
+            & (pl.col("_clone") != "")
+            & (pl.col("_clone").str.to_lowercase() != "none")
+        )
+        .select(["cell_id", "_clone"])
+    )
+
+    if exploded.height == 0:
+        return pl.DataFrame({"cell_id": membership["cell_id"], "membership_id": [None] * membership.height})
+
+    # Assign initial group_id as minimum clone per cell
+    cell_groups = (
+        exploded
+        .group_by("cell_id")
+        .agg(pl.col("_clone").min().alias("group_id"))
+    )
+
+    # Iteratively propagate minimum group_id through shared clones
+    for _ in range(100):  # Max iterations
+        # Get minimum group_id for each clone
+        clone_min_group = (
+            exploded
+            .join(cell_groups, on="cell_id")
+            .group_by("_clone")
+            .agg(pl.col("group_id").min().alias("new_group"))
+        )
+
+        # Update cell group_id to minimum of all its clones' groups
+        new_cell_groups = (
+            exploded
+            .join(clone_min_group, on="_clone")
+            .group_by("cell_id")
+            .agg(pl.col("new_group").min().alias("group_id"))
+        )
+
+        # Check for convergence
+        if new_cell_groups["group_id"].equals(cell_groups["group_id"]):
+            break
+        cell_groups = new_cell_groups
+
+    # Join back to original membership
+    result = (
+        membership
+        .select("cell_id")
+        .join(cell_groups, on="cell_id", how="left")
+        .rename({"group_id": "membership_id"})
+    )
+
+    return result
+
+
 def generate_network(
     vdj: DandelionPolars,
     adata: AnnData | None = None,
@@ -269,40 +346,9 @@ def generate_network(
         )
 
         if compute_graph or compute_layout or distance_mode == "clone":
-            membership = {}
-            if isinstance(dat._metadata, pl.LazyFrame):
-                clone_data = dat._metadata.select(
-                    ["cell_id", clone_key]
-                ).collect(engine="streaming")
-            elif isinstance(dat._metadata, pl.DataFrame):
-                clone_data = dat._metadata.select(["cell_id", clone_key])
-            else:
-                clone_data = dat._metadata[["cell_id", clone_key]]
-
-            # Keep as polars and iterate using polars operations
-            if isinstance(clone_data, pl.LazyFrame):
-                clone_data = clone_data.collect(engine="streaming")
-
-            for cell_name, clone_str in zip(
-                clone_data["cell_id"].to_list(), clone_data[clone_key].to_list()
-            ):
-                if (
-                    clone_str is not None
-                    and clone_str.lower() != "none"
-                    and clone_str != ""
-                ):
-                    clone_ids = str(clone_str).split("|")
-                    for clone_id in clone_ids:
-                        clone_id = clone_id.strip()
-                        if (
-                            clone_id
-                            and clone_id.lower() != "none"
-                            and clone_id != ""
-                        ):
-                            if clone_id not in membership:
-                                membership[clone_id] = []
-                            if cell_name not in membership[clone_id]:
-                                membership[clone_id].append(cell_name)
+            # Get clone membership as DataFrame and merge overlapping clones
+            clone_df = dat._merge(clone_key, unique=True)
+            membership = _merge_overlapping_clones(clone_df, clone_key)
 
         # Check if pre-computed distances are available
         if hasattr(vdj, "distances") and vdj.distances is not None:
@@ -1229,7 +1275,7 @@ def clone_centrality(vdj: DandelionPolars):
 
 def calculate_distance_matrix_original(
     dat_seq: pl.DataFrame,
-    membership: dict,
+    membership: pl.DataFrame,
     metric: Metric,
     pad_to_max: bool = False,
     verbose: bool = True,
@@ -1241,8 +1287,8 @@ def calculate_distance_matrix_original(
     ----------
     dat_seq : pl.DataFrame
         Polars DataFrame with sequence columns and 'cell_id' column.
-    membership : dict
-        Mapping from clone_id -> list of cell_ids (these cell_ids must be present in dat_seq['cell_id']).
+    membership : pl.DataFrame
+        DataFrame with 'cell_id' and 'membership_id' columns mapping cells to clone groups.
     metric : Metric
         Distance metric to use.
     pad_to_max : bool, optional
@@ -1261,27 +1307,31 @@ def calculate_distance_matrix_original(
 
     n = dat_seq.height
     cell_id_list = dat_seq["cell_id"].to_list()
-    # cell_id_to_idx = {cell_id: idx for idx, cell_id in enumerate(cell_id_list)}
 
     dmat_per_column = defaultdict(list)
 
-    for clone in tqdm(
-        membership,
+    # Join with membership and partition by membership_id
+    dat_seq_with_membership = dat_seq.join(
+        membership, on="cell_id", how="inner"
+    )
+    groups = dat_seq_with_membership.partition_by("membership_id", as_dict=True)
+
+    for group_df in tqdm(
+        groups.values(),
         disable=not verbose,
         bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
     ):
-        clone_cell_ids = membership[clone]
-        if len(clone_cell_ids) > 1:
-            tmp = dat_seq.filter(pl.col("cell_id").is_in(clone_cell_ids))
-            tmp_cell_ids = tmp["cell_id"].to_list()
+        if group_df.height > 1:
+            tmp_cell_ids = group_df["cell_id"].to_list()
 
             seq_cols = [
-                col for col in tmp.collect_schema().names() if col != "cell_id"
+                col for col in group_df.collect_schema().names()
+                if col not in ("cell_id", "membership_id")
             ]
 
             for col in seq_cols:
                 seq_series = (
-                    tmp[col]
+                    group_df[col]
                     .cast(pl.String)
                     .str.replace_all(r"\.", "")
                     .fill_null("")
@@ -1297,29 +1347,15 @@ def calculate_distance_matrix_original(
                 )
 
                 # Deduplicate sequences for faster computation
-                unique_seqs = []
-                seq_to_unique_idx = {}
-                for seq in prepared_seqs:
-                    if seq not in seq_to_unique_idx:
-                        seq_to_unique_idx[seq] = len(unique_seqs)
-                        unique_seqs.append(seq)
+                unique_seqs = list(set(prepared_seqs))
+                seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
 
-                # Vectorized computation
-                if len(unique_seqs) < len(prepared_seqs):
-                    # Compute distances only for unique sequences
-                    d_mat_unique = metric.compute_vectorized(unique_seqs)
+                # Compute distances only for unique sequences
+                d_mat_unique = metric.compute_vectorized(unique_seqs)
 
-                    # Map back to full distance matrix
-                    n = len(prepared_seqs)
-                    d_mat_tmp = np.zeros((n, n), dtype=np.float64)
-                    for i, seq_i in enumerate(prepared_seqs):
-                        unique_i = seq_to_unique_idx[seq_i]
-                        for j, seq_j in enumerate(prepared_seqs):
-                            unique_j = seq_to_unique_idx[seq_j]
-                            d_mat_tmp[i, j] = d_mat_unique[unique_i, unique_j]
-                else:
-                    # No duplicates, compute normally
-                    d_mat_tmp = metric.compute_vectorized(prepared_seqs)
+                # Use vectorized indexing to expand to full matrix
+                unique_indices = np.array([seq_to_unique_idx[seq] for seq in prepared_seqs])
+                d_mat_tmp = d_mat_unique[np.ix_(unique_indices, unique_indices)]
 
                 df_block = pd.DataFrame(
                     d_mat_tmp, index=tmp_cell_ids, columns=tmp_cell_ids
@@ -1412,29 +1448,15 @@ def calculate_distance_matrix_original_full(
         )
 
         # Deduplicate sequences for faster computation
-        unique_seqs = []
-        seq_to_unique_idx = {}
-        for seq in prepared_seqs:
-            if seq not in seq_to_unique_idx:
-                seq_to_unique_idx[seq] = len(unique_seqs)
-                unique_seqs.append(seq)
+        unique_seqs = list(set(prepared_seqs))
+        seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
 
-        # Compute distance matrix using vectorized metric
-        if len(unique_seqs) < len(prepared_seqs):
-            # Compute distances only for unique sequences
-            results_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
+        # Compute distances only for unique sequences
+        results_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
 
-            # Map back to full distance matrix
-            n = len(prepared_seqs)
-            results = np.zeros((n, n), dtype=np.float64)
-            for i, seq_i in enumerate(prepared_seqs):
-                unique_i = seq_to_unique_idx[seq_i]
-                for j, seq_j in enumerate(prepared_seqs):
-                    unique_j = seq_to_unique_idx[seq_j]
-                    results[i, j] = results_unique[unique_i, unique_j]
-        else:
-            # No duplicates, compute normally
-            results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
+        # Use vectorized indexing to expand to full matrix
+        unique_indices = np.array([seq_to_unique_idx[seq] for seq in prepared_seqs])
+        results = results_unique[np.ix_(unique_indices, unique_indices)]
 
         total_dist += results
 
@@ -1449,7 +1471,7 @@ def calculate_distance_matrix_original_full(
 
 def calculate_distance_matrix_long(
     dat_seq: pl.DataFrame,
-    membership: dict | None,
+    membership: pl.DataFrame | None,
     metric: Metric,
     pad_to_max: bool = False,
     n_cpus: int = 1,
@@ -1463,8 +1485,8 @@ def calculate_distance_matrix_long(
     ----------
     dat_seq : pl.DataFrame
         Polars DataFrame with sequence columns and 'cell_id' column.
-    membership : dict | None
-        Mapping from clone_id -> list of cell_ids (these cell_ids must be present in dat_seq['cell_id']).
+    membership : pl.DataFrame | None
+        DataFrame with 'cell_id' and 'membership_id' columns mapping cells to clone groups.
         None indicates full pairwise distance calculation.
     metric : Metric
         Distance metric to use.
@@ -1529,18 +1551,19 @@ def calculate_distance_matrix_long(
         results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
         total_dist += results
     else:
-        # Step 4: iterate over clone memberships
-        for clone in tqdm(
-            membership,
+        # Step 4: join with membership and partition by membership_id
+        dat_seq_with_membership = dat_seq_clean.join(
+            membership, on="cell_id", how="inner"
+        )
+        groups = dat_seq_with_membership.partition_by("membership_id", as_dict=True)
+
+        for group_df in tqdm(
+            groups.values(),
             disable=not verbose,
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
         ):
-            clone_cell_ids = membership[clone]
-            if len(clone_cell_ids) > 1:
-                tmp = dat_seq_clean.filter(
-                    pl.col("cell_id").is_in(clone_cell_ids)
-                )
-                tmp_cell_ids = tmp["cell_id"].to_list()
+            if group_df.height > 1:
+                tmp_cell_ids = group_df["cell_id"].to_list()
 
                 # Map cell_ids to indices
                 indices = [cell_id_to_idx[cid] for cid in tmp_cell_ids]
@@ -1549,29 +1572,15 @@ def calculate_distance_matrix_long(
                 clone_seqs = [prepared_seqs[i] for i in indices]
 
                 # Deduplicate sequences for faster computation
-                unique_seqs = []
-                seq_to_unique_idx = {}
-                for seq in clone_seqs:
-                    if seq not in seq_to_unique_idx:
-                        seq_to_unique_idx[seq] = len(unique_seqs)
-                        unique_seqs.append(seq)
+                unique_seqs = list(set(clone_seqs))
+                seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
 
-                # Compute distance matrix using vectorized metric
-                if len(unique_seqs) < len(clone_seqs):
-                    # Compute distances only for unique sequences
-                    d_mat_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
+                # Compute distances only for unique sequences
+                d_mat_unique = metric.compute_vectorized(unique_seqs, n_cpus=n_cpus)
 
-                    # Map back to full distance matrix
-                    n = len(clone_seqs)
-                    d_mat_tmp = np.zeros((n, n), dtype=np.float64)
-                    for i, seq_i in enumerate(clone_seqs):
-                        unique_i = seq_to_unique_idx[seq_i]
-                        for j, seq_j in enumerate(clone_seqs):
-                            unique_j = seq_to_unique_idx[seq_j]
-                            d_mat_tmp[i, j] = d_mat_unique[unique_i, unique_j]
-                else:
-                    # No duplicates, compute normally
-                    d_mat_tmp = metric.compute_vectorized(clone_seqs, n_cpus=n_cpus)
+                # Use vectorized indexing to expand to full matrix
+                unique_indices = np.array([seq_to_unique_idx[seq] for seq in clone_seqs])
+                d_mat_tmp = d_mat_unique[np.ix_(unique_indices, unique_indices)]
 
                 total_dist[np.ix_(indices, indices)] += d_mat_tmp
 

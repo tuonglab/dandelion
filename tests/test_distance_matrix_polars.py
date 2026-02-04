@@ -13,11 +13,24 @@ from dandelion.base.tools._network import (
     calculate_distance_matrix_long as calc_dist_long_pandas,
 )
 from dandelion.polars.tools._network_polars import (
+    _merge_overlapping_clones,
     calculate_distance_matrix_original as calc_dist_polars,
     calculate_distance_matrix_original_full as calc_dist_full_polars,
     calculate_distance_matrix_long as calc_dist_long_polars,
 )
 from dandelion.utilities._distances import LevenshteinMetric
+
+
+def _dict_to_dataframe_membership(membership: dict) -> pl.DataFrame:
+    """Convert dict membership to DataFrame format using same process as real code."""
+    # Build DataFrame with cell_id and clone_id columns (same format as dat._merge)
+    rows = []
+    for clone_id, cell_ids in membership.items():
+        for cell_id in cell_ids:
+            rows.append({"cell_id": cell_id, "clone_id": clone_id})
+    clone_df = pl.DataFrame(rows)
+    # Use the same merging process as the real code
+    return _merge_overlapping_clones(clone_df, "clone_id")
 
 
 def test_calculate_distance_matrix_original_polars_vs_pandas():
@@ -70,7 +83,7 @@ def test_calculate_distance_matrix_original_polars_vs_pandas():
 
     result_polars = calc_dist_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=False,
         verbose=False,
@@ -127,7 +140,7 @@ def test_calculate_distance_matrix_with_padding():
 
     result_polars = calc_dist_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=True,
         verbose=False,
@@ -179,7 +192,7 @@ def test_calculate_distance_matrix_with_empty_sequences():
 
     result_polars = calc_dist_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=False,
         verbose=False,
@@ -256,7 +269,7 @@ def test_calculate_distance_matrix_multiple_clones():
 
     result_polars = calc_dist_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=False,
         verbose=False,
@@ -521,7 +534,7 @@ def test_calculate_distance_matrix_long_clone_mode_polars_vs_pandas():
 
     result_polars = calc_dist_long_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=False,
         n_cpus=1,
@@ -643,7 +656,7 @@ def test_calculate_distance_matrix_long_with_padding():
 
     result_polars = calc_dist_long_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=True,
         n_cpus=1,
@@ -761,7 +774,7 @@ def test_calculate_distance_matrix_long_with_empty_sequences():
 
     result_polars = calc_dist_long_polars(
         df_polars,
-        membership=membership,
+        membership=_dict_to_dataframe_membership(membership),
         metric=metric,
         pad_to_max=False,
         n_cpus=1,

@@ -14,7 +14,18 @@ from dandelion.base.tools._lazydistances import (
 from dandelion.polars.tools._lazydistances_polars import (
     calculate_distance_matrix_zarr as calculate_distance_matrix_zarr_polars,
 )
+from dandelion.polars.tools._network_polars import _merge_overlapping_clones
 from dandelion.utilities._distances import LevenshteinMetric
+
+
+def _dict_to_dataframe_membership(membership: dict) -> pl.DataFrame:
+    """Convert dict membership to DataFrame format using same process as real code."""
+    rows = []
+    for clone_id, cell_ids in membership.items():
+        for cell_id in cell_ids:
+            rows.append({"cell_id": cell_id, "clone_id": str(clone_id)})
+    clone_df = pl.DataFrame(rows)
+    return _merge_overlapping_clones(clone_df, "clone_id")
 
 
 @pytest.fixture
@@ -128,7 +139,7 @@ def test_membership_mode_comparison(sample_data, sample_membership):
             df_polars,
             metric=metric,
             pad_to_max=True,
-            membership=sample_membership,
+            membership=_dict_to_dataframe_membership(sample_membership),
             zarr_path=tmpdir2,
             chunk_size=5,
             n_cpus=1,

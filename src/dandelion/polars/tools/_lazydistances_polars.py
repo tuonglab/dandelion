@@ -63,7 +63,7 @@ def calculate_distance_matrix_zarr(
     dat_seq: pl.DataFrame,
     metric: Metric,
     pad_to_max: bool = True,
-    membership: dict | None = None,
+    membership: pl.DataFrame | None = None,
     zarr_path: str | None = None,
     chunk_size: int | None = None,
     n_cpus: int = 1,
@@ -87,9 +87,9 @@ def calculate_distance_matrix_zarr(
         Distance metric to use.
     pad_to_max : bool
         Whether to pad sequences to maximum length before distance calculation.
-    membership : dict or None, optional
-        Dictionary mapping indices to membership groups. If provided, distances are only
-        computed within groups (clone mode). If None, computes full pairwise distances.
+    membership : pl.DataFrame or None, optional
+        DataFrame with 'cell_id' and 'membership_id' columns. If provided, distances are only
+        computed within membership groups. If None, computes full pairwise distances.
     zarr_path : str, optional
         Path to save the Zarr array. If None, uses a temporary directory.
     chunk_size : int, optional
@@ -122,10 +122,6 @@ def calculate_distance_matrix_zarr(
         c for c in dat_seq.collect_schema().names() if c not in exclude_cols
     ]
 
-    # Get cell IDs and create index mapping (for membership-based computation)
-    cell_id_list = dat_seq["cell_id"].to_list()
-    cell_id_to_idx = {cell_id: i for i, cell_id in enumerate(cell_id_list)}
-
     # Add row index to preserve order, then clean sequences
     dat_seq_indexed = dat_seq.with_row_index("_original_order")
 
@@ -133,6 +129,7 @@ def calculate_distance_matrix_zarr(
     dat_seq_clean = dat_seq_indexed.select(
         [
             pl.col("_original_order"),
+            pl.col("cell_id"),
             *[
                 pl.col(c)
                 .cast(pl.String)
@@ -154,12 +151,26 @@ def calculate_distance_matrix_zarr(
     )
 
     # Reconstruct DataFrame with prepared sequences as single column
-    dat_seq_clean = pl.DataFrame(
-        {
-            "_original_order": dat_seq_clean["_original_order"],
-            "_prepared_seq": prepared_seqs,
-        }
-    )
+    # Join membership DataFrame if provided to get membership_id
+    if membership is not None:
+        # membership DataFrame has 'cell_id' and 'membership_id' columns
+        dat_seq_clean = dat_seq_clean.select(["_original_order", "cell_id"]).join(
+            membership.select(["cell_id", "membership_id"]), on="cell_id", how="left"
+        )
+        dat_seq_clean = pl.DataFrame(
+            {
+                "_original_order": dat_seq_clean["_original_order"],
+                "_prepared_seq": prepared_seqs,
+                "membership_id": dat_seq_clean["membership_id"],
+            }
+        )
+    else:
+        dat_seq_clean = pl.DataFrame(
+            {
+                "_original_order": dat_seq_clean["_original_order"],
+                "_prepared_seq": prepared_seqs,
+            }
+        )
 
     # Store cleaned dataframe for lazy chunk extraction - do NOT convert to numpy yet
     m = dat_seq_clean.height
@@ -220,20 +231,13 @@ def calculate_distance_matrix_zarr(
     if membership is not None:
         # Clone mode: only compute within membership groups
         logg.info(
-            "Computing distances in clone mode (within membership groups)"
+            "Computing distances in clone mode (within clone groups)"
         )
 
-        n_groups = len(membership)
-        logg.info(
-            f"Processing {n_groups} membership groups using Polars vectorized approach"
-        )
-
-        # Use Polars-native vectorized approach for moderate number of groups
-        # This is much faster than Dask for ~100-1000 groups due to lower overhead
-        tmp_results = _compute_distances_polars_native(
+        # Use Polars-native vectorized approach
+        # dat_seq_clean already has membership_id column from membership join
+        _compute_distances_polars_native(
             dat_seq_clean=dat_seq_clean,
-            membership=membership,
-            cell_id_to_idx=cell_id_to_idx,
             metric=metric,
             z_array=z_array,
             n_jobs=n_cpus,
@@ -314,9 +318,9 @@ def calculate_distance_matrix_zarr(
             with ProgressBar():
                 tmp_results = compute(*delayed_blocks, scheduler="threads")
 
-    logg.info("Merging temporary results into final Zarr array...")
-    # Merge all temporary arrays into the main array
-    merge_tmp_arrays(z_array, tmp_results, verbose)
+        logg.info("Merging temporary results into final Zarr array...")
+        # Merge all temporary arrays into the main array
+        merge_tmp_arrays(z_array, tmp_results, verbose)
 
     # Set diagonal to NaN
     for i in range(0, m, chunk_size):
@@ -791,73 +795,11 @@ def create_tmp_zarr(z_array: zarr.Array, compress: bool = True) -> zarr.Array:
     return tmp_array, tmp_dir
 
 
-def _compute_group_distances_sequential(
-    group_df: pl.DataFrame, metric: Metric, z_array: zarr.Array
-) -> pl.DataFrame:
-    """
-    Compute pairwise distances for a group and write to Zarr (sequential version).
-
-    Used with Polars map_groups for sequential processing.
-
-    Parameters
-    ----------
-    group_df : pl.DataFrame
-        DataFrame for a single group/clone
-    metric : Metric
-        Distance metric to use
-    z_array : zarr.Array
-        Zarr array to write distances to
-
-    Returns
-    -------
-    pl.DataFrame
-        Empty DataFrame (distances written as side effect)
-    """
-    if group_df.height < 2:
-        return pl.DataFrame()
-
-    # Direct column access is faster than select + to_numpy
-    array_indices = group_df["_original_order"].to_numpy()
-    seqs_flat = group_df["_prepared_seq"].to_list()
-
-    # Deduplicate sequences within this group for faster computation
-    unique_seqs = []
-    seq_to_unique_idx = {}
-    for seq in seqs_flat:
-        if seq not in seq_to_unique_idx:
-            seq_to_unique_idx[seq] = len(unique_seqs)
-            unique_seqs.append(seq)
-
-    # Only compute distances if we have duplicates (speedup opportunity)
-    if len(unique_seqs) < len(seqs_flat):
-        # Compute distances only for unique sequences
-        dist_block_unique = metric.compute_vectorized(unique_seqs)
-
-        # Map back to full distance matrix
-        n = len(seqs_flat)
-        dist_block = np.zeros((n, n), dtype=np.float64)
-        for i, seq_i in enumerate(seqs_flat):
-            unique_i = seq_to_unique_idx[seq_i]
-            for j, seq_j in enumerate(seqs_flat):
-                unique_j = seq_to_unique_idx[seq_j]
-                dist_block[i, j] = dist_block_unique[unique_i, unique_j]
-    else:
-        # No duplicates, compute normally
-        dist_block = metric.compute_vectorized(seqs_flat)
-
-    # Write directly to Zarr
-    z_array[np.ix_(array_indices, array_indices)] = dist_block
-
-    return pl.DataFrame()
-
-
-def _process_group_parallel(
+def _compute_group_distances(
     group_df: pl.DataFrame, metric: Metric, z_array: zarr.Array
 ) -> None:
     """
-    Process a single group - write to Zarr array (parallel version).
-
-    Used with joblib for parallel processing.
+    Compute pairwise distances for a group and write to Zarr.
 
     Parameters
     ----------
@@ -874,58 +816,37 @@ def _process_group_parallel(
     array_indices = group_df["_original_order"].to_numpy()
     seqs_flat = group_df["_prepared_seq"].to_list()
 
-    # Deduplicate sequences within this group for faster computation
-    unique_seqs = []
-    seq_to_unique_idx = {}
-    for seq in seqs_flat:
-        if seq not in seq_to_unique_idx:
-            seq_to_unique_idx[seq] = len(unique_seqs)
-            unique_seqs.append(seq)
+    # Deduplicate sequences for faster computation
+    unique_seqs = list(set(seqs_flat))
+    seq_to_unique_idx = {seq: i for i, seq in enumerate(unique_seqs)}
 
-    # Only compute distances if we have duplicates (speedup opportunity)
-    if len(unique_seqs) < len(seqs_flat):
-        # Compute distances only for unique sequences
-        dist_block_unique = metric.compute_vectorized(unique_seqs)
+    # Compute distances only for unique sequences
+    dist_block_unique = metric.compute_vectorized(unique_seqs)
 
-        # Map back to full distance matrix
-        n = len(seqs_flat)
-        dist_block = np.zeros((n, n), dtype=np.float64)
-        for i, seq_i in enumerate(seqs_flat):
-            unique_i = seq_to_unique_idx[seq_i]
-            for j, seq_j in enumerate(seqs_flat):
-                unique_j = seq_to_unique_idx[seq_j]
-                dist_block[i, j] = dist_block_unique[unique_i, unique_j]
-    else:
-        # No duplicates, compute normally
-        dist_block = metric.compute_vectorized(seqs_flat)
+    # Use vectorized indexing to expand to full matrix
+    unique_indices = np.array([seq_to_unique_idx[seq] for seq in seqs_flat])
+    dist_block = dist_block_unique[np.ix_(unique_indices, unique_indices)]
 
-    # Write to Zarr (Zarr handles thread-safe writes)
     z_array[np.ix_(array_indices, array_indices)] = dist_block
 
 
 def _compute_distances_polars_native(
     dat_seq_clean: pl.DataFrame,
-    membership: dict,
-    cell_id_to_idx: dict,
     metric: Metric,
     z_array: zarr.Array,
     n_jobs: int = 1,
     verbose: bool = True,
-) -> list[str]:
+) -> None:
     """
     Compute distances using fully vectorized Polars operations.
 
-    Uses group_by to partition data and applies vectorized distance computation
-    within each group. Optimized with vectorized joins and optional parallelization.
+    Uses partition_by to group data by membership_id and applies vectorized distance
+    computation within each group.
 
     Parameters
     ----------
     dat_seq_clean : pl.DataFrame
-        Cleaned Polars DataFrame with prepared sequences (already padded and concatenated)
-    membership : dict
-        Mapping from clone_id -> list of cell_ids
-    cell_id_to_idx : dict
-        Mapping from cell_id -> array index
+        Cleaned Polars DataFrame with '_original_order', '_prepared_seq', and 'membership_id' columns
     metric : Metric
         Distance metric
     z_array : zarr.Array
@@ -935,79 +856,39 @@ def _compute_distances_polars_native(
         Use -1 to use all available CPUs.
     verbose: bool, optional
         Whether to print progress bar.
-
-    Returns
-    -------
-    list[str]
-        List of temporary Zarr array paths
     """
-    # Build mapping DataFrames using vectorized joins (much faster than map_elements)
-    # 1. Create cell_id -> clone_id mapping as DataFrame
-    cell_clone_pairs = [
-        (cell_id, clone_id)
-        for clone_id, members in membership.items()
-        for cell_id in members
-        if cell_id in cell_id_to_idx
-    ]
+    # Filter to rows with valid membership_id and partition by clone
+    df_with_clone = dat_seq_clean.filter(pl.col("membership_id").is_not_null())
 
-    if not cell_clone_pairs:
-        return []
+    if df_with_clone.height == 0:
+        return
 
-    cell_clone_df = pl.DataFrame(
-        {
-            "cell_id": [pair[0] for pair in cell_clone_pairs],
-            "clone_id": [pair[1] for pair in cell_clone_pairs],
-        }
-    )
+    groups = df_with_clone.partition_by("membership_id", as_dict=True)
 
-    # 2. Create _original_order -> cell_id mapping as DataFrame
-    order_cell_df = pl.DataFrame(
-        {
-            "_original_order": list(cell_id_to_idx.values()),
-            "cell_id": list(cell_id_to_idx.keys()),
-        }
-    )
-
-    # 3. Use vectorized joins instead of map_elements (10-100x faster)
-    df_with_clone = (
-        dat_seq_clean.join(order_cell_df, on="_original_order", how="left")
-        .join(cell_clone_df, on="cell_id", how="left")
-        .filter(pl.col("clone_id").is_not_null())
+    # Bind metric and z_array to the helper function
+    compute_fn = functools.partial(
+        _compute_group_distances, metric=metric, z_array=z_array
     )
 
     # Determine parallelization strategy
     if n_jobs == 1:
-        # Sequential processing - use Polars map_groups (original approach)
-        # Use partial to bind metric and z_array to the helper function
-        compute_fn = functools.partial(
-            _compute_group_distances_sequential, metric=metric, z_array=z_array
-        )
-
-        # Apply sequentially to each group
-        _ = (
-            df_with_clone.lazy()
-            .group_by("clone_id", maintain_order=True)
-            .map_groups(compute_fn, schema={})
-            .collect(engine="streaming")
-        )
+        # Sequential processing
+        for group_df in tqdm(
+            groups.values(),
+            total=len(groups),
+            desc="Processing clone groups",
+            disable=not verbose,
+            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+        ):
+            compute_fn(group_df)
     else:
         # Parallel processing using joblib
-        # Determine actual number of jobs
         if n_jobs == -1:
             n_jobs = multiprocessing.cpu_count()
 
-        # Partition by group and collect groups as list of DataFrames
-        groups = df_with_clone.partition_by("clone_id", as_dict=True)
-
-        # Use partial to bind metric and z_array to the helper function
-        process_fn = functools.partial(
-            _process_group_parallel, metric=metric, z_array=z_array
-        )
-
-        # Process groups in parallel
-        # Use threading backend since we're doing I/O (Zarr writes)
+        # Process groups in parallel (threading backend for I/O)
         Parallel(n_jobs=n_jobs, backend="threading")(
-            delayed(process_fn)(group_df)
+            delayed(compute_fn)(group_df)
             for group_df in tqdm(
                 groups.values(),
                 total=len(groups),
@@ -1016,6 +897,3 @@ def _compute_distances_polars_native(
                 bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
             )
         )
-
-    # Return empty list since we write directly to z_array
-    return []
