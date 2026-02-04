@@ -1271,7 +1271,10 @@ def transfer(
                     continue
                 coord = pd.DataFrame.from_dict(layout, orient="index")
                 coord = coord.reindex(index=recipient.obs_names).fillna(np.nan)
-                if coord.shape[1] >= 2:
+                if coord.shape[1] == 0:
+                    # Empty layout - skip this embedding
+                    continue
+                elif coord.shape[1] >= 2:
                     embedding = coord.iloc[:, :2].to_numpy(dtype=np.float32)
                 else:
                     col0 = (
