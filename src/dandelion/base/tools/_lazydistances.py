@@ -12,7 +12,6 @@ import pandas as pd
 from dask import compute
 from dask.diagnostics import ProgressBar
 from dask.distributed import Client, progress
-from packaging import version
 from pathlib import Path
 from scanpy import logging as logg
 from tqdm import tqdm
@@ -21,33 +20,12 @@ from dandelion.utilities._distances import (
     Metric,
     _prepare_sequences_with_separator,
 )
-
-ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
-if ZARR_V3:
-    from zarr.storage import LocalStore
-    from zarr.codecs import BloscCodec
-
-    def open_zarr_group(store, mode="a"):
-        return zarr.open_group(store=store, mode=mode)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create_array(name, **kwargs)
-
-else:
-    from zarr import DirectoryStore
-    from zarr.codecs import Blosc as BloscCodec
-
-    def LocalStore(path):
-        return DirectoryStore(path)
-
-    def open_zarr_group(store, mode="a"):
-        if mode == "w":
-            return zarr.group(store=store, overwrite=True)
-        else:
-            return zarr.group(store=store)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create(name, **kwargs)
+from dandelion.utilities._utilities import (
+    LocalStore,
+    open_zarr_group,
+    create_zarr_array,
+    BloscCodec,
+)
 
 
 def calculate_distance_matrix_zarr(

@@ -20,7 +20,6 @@ with warnings.catch_warnings():
 from anndata import AnnData
 from changeo.IO import readGermlines
 from functools import cmp_to_key, reduce
-from packaging import version
 from pandas.api.types import infer_dtype
 from pathlib import Path
 from polars import ColumnNotFoundError
@@ -41,40 +40,15 @@ from dandelion.utilities._utilities import (
     lib_type,
     Contig,
 )
-from dandelion.utilities._utilities import TRUES_STR, write_fasta
-
-ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
-if ZARR_V3:
-    from zarr.storage import LocalStore, ZipStore
-    from zarr.codecs import BloscCodec
-
-    def open_zarr_group(store, mode="a"):
-        return zarr.open_group(store=store, mode=mode)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create_array(name, **kwargs)
-
-    def create_zarr_dataset(group, *args, **kwargs):
-        return group.create_dataset(*args, **kwargs)
-
-else:
-    from zarr import DirectoryStore, ZipStore
-    from zarr.codecs import Blosc as BloscCodec
-
-    def LocalStore(path):
-        return DirectoryStore(path)
-
-    def open_zarr_group(store, mode="a"):
-        if mode == "w":
-            return zarr.group(store=store, overwrite=True)
-        else:
-            return zarr.group(store=store)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create(name, **kwargs)
-
-    def create_zarr_dataset(group, *args, **kwargs):
-        return group.create_dataset(*args, **kwargs)
+from dandelion.utilities._utilities import (
+    TRUES_STR,
+    write_fasta,
+    LocalStore,
+    ZipStore,
+    BloscCodec,
+    open_zarr_group,
+    create_zarr_dataset,
+)
 
 
 # Enable string cache for Polars to optimize repeated string operations
@@ -351,7 +325,9 @@ class DandelionPolars:
                 # Check if the mask length matches metadata (cell-level) or data (contig-level)
                 if metadata is not None:
                     if isinstance(metadata, pl.LazyFrame):
-                        metadata_len = metadata.collect(engine="streaming").height
+                        metadata_len = metadata.collect(
+                            engine="streaming"
+                        ).height
                     else:
                         metadata_len = metadata.height
                 else:
@@ -381,10 +357,14 @@ class DandelionPolars:
                         )
                     else:
                         _metadata = metadata.filter(filter_expr)
-                        filtered_cell_ids = _metadata.select("cell_id").to_series().unique()
+                        filtered_cell_ids = (
+                            _metadata.select("cell_id").to_series().unique()
+                        )
 
                     # Now filter data by those cell_ids
-                    _data = data.filter(pl.col("cell_id").is_in(filtered_cell_ids))
+                    _data = data.filter(
+                        pl.col("cell_id").is_in(filtered_cell_ids)
+                    )
                     cell_ids = filtered_cell_ids
                 else:
                     # Mask length matches data (contig-level), apply directly

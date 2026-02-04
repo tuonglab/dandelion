@@ -22,7 +22,6 @@ from dask import compute
 from dask.diagnostics import ProgressBar
 from dask.distributed import Client, progress
 from joblib import Parallel, delayed
-from packaging import version
 from tqdm import tqdm
 from scanpy import logging as logg
 
@@ -30,33 +29,12 @@ from dandelion.utilities._distances import (
     Metric,
     _prepare_sequences_with_separator,
 )
-
-ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
-if ZARR_V3:
-    from zarr.storage import LocalStore
-    from zarr.codecs import BloscCodec
-
-    def open_zarr_group(store, mode="a"):
-        return zarr.open_group(store=store, mode=mode)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create_array(name, **kwargs)
-
-else:
-    from zarr import DirectoryStore
-    from zarr.codecs import Blosc as BloscCodec
-
-    def LocalStore(path):
-        return DirectoryStore(path)
-
-    def open_zarr_group(store, mode="a"):
-        if mode == "w":
-            return zarr.group(store=store, overwrite=True)
-        else:
-            return zarr.group(store=store)
-
-    def create_zarr_array(root, name, **kwargs):
-        return root.create(name, **kwargs)
+from dandelion.utilities._utilities import (
+    open_zarr_group,
+    create_zarr_array,
+    LocalStore,
+    BloscCodec,
+)
 
 
 def calculate_distance_matrix_zarr(
@@ -154,8 +132,12 @@ def calculate_distance_matrix_zarr(
     # Join membership DataFrame if provided to get membership_id
     if membership is not None:
         # membership DataFrame has 'cell_id' and 'membership_id' columns
-        dat_seq_clean = dat_seq_clean.select(["_original_order", "cell_id"]).join(
-            membership.select(["cell_id", "membership_id"]), on="cell_id", how="left"
+        dat_seq_clean = dat_seq_clean.select(
+            ["_original_order", "cell_id"]
+        ).join(
+            membership.select(["cell_id", "membership_id"]),
+            on="cell_id",
+            how="left",
         )
         dat_seq_clean = pl.DataFrame(
             {
@@ -230,9 +212,7 @@ def calculate_distance_matrix_zarr(
 
     if membership is not None:
         # Clone mode: only compute within membership groups
-        logg.info(
-            "Computing distances in clone mode (within clone groups)"
-        )
+        logg.info("Computing distances in clone mode (within clone groups)")
 
         # Use Polars-native vectorized approach
         # dat_seq_clean already has membership_id column from membership join
@@ -550,85 +530,6 @@ def _compute_and_write_block(
     if not is_diagonal:
         tmp_array[start_j:end_j, start_i:end_i] = block.T
 
-    return tmp_dir
-
-
-def _process_batch(
-    seq_cat: list[np.ndarray],
-    idx_cat: list[list[int]],
-    seq_lengths: list[int],
-    metric: Metric,
-    zarr_path: str,
-    compress: bool = True,
-):
-    """
-    Process a batch of membership groups.
-
-    Parameters
-    ----------
-    seq_cat : list[np.ndarray]
-        Concatenated sequences for the batch
-    idx_cat : list[list[int]]
-        Concatenated indices for the batch
-    seq_lengths : list[int]
-        Lengths of each group in the batch
-    metric : Metric
-        Distance metric
-    zarr_path : str
-        Path to Zarr array
-    compress : bool
-        Whether to compress temporary arrays
-
-    Returns
-    -------
-    str
-        Path to temporary Zarr array
-    """
-    # Open Zarr array from path
-    store = zarr.storage.LocalStore(zarr_path)
-    root = zarr.open_group(store=store, mode="r")
-    z_array = root["distance_matrix"]
-
-    boundaries = np.cumsum(seq_lengths)
-    boundaries = np.insert(boundaries, 0, 0)
-
-    results = _compute_and_write_membership_cat(
-        seqs_cat=seq_cat,
-        idxs_cat=idx_cat,
-        boundaries=boundaries,
-        metric=metric,
-        z_array=z_array,
-        compress=compress,
-    )
-    return results
-
-
-def _compute_and_write_membership_cat(
-    seqs_cat: np.ndarray,
-    idxs_cat: np.ndarray,
-    boundaries: np.ndarray,
-    metric: Metric,
-    z_array: zarr.Array,
-    compress: bool = True,
-):
-    """
-    Compute distances within each membership group only.
-    """
-    # Compute full block once
-    block = _compute_block_multicol(seqs_cat, seqs_cat, metric)
-    # compress the tmp_array
-    n_groups = len(boundaries) - 1
-    tmp_array, tmp_dir = create_tmp_zarr(z_array, compress)
-    # Only process diagonal blocks (within each group)
-    for g in range(n_groups):
-        s, e = boundaries[g], boundaries[g + 1]
-        idx = idxs_cat[s:e]
-
-        # Extract subblock for this group only
-        subblock = block[s:e, s:e]
-
-        # Write to zarr
-        tmp_array[np.ix_(idx, idx)] = subblock
     return tmp_dir
 
 

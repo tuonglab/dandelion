@@ -24,28 +24,9 @@ from dandelion.utilities._utilities import (
     CELLRANGER,
     AIRR,
     fasta_iterator,
+    open_zarr_group,
+    ZipStore,
 )
-
-ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
-if ZARR_V3:
-    from zarr.storage import LocalStore, ZipStore
-
-    def open_zarr_group(store, mode="a"):
-        return zarr.open_group(store=store, mode=mode)
-
-else:
-    from zarr import DirectoryStore, ZipStore
-
-    def LocalStore(path):
-        return DirectoryStore(path)
-
-    def open_zarr_group(store, mode="a"):
-        import zarr
-
-        if mode == "w":
-            return zarr.group(store=store, overwrite=True)
-        else:
-            return zarr.group(store=store)
 
 
 def read_zipddl(

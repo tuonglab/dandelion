@@ -4,6 +4,7 @@ import os
 import re
 import unicodedata
 import warnings
+import zarr
 
 import numpy as np
 import pandas as pd
@@ -13,9 +14,45 @@ with warnings.catch_warnings():
     from airr import RearrangementSchema
 from collections import defaultdict
 from collections.abc import Iterable
+from packaging import version
 from pathlib import Path
 from subprocess import run
 from typing import TypeVar, Literal, Callable
+
+
+ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
+if ZARR_V3:
+    from zarr.storage import LocalStore, ZipStore
+    from zarr.codecs import BloscCodec
+
+    def open_zarr_group(store, mode="a"):
+        return zarr.open_group(store=store, mode=mode)
+
+    def create_zarr_array(root, name, **kwargs):
+        return root.create_array(name, **kwargs)
+
+    def create_zarr_dataset(group, *args, **kwargs):
+        return group.create_dataset(*args, **kwargs)
+
+else:
+    from zarr import DirectoryStore, ZipStore
+    from zarr.codecs import Blosc as BloscCodec
+
+    def LocalStore(path):
+        return DirectoryStore(path)
+
+    def open_zarr_group(store, mode="a"):
+        if mode == "w":
+            return zarr.group(store=store, overwrite=True)
+        else:
+            return zarr.group(store=store)
+
+    def create_zarr_array(root, name, **kwargs):
+        return root.create(name, **kwargs)
+
+    def create_zarr_dataset(group, *args, **kwargs):
+        return group.create_dataset(*args, **kwargs)
+
 
 # help silence the dtype warning?
 warnings.filterwarnings("ignore", category=pd.errors.DtypeWarning)
