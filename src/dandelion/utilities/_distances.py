@@ -12,7 +12,9 @@ from rapidfuzz import process
 from typing import Callable, Protocol, runtime_checkable
 
 
-def _create_memmap_matrix(n: int, dtype=np.float32) -> np.memmap:
+def _create_memmap_matrix(
+    n: int, dtype=np.float32, temp_dir: str | None = None
+) -> np.memmap:
     """
     Create a temporary memory-mapped array for distance matrix storage.
 
@@ -22,13 +24,17 @@ def _create_memmap_matrix(n: int, dtype=np.float32) -> np.memmap:
         Size of the square matrix (n x n).
     dtype : numpy dtype, optional
         Data type for the matrix. Default is np.float32.
+    temp_dir : str or None, optional
+        Directory to create the temp file in. If None, uses system default.
 
     Returns
     -------
     np.memmap
         Memory-mapped array of shape (n, n).
     """
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".dat")
+    temp_file = tempfile.NamedTemporaryFile(
+        delete=False, suffix=".dat", dir=temp_dir
+    )
     return np.memmap(temp_file.name, dtype=dtype, mode="w+", shape=(n, n))
 
 
@@ -151,7 +157,11 @@ class Metric(Protocol):
     def compute(self, s1: str, s2: str, n_cpus: int = 1) -> float: ...
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+        memmap: bool = False,
+        temp_dir: str | None = None,
     ) -> np.ndarray: ...
 
 
@@ -215,7 +225,11 @@ class CallableMetric:
             return float(result[0, 1])
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+        memmap: bool = False,
+        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Use provided vectorized function.
@@ -228,7 +242,7 @@ class CallableMetric:
             result = self._vectorized_func(seqs)
             if memmap:
                 n = len(seqs)
-                mmap_matrix = _create_memmap_matrix(n, dtype=result.dtype)
+                mmap_matrix = _create_memmap_matrix(n, dtype=result.dtype, temp_dir=temp_dir)
                 mmap_matrix[:] = result
                 return mmap_matrix
             return result
@@ -239,7 +253,7 @@ class CallableMetric:
             return np.empty((0, 0), dtype=float)
 
         if memmap:
-            dist_matrix = _create_memmap_matrix(n, dtype=np.float64)
+            dist_matrix = _create_memmap_matrix(n, dtype=np.float64, temp_dir=temp_dir)
         else:
             dist_matrix = np.zeros((n, n))
 
@@ -259,7 +273,11 @@ class LevenshteinMetric:
         return float(Levenshtein.distance(s1, s2))
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+        memmap: bool = False,
+        temp_dir: str | None = None,
     ) -> np.ndarray:
         if not seqs:
             return np.empty((0, 0), dtype=float)
@@ -274,7 +292,7 @@ class LevenshteinMetric:
 
         if memmap:
             n = len(seqs)
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
             mmap_matrix[:] = result
             return mmap_matrix
 
@@ -354,7 +372,11 @@ class HammingMetric:
         return float(sum(c1 != c2 for c1, c2 in zip(s1, s2)))
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+        memmap: bool = False,
+        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Compute pairwise Hamming distances using the best available backend.
@@ -367,6 +389,8 @@ class HammingMetric:
             Number of CPUs to use (currently not utilized for GPU backends).
         memmap : bool, optional
             Whether to use memory-mapped storage. Default is False.
+        temp_dir : str or None, optional
+            Directory to create temp memmap files in. If None, uses system default.
 
         Returns
         -------
@@ -387,63 +411,51 @@ class HammingMetric:
             result = self._compute_numpy(seqs, n)
 
         if memmap:
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
             mmap_matrix[:] = result
             return mmap_matrix
 
         return result
 
     def _compute_cupy(self, seqs: list[str], n: int) -> np.ndarray:
-        """CuPy implementation."""
+        """CuPy implementation using matmul to avoid O(n^2 * L) memory."""
+        seqs_np = np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(n, -1)
+        L = seqs_np.shape[1]
+        seqs_array = self.cp.asarray(seqs_np)
 
-        # Convert sequences to integer arrays (ASCII codes)
-        try:
-            seqs_array = self.cp.array(
-                [[ord(c) for c in s] for s in seqs], dtype=self.cp.int16
-            )
-        except ValueError:
-            max_len = max(len(s) for s in seqs)
-            seqs_array = self.cp.zeros((n, max_len), dtype=self.cp.int16)
-            for i, s in enumerate(seqs):
-                seqs_array[i, : len(s)] = self.cp.array(
-                    [ord(c) for c in s], dtype=self.cp.int16
-                )
+        match_count = self.cp.zeros((n, n), dtype=self.cp.float32)
+        for c in self.cp.unique(seqs_array):
+            mask = (seqs_array == c).astype(self.cp.float32)  # (n, L)
+            match_count += mask @ mask.T  # (n, n)
 
-        dist_matrix = (
-            (seqs_array[:, None, :] != seqs_array[None, :, :])
-            .sum(axis=2)
-            .astype(self.cp.float32)
-        )
-
+        dist_matrix = self.cp.float32(L) - match_count
         return self.cp.asnumpy(dist_matrix)
 
     def _compute_torch(self, seqs: list[str], n: int) -> np.ndarray:
-        """PyTorch implementation."""
-        seqs_tensor = self.torch.tensor(
-            np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(
-                n, -1
-            ),
-            device=self.device,
-        )
+        """PyTorch implementation using matmul to avoid O(n^2 * L) memory."""
+        seqs_np = np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(n, -1)
+        L = seqs_np.shape[1]
+        seqs_tensor = self.torch.tensor(seqs_np, device=self.device)
 
-        dist_matrix = (
-            (seqs_tensor[:, None, :] != seqs_tensor[None, :, :])
-            .sum(dim=2)
-            .float()
-        )
+        match_count = self.torch.zeros((n, n), device=self.device, dtype=self.torch.float32)
+        for c in self.torch.unique(seqs_tensor):
+            mask = (seqs_tensor == c).float()  # (n, L)
+            match_count += mask @ mask.T  # (n, n)
 
+        dist_matrix = float(L) - match_count
         return dist_matrix.cpu().numpy()
 
     def _compute_numpy(self, seqs: list[str], n: int) -> np.ndarray:
-        """NumPy implementation."""
-        seqs_array = np.frombuffer("".join(seqs).encode(), dtype="S1").reshape(
-            n, -1
-        )
-        return (
-            (seqs_array[:, None, :] != seqs_array[None, :, :])
-            .sum(axis=2)
-            .astype(np.float32)
-        )
+        """NumPy implementation using matmul to avoid O(n^2 * L) memory."""
+        seqs_array = np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(n, -1)
+        L = seqs_array.shape[1]
+
+        match_count = np.zeros((n, n), dtype=np.float32)
+        for c in np.unique(seqs_array):
+            mask = (seqs_array == c).astype(np.float32)  # (n, L)
+            match_count += mask @ mask.T  # (n, n)
+
+        return (np.float32(L) - match_count)
 
 
 class IdentityMetric:
@@ -521,7 +533,11 @@ class IdentityMetric:
         return 0.0 if s1 == s2 else 1.0
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+        memmap: bool = False,
+        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Compute pairwise identity distance matrix.
@@ -534,6 +550,8 @@ class IdentityMetric:
             Number of CPUs to use (currently not utilized for GPU backends).
         memmap : bool, optional
             Whether to use memory-mapped storage. Default is False.
+        temp_dir : str or None, optional
+            Directory to create temp memmap files in. If None, uses system default.
 
         Returns
         -------
@@ -556,7 +574,7 @@ class IdentityMetric:
             result = self._compute_numpy(hashes)
 
         if memmap:
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
             mmap_matrix[:] = result
             return mmap_matrix
 
@@ -650,7 +668,11 @@ class SubstitutionMatrixMetric:
         return max(0.0, max_score - score_12)
 
     def compute_vectorized(
-        self, seqs: list[str], n_cpus: int = 1, memmap: bool = False
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+        memmap: bool = False,
+        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Vectorized pairwise distance computation using substitution matrices.
@@ -666,6 +688,8 @@ class SubstitutionMatrixMetric:
             Number of CPUs to use (currently not utilized).
         memmap : bool, optional
             Whether to use memory-mapped storage. Default is False.
+        temp_dir : str or None, optional
+            Directory to create temp memmap files in. If None, uses system default.
 
         Returns
         -------
@@ -712,7 +736,7 @@ class SubstitutionMatrixMetric:
         np.fill_diagonal(dist_matrix, 0.0)
 
         if memmap:
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32)
+            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
             mmap_matrix[:] = dist_matrix
             return mmap_matrix
 

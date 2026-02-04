@@ -201,12 +201,14 @@ def find_clones(
     cell_id_to_meta_idx = {cell_id: i for i, cell_id in enumerate(all_cell_ids)}
     n_cells = len(all_cell_ids)
 
+    # Initialize temp directory for memmap files (all memmaps go here for cleanup)
+    if dist_memmap:
+        _temp_dir_handle = tempfile.TemporaryDirectory(prefix="dandelion_dist_")
+        _temp_dir = _temp_dir_handle.name
+
     # Initialize distance collection if storing distances (memmap for low memory)
     # Separate memmaps for VDJ and VJ chains
     if store_distances and dist_memmap:
-        # TemporaryDirectory with delete=True auto-cleans on GC, exit, or interrupt
-        _temp_dir_handle = tempfile.TemporaryDirectory(prefix="dandelion_dist_")
-        _temp_dir = _temp_dir_handle.name
         # Estimate max entries per chain type - can grow if needed
         _max_nnz_vdj = n_cells * 500
         _max_nnz_vj = n_cells * 500
@@ -357,7 +359,9 @@ def find_clones(
                 if seqs_non_empty:
                     # Compute distances on all sequences (memmap keeps it on disk)
                     d_mat = metric.compute_vectorized(
-                        seqs_non_empty, memmap=dist_memmap
+                        seqs_non_empty,
+                        memmap=dist_memmap,
+                        temp_dir=_temp_dir if dist_memmap else None,
                     )
 
                     # Get metadata indices for these cells
@@ -546,7 +550,9 @@ def find_clones(
                 if seqs_non_empty:
                     # Compute distances on all sequences (memmap keeps it on disk)
                     d_mat = metric.compute_vectorized(
-                        seqs_non_empty, memmap=dist_memmap
+                        seqs_non_empty,
+                        memmap=dist_memmap,
+                        temp_dir=_temp_dir if dist_memmap else None,
                     )
 
                     # Get metadata indices for these cells
@@ -851,10 +857,9 @@ def find_clones(
         # Store in vdj.distances
         vdj.distances = vdj_csr + vj_csr
 
-        # Cleanup temp directory (delete memmaps first, then cleanup handle)
+        # Cleanup COO memmaps (temp directory cleaned up below)
         del _vdj_row_mmap, _vdj_col_mmap, _vdj_data_mmap
         del _vj_row_mmap, _vj_col_mmap, _vj_data_mmap
-        _temp_dir_handle.cleanup()
     elif store_distances and not dist_memmap:
         # In-memory COO assembly
         # Build VDJ CSR matrix
@@ -889,6 +894,10 @@ def find_clones(
 
         # Store in vdj.distances
         vdj.distances = vdj_csr + vj_csr
+
+    # Cleanup temp directory (covers both COO memmaps and per-group distance memmaps)
+    if dist_memmap:
+        _temp_dir_handle.cleanup()
 
     logg.info(
         " finished",
