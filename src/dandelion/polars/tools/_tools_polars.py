@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from distance import hamming
 from itertools import product
 from scanpy import logging as logg
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import coo_matrix, csr_matrix, eye as speye
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import pdist, squareform
 
@@ -1268,9 +1268,7 @@ def transfer(
                     range(0, len(cell_indices)), cell_indices.values()
                 )
             }
-            bin_conn = np.zeros([len(cell_indices), len(cell_indices)])
-            np.fill_diagonal(bin_conn, 1)
-            bin_conn = csr_matrix(bin_conn)
+            bin_conn = speye(len(cell_indices), format="csr")
 
         recipient.uns[clone_key] = {
             # this is a symmetrical, pairwise, sparse distance matrix of clonotypes
