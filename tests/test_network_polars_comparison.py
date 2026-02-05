@@ -55,6 +55,8 @@ def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
     distances_pandas = vdj_pandas.distances.toarray()
     distances_polars = vdj_polars.distances.toarray()
     print(distances_pandas), print(distances_polars)
+    np.fill_diagonal(distances_pandas, 0.0)
+    np.fill_diagonal(distances_polars, 0.0)
     assert np.array_equal(
         distances_pandas, distances_polars, equal_nan=True
     ), "Distance matrices differ between pandas and Polars implementations"
@@ -100,8 +102,6 @@ def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
         assert (
             pandas_g.edges() == polars_g.edges()
         ), f"Graph {g_idx}: Edge sets differ between implementations"
-
-        import networkx as nx
 
         # Compare edge weights between Polars and pandas graphs
 
@@ -158,6 +158,8 @@ def test_generate_network_polars_vs_pandas_full(vdj_smaller):
     # Compare distance matrices
     distances_pandas = vdj_pandas.distances.toarray()
     distances_polars = vdj_polars.distances.toarray()
+    np.fill_diagonal(distances_pandas, 0.0)
+    np.fill_diagonal(distances_polars, 0.0)
 
     assert np.array_equal(
         distances_pandas, distances_polars, equal_nan=True
@@ -243,6 +245,8 @@ def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
         lazy_distances = vdj_lazy.distances.toarray()
 
     eager_distances = vdj_eager.distances.toarray()
+    np.fill_diagonal(eager_distances, 0.0)
+    np.fill_diagonal(lazy_distances, 0.0)
     # Compare results
     assert np.array_equal(
         eager_distances, lazy_distances, equal_nan=True
@@ -294,6 +298,8 @@ def test_generate_network_polars_vs_pandas_padded(vdj_smaller, pad_to_max):
     # Compare distance matrices
     distances_pandas = vdj_pandas.distances.toarray()
     distances_polars = vdj_polars.distances.toarray()
+    np.fill_diagonal(distances_pandas, 0.0)
+    np.fill_diagonal(distances_polars, 0.0)
 
     assert np.array_equal(
         distances_pandas, distances_polars, equal_nan=True

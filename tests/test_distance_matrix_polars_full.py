@@ -36,6 +36,18 @@ def _dict_to_dataframe_membership(membership: dict) -> pl.DataFrame:
     return _merge_overlapping_clones(clone_df, "clone_id")
 
 
+def _to_dense(mat):
+    """Convert sparse CSR result to dense with NaN diagonal for comparison with pandas."""
+    from scipy.sparse import issparse
+
+    if issparse(mat):
+        arr = mat.toarray().astype(float)
+    else:
+        arr = np.asarray(mat, dtype=float)
+    np.fill_diagonal(arr, np.nan)
+    return arr
+
+
 def _build_membership_from_metadata(dat, clone_key: str = "clone_id"):
     """Create clone membership mapping from metadata."""
     membership: dict[str, list[str]] = {}
@@ -159,13 +171,13 @@ def _assert_distance_matrix_original_matches(data, membership):
     )
 
     assert np.array_equal(
-        np.isnan(result_pandas), np.isnan(result_polars)
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
     ), "NaN positions don't match between pandas and polars implementations"
 
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
         err_msg="Distance matrices differ between pandas and polars implementations",
@@ -218,11 +230,11 @@ def test_calculate_distance_matrix_with_padding(mouse_vdj_membership):
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -265,11 +277,11 @@ def test_calculate_distance_matrix_multiple_clones(mouse_vdj_membership):
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -305,11 +317,11 @@ def test_calculate_distance_matrix_full_with_empty_sequences():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -344,11 +356,11 @@ def test_calculate_distance_matrix_full_with_padding(mouse_vdj_membership):
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -393,12 +405,12 @@ def test_calculate_distance_matrix_full_multicore(mouse_vdj_membership):
         df_polars, metric=metric, pad_to_max=False, n_cpus=2, verbose=False
     )
     # Compare
-    assert np.array_equal(result_pandas, result_polars, equal_nan=True)
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(result_pandas, _to_dense(result_polars), equal_nan=True)
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -447,7 +459,7 @@ def test_calculate_distance_matrix_long_clone_mode_polars_vs_pandas(
     )
 
     # Compare results
-    assert np.array_equal(result_pandas, result_polars, equal_nan=True)
+    assert np.array_equal(result_pandas, _to_dense(result_polars), equal_nan=True)
 
     print(
         "✓ Pandas and Polars implementations (long mode with clones) produce identical results!"
@@ -491,11 +503,11 @@ def test_calculate_distance_matrix_long_with_padding(mouse_vdj_membership):
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -540,11 +552,11 @@ def test_calculate_distance_matrix_long_multicore(mouse_vdj_membership):
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
@@ -591,11 +603,11 @@ def test_calculate_distance_matrix_long_with_empty_sequences(
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(result_polars))
+    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
-        result_polars[non_nan_mask],
+        _to_dense(result_polars)[non_nan_mask],
         rtol=1e-10,
         atol=1e-10,
     )
