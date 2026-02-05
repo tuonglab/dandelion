@@ -1,8 +1,8 @@
 from __future__ import annotations
+
 import functools
 import math
 import re
-import tempfile
 
 import networkx as nx
 import numpy as np
@@ -176,6 +176,9 @@ def find_clones(
     # Store results from each locus
     locus_results = {}
 
+    # Initialize list to collect distance matrices with their indices
+    distance_results = []
+
     # Create mapping from cell_id to metadata index for distance storage
     metadata_for_mapping = vdj._metadata
     if isinstance(metadata_for_mapping, pl.LazyFrame):
@@ -183,15 +186,6 @@ def find_clones(
     all_cell_ids = metadata_for_mapping["cell_id"].to_list()
     cell_id_to_meta_idx = {cell_id: i for i, cell_id in enumerate(all_cell_ids)}
     n_cells = len(all_cell_ids)
-
-    # Initialize sparse stacking lists for distance accumulation
-    if store_distances:
-        _vdj_rows_list: list[np.ndarray] = []
-        _vdj_cols_list: list[np.ndarray] = []
-        _vdj_data_list: list[np.ndarray] = []
-        _vj_rows_list: list[np.ndarray] = []
-        _vj_cols_list: list[np.ndarray] = []
-        _vj_data_list: list[np.ndarray] = []
 
     # Process each locus
     for locus, (vdj_loci, vj_loci) in locus_dict.items():
@@ -287,38 +281,70 @@ def find_clones(
                 ]
 
                 if seqs_non_empty:
-                    # Compute distances on all sequences (memmap keeps it on disk)
-                    d_mat = metric.compute_vectorized(seqs_non_empty)
+                    # Deduplicate sequences for faster computation
+                    unique_seqs = list(set(seqs_non_empty))
+                    seq_to_unique_idx = {
+                        seq: i for i, seq in enumerate(unique_seqs)
+                    }
 
-                    # Get metadata indices for these cells
+                    # Compute distances only for unique sequences
+                    d_mat_unique = metric.compute_vectorized(unique_seqs)
+
+                    # Convert to COO sparse matrix for efficient concatenation
+                    # Filter to only cells that are in metadata (ensure alignment)
+                    valid_mask = [
+                        cid in cell_id_to_meta_idx for cid in cell_ids_non_empty
+                    ]
+                    seqs_filtered = [
+                        s
+                        for s, valid in zip(seqs_non_empty, valid_mask)
+                        if valid
+                    ]
                     meta_indices = np.array(
                         [
                             cell_id_to_meta_idx[cid]
-                            for cid in cell_ids_non_empty
-                            if cid in cell_id_to_meta_idx
+                            for cid, valid in zip(
+                                cell_ids_non_empty, valid_mask
+                            )
+                            if valid
                         ]
                     )
 
-                    # Cluster sequences
-                    if len(seqs_non_empty) > 1:
+                    if len(meta_indices) > 0 and d_mat_unique.size > 0:
+                        # Use vectorized indexing to expand unique distances to full matrix
+                        unique_indices = np.array(
+                            [seq_to_unique_idx[seq] for seq in seqs_filtered]
+                        )
+                        d_mat = d_mat_unique[
+                            np.ix_(unique_indices, unique_indices)
+                        ]
+                        if store_distances:
+                            # Collect COO components for in-memory assembly
+                            n_local = len(meta_indices)
+                            rows, cols = np.meshgrid(
+                                range(n_local),
+                                range(n_local),
+                                indexing="ij",
+                            )
+                            rows_flat = rows.ravel()
+                            cols_flat = cols.ravel()
+                            data_flat = d_mat.ravel()
+                            global_rows = meta_indices[rows_flat]
+                            global_cols = meta_indices[cols_flat]
+                            distance_results.append(
+                                (global_rows, global_cols, data_flat)
+                            )
+
+                    # Cluster on unique sequences only, then map back
+                    if len(unique_seqs) > 1:
                         seq_tmp_dict = _clustering_scipy(
-                            d_mat,
+                            d_mat_unique,
                             threshold=threshold,
-                            sequences=seqs_non_empty,
+                            sequences=unique_seqs,
                             hard_threshold=hard_cutoff,
                         )
                     else:
-                        seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
-
-                    # Sparse stacking: convert block to similarity, extract nonzeros
-                    if store_distances and len(meta_indices) > 0:
-                        sim_mat = np.exp(-np.asarray(d_mat, dtype=np.float32))
-                        np.fill_diagonal(sim_mat, 0)
-                        block_coo = coo_matrix(sim_mat)
-                        if block_coo.nnz > 0:
-                            _vdj_rows_list.append(meta_indices[block_coo.row])
-                            _vdj_cols_list.append(meta_indices[block_coo.col])
-                            _vdj_data_list.append(block_coo.data)
+                        seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
                 else:
                     # All sequences in this membership are empty - assign them together
                     if seqs_empty:
@@ -421,38 +447,70 @@ def find_clones(
                 ]
 
                 if seqs_non_empty:
-                    # Compute distances on sequences
-                    d_mat = metric.compute_vectorized(seqs_non_empty)
+                    # Deduplicate sequences for faster computation
+                    unique_seqs = list(set(seqs_non_empty))
+                    seq_to_unique_idx = {
+                        seq: i for i, seq in enumerate(unique_seqs)
+                    }
 
-                    # Get metadata indices for these cells
+                    # Compute distances only for unique sequences
+                    d_mat_unique = metric.compute_vectorized(unique_seqs)
+
+                    # Convert to COO sparse matrix for efficient concatenation
+                    # Filter to only cells that are in metadata (ensure alignment)
+                    valid_mask = [
+                        cid in cell_id_to_meta_idx for cid in cell_ids_non_empty
+                    ]
+                    seqs_filtered = [
+                        s
+                        for s, valid in zip(seqs_non_empty, valid_mask)
+                        if valid
+                    ]
                     meta_indices = np.array(
                         [
                             cell_id_to_meta_idx[cid]
-                            for cid in cell_ids_non_empty
-                            if cid in cell_id_to_meta_idx
+                            for cid, valid in zip(
+                                cell_ids_non_empty, valid_mask
+                            )
+                            if valid
                         ]
                     )
 
-                    # Cluster sequences
-                    if len(seqs_non_empty) > 1:
+                    if len(meta_indices) > 0 and d_mat_unique.size > 0:
+                        # Use vectorized indexing to expand unique distances to full matrix
+                        unique_indices = np.array(
+                            [seq_to_unique_idx[seq] for seq in seqs_filtered]
+                        )
+                        d_mat = d_mat_unique[
+                            np.ix_(unique_indices, unique_indices)
+                        ]
+                        if store_distances:
+                            # Collect COO components for in-memory assembly
+                            n_local = len(meta_indices)
+                            rows, cols = np.meshgrid(
+                                range(n_local),
+                                range(n_local),
+                                indexing="ij",
+                            )
+                            rows_flat = rows.ravel()
+                            cols_flat = cols.ravel()
+                            data_flat = d_mat.ravel()
+                            global_rows = meta_indices[rows_flat]
+                            global_cols = meta_indices[cols_flat]
+                            distance_results.append(
+                                (global_rows, global_cols, data_flat)
+                            )
+
+                    # Cluster on unique sequences only, then map back
+                    if len(unique_seqs) > 1:
                         seq_tmp_dict = _clustering_scipy(
-                            d_mat,
+                            d_mat_unique,
                             threshold=threshold,
-                            sequences=seqs_non_empty,
+                            sequences=unique_seqs,
                             hard_threshold=hard_cutoff,
                         )
                     else:
-                        seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
-
-                    # Sparse stacking: convert block to similarity, extract nonzeros
-                    if store_distances and len(meta_indices) > 0:
-                        sim_mat = np.exp(-np.asarray(d_mat, dtype=np.float32))
-                        np.fill_diagonal(sim_mat, 0)
-                        block_coo = coo_matrix(sim_mat)
-                        if block_coo.nnz > 0:
-                            _vj_rows_list.append(meta_indices[block_coo.row])
-                            _vj_cols_list.append(meta_indices[block_coo.col])
-                            _vj_data_list.append(block_coo.data)
+                        seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
                 else:
                     # All sequences in this membership are empty - assign them together
                     if seqs_empty:
@@ -632,37 +690,31 @@ def find_clones(
     # offload memory
     vdj._cache_data()
 
-    # Assemble distance matrices via sparse stacking
-    if store_distances:
-        if _vdj_rows_list:
-            vdj_csr = coo_matrix(
-                (
-                    np.concatenate(_vdj_data_list),
-                    (
-                        np.concatenate(_vdj_rows_list),
-                        np.concatenate(_vdj_cols_list),
-                    ),
-                ),
-                shape=(n_cells, n_cells),
-            ).tocsr()
-        else:
-            vdj_csr = csr_matrix((n_cells, n_cells), dtype=np.float32)
+    # Build sparse distance matrix from collected COO tiles
+    if distance_results:
+        logg.info("Storing distance matrix...")
+        nnz = sum(len(d) for r, c, d in distance_results)
+        # pre-allocate
+        all_rows = np.empty(nnz)
+        # Concatenate all COO tiles
+        all_rows = np.concatenate([r for r, c, d in distance_results])
+        all_cols = np.concatenate([c for r, c, d in distance_results])
+        all_data = np.concatenate([d for r, c, d in distance_results])
 
-        if _vj_rows_list:
-            vj_csr = coo_matrix(
-                (
-                    np.concatenate(_vj_data_list),
-                    (
-                        np.concatenate(_vj_rows_list),
-                        np.concatenate(_vj_cols_list),
-                    ),
-                ),
-                shape=(n_cells, n_cells),
-            ).tocsr()
-        else:
-            vj_csr = csr_matrix((n_cells, n_cells), dtype=np.float32)
+        # Get matrix dimensions
+        n_cells = len(all_cell_ids)
 
-        vdj.distances = vdj_csr + vj_csr
+        # Create COO matrix and convert to CSR
+        coo_dist = coo_matrix(
+            (all_data, (all_rows, all_cols)), shape=(n_cells, n_cells)
+        )
+        csr_dist = coo_dist.tocsr()
+
+        # Store in vdj.distances
+        vdj.distances = csr_dist
+        logg.info(
+            f"Stored distances as CSR sparse matrix: {csr_dist.shape}, density={csr_dist.nnz / (n_cells**2):.2%}"
+        )
 
     logg.info(
         " finished",
