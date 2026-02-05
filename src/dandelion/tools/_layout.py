@@ -19,7 +19,9 @@ def generate_layout(
     weight: str | None = None,
     verbose: bool = True,
     compute_layout: bool = True,
-    layout_method: Literal["mod_fr", "sfdp"] = "mod_fr",
+    layout_method: Literal[
+        "mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"
+    ] = "mod_fr",
     expanded_only: bool = False,
     graphs: tuple[nx.Graph, nx.Graph] = None,
     **kwargs,
@@ -40,7 +42,7 @@ def generate_layout(
         whether or not to print status
     compute_layout : bool, optional
         whether or not to compute layout.
-    layout_method : Literal["mod_fr", "sfdp"], optional
+    layout_method : Literal["mod_fr", "sfdp", "open_ord"], optional
         layout method.
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clones.
@@ -105,6 +107,32 @@ def generate_layout(
             if verbose:
                 logg.info("Computing expanded network layout")
             pos_ = _fruchterman_reingold_layout(G_, weight=weight, **kwargs)
+        elif layout_method == "mod_fr2":
+            if not expanded_only:
+                if verbose:
+                    logg.info("Computing network layout (Numba-accelerated)")
+                pos = _fruchterman_reingold_layout_v2(
+                    G, weight=weight, **kwargs
+                )
+            else:
+                pos = None
+            if verbose:
+                logg.info(
+                    "Computing expanded network layout (Numba-accelerated)"
+                )
+            pos_ = _fruchterman_reingold_layout_v2(G_, weight=weight, **kwargs)
+        elif layout_method == "mod_fr2_gpu":
+            if not expanded_only:
+                if verbose:
+                    logg.info("Computing network layout (GPU-accelerated)")
+                pos = _fruchterman_reingold_layout_gpu(
+                    G, weight=weight, **kwargs
+                )
+            else:
+                pos = None
+            if verbose:
+                logg.info("Computing expanded network layout (GPU-accelerated)")
+            pos_ = _fruchterman_reingold_layout_gpu(G_, weight=weight, **kwargs)
         elif layout_method == "sfdp":
             try:
                 from graph_tool.all import sfdp_layout
@@ -113,37 +141,42 @@ def generate_layout(
                     "Please install graph-tool to use sfdp layout:"
                     "conda install -c conda-forge graph-tool"
                 )
-                nographtool = True
-            if "nographtool" in locals():
-                if not expanded_only:
-                    if verbose:
-                        logg.info("Computing network layout")
-                    pos = _fruchterman_reingold_layout(
-                        G, weight=weight, **kwargs
-                    )
-                else:
-                    pos = None
+            if not expanded_only:
+                gtg = nx2gt(G)
                 if verbose:
-                    logg.info("Computing expanded network layout")
-                pos_ = _fruchterman_reingold_layout(G_, weight=weight, **kwargs)
+                    logg.info("Computing network layout")
+                posx = sfdp_layout(gtg, **kwargs)
+                pos = dict(zip(list(gtg.vertex_properties["id"]), list(posx)))
             else:
-                if not expanded_only:
-                    gtg = nx2gt(G)
-                    if verbose:
-                        logg.info("Computing network layout")
-                    posx = sfdp_layout(gtg, **kwargs)
-                    pos = dict(
-                        zip(list(gtg.vertex_properties["id"]), list(posx))
-                    )
-                else:
-                    pos = None
-                gtg_ = nx2gt(G_)
-                if verbose:
-                    logg.info("Computing expanded network layout")
-                posx_ = sfdp_layout(gtg_, **kwargs)
-                pos_ = dict(
-                    zip(list(gtg_.vertex_properties["id"]), list(posx_))
+                pos = None
+            gtg_ = nx2gt(G_)
+            if verbose:
+                logg.info("Computing expanded network layout")
+            posx_ = sfdp_layout(gtg_, **kwargs)
+            pos_ = dict(zip(list(gtg_.vertex_properties["id"]), list(posx_)))
+        elif layout_method == "fa2":
+            try:
+                from fa2_modified import ForceAtlas2
+            except ImportError:
+                logg.info(
+                    "Please install ForceAtlas2 to use fa2 layout:"
+                    "pip install fa2-modified"
                 )
+            fa2_layout = ForceAtlas2(**kwargs)
+            if not expanded_only:
+                if verbose:
+                    logg.info("Computing network layout")
+                pos = fa2_layout.forceatlas2_networkx_layout(
+                    G, weight_attr=weight
+                )
+            else:
+                pos = None
+            gtg_ = nx2gt(G_)
+            if verbose:
+                logg.info("Computing expanded network layout")
+            pos_ = fa2_layout.forceatlas2_networkx_layout(
+                G_, weight_attr=weight
+            )
         if pos is None:
             G = G_
             pos = pos_
@@ -509,11 +542,417 @@ def _rescale_layout(pos: np.ndarray, scale: float = 1) -> np.ndarray:
     return pos
 
 
+def _detect_torch_device():
+    """Detect best available PyTorch device for layout computation."""
+    try:
+        import torch
+    except ImportError:
+        raise ImportError(
+            "PyTorch is required for mod_fr2_gpu layout. "
+            "Install it with: pip install torch"
+        )
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        logg.info("Using PyTorch with CUDA GPU for layout")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+        logg.info("Using PyTorch with Apple Metal GPU for layout")
+    else:
+        device = torch.device("cpu")
+        logg.info("Using PyTorch on CPU for layout")
+    return torch, device
+
+
+_numba_fr_kernel_cache = None
+
+
+def _get_numba_fr_kernel():
+    """Lazily compile the Numba-accelerated FR force computation kernel."""
+    global _numba_fr_kernel_cache
+    if _numba_fr_kernel_cache is not None:
+        return _numba_fr_kernel_cache
+
+    try:
+        from numba import njit, prange
+    except ImportError:
+        raise ImportError(
+            "Numba is required for mod_fr2 layout. "
+            "Install it with: pip install numba"
+        )
+
+    @njit(parallel=True, cache=True, fastmath=True)
+    def _kernel(
+        pos,
+        A_data,
+        A_indices,
+        A_indptr,
+        k,
+        nnodes,
+        dim,
+        iterations,
+        threshold,
+        t,
+        dt,
+        fixed_mask,
+    ):
+        k2 = k * k
+        inv_k = 1.0 / k
+        gravity = 1.0 / (k * np.sqrt(float(nnodes)))
+
+        for _iter in range(iterations):
+            displacement = np.zeros((nnodes, dim), dtype=pos.dtype)
+
+            for i in prange(nnodes):
+                if fixed_mask[i]:
+                    continue
+
+                # Repulsive forces from all other nodes
+                for j in range(nnodes):
+                    if i == j:
+                        continue
+                    dist_sq = 0.0
+                    for d in range(dim):
+                        diff = pos[i, d] - pos[j, d]
+                        dist_sq += diff * diff
+                    if dist_sq < 1e-6:
+                        dist_sq = 1e-6
+                    factor = k2 / dist_sq
+                    for d in range(dim):
+                        displacement[i, d] += (pos[i, d] - pos[j, d]) * factor
+
+                # Attractive forces from edges (sparse CSR)
+                for idx in range(A_indptr[i], A_indptr[i + 1]):
+                    j = A_indices[idx]
+                    w = A_data[idx]
+                    dist_sq = 0.0
+                    for d in range(dim):
+                        diff = pos[i, d] - pos[j, d]
+                        dist_sq += diff * diff
+                    dist = np.sqrt(max(dist_sq, 1e-6))
+                    factor = -w * dist * inv_k
+                    for d in range(dim):
+                        displacement[i, d] += (pos[i, d] - pos[j, d]) * factor
+
+                # Gravity toward center
+                for d in range(dim):
+                    displacement[i, d] -= pos[i, d] * gravity
+
+            # Update positions (sequential to avoid race conditions)
+            err_sum = 0.0
+            for i in range(nnodes):
+                if fixed_mask[i]:
+                    continue
+                length_sq = 0.0
+                for d in range(dim):
+                    length_sq += displacement[i, d] ** 2
+                length = np.sqrt(length_sq)
+                if length < 0.01:
+                    length = 0.1
+                scale = t / length
+                for d in range(dim):
+                    dp = displacement[i, d] * scale
+                    pos[i, d] += dp
+                    err_sum += dp * dp
+
+            t -= dt
+            if np.sqrt(err_sum) / nnodes < threshold:
+                break
+
+        return pos
+
+    _numba_fr_kernel_cache = _kernel
+    return _kernel
+
+
+@random_state(7)
+def _fruchterman_reingold_numba(
+    A,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    dim=2,
+    seed=None,
+):
+    """Numba-accelerated Fruchterman-Reingold algorithm.
+
+    Uses parallel CPU execution via Numba JIT compilation.
+    Separates repulsive (O(N^2)) and attractive (O(E)) forces
+    with CSR sparse format for efficient edge traversal.
+    """
+    from scipy.sparse import csr_matrix, issparse
+
+    try:
+        nnodes, _ = A.shape
+    except AttributeError as e:
+        msg = "fruchterman_reingold() takes an adjacency matrix as input"
+        raise nx.NetworkXError(msg) from e
+
+    # Convert to CSR for efficient row access in Numba
+    if issparse(A):
+        A_csr = A.tocsr().astype(np.float32)
+    else:
+        A_csr = csr_matrix(A.astype(np.float32))
+
+    if pos is None:
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
+    else:
+        pos = pos.astype(np.float32)
+
+    if k is None:
+        k = np.sqrt(1.0 / nnodes)
+
+    t = max(float(pos[:, d].max() - pos[:, d].min()) for d in range(dim)) * 0.1
+    dt = t / float(iterations + 1)
+
+    fixed_mask = np.zeros(nnodes, dtype=np.bool_)
+    if fixed is not None:
+        fixed_mask[np.asarray(fixed)] = True
+
+    kernel = _get_numba_fr_kernel()
+    pos = kernel(
+        pos,
+        np.ascontiguousarray(A_csr.data),
+        np.ascontiguousarray(A_csr.indices.astype(np.int64)),
+        np.ascontiguousarray(A_csr.indptr.astype(np.int64)),
+        float(k),
+        nnodes,
+        dim,
+        iterations,
+        float(threshold),
+        float(t),
+        float(dt),
+        fixed_mask,
+    )
+
+    return pos
+
+
+@random_state(9)
+def _fruchterman_reingold_torch(
+    A,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    dim=2,
+    torch_module=None,
+    device=None,
+    seed=None,
+):
+    """PyTorch GPU-accelerated Fruchterman-Reingold algorithm.
+
+    Uses dense tensor operations on GPU (CUDA/MPS) or CPU.
+    The O(N^2) pairwise computation maps naturally to GPU parallelism.
+    """
+    try:
+        nnodes, _ = A.shape
+    except AttributeError as e:
+        msg = "fruchterman_reingold() takes an adjacency matrix as input"
+        raise nx.NetworkXError(msg) from e
+
+    torch = torch_module
+
+    if pos is None:
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
+    else:
+        pos = pos.astype(np.float32)
+
+    if k is None:
+        k = float(np.sqrt(1.0 / nnodes))
+
+    A_t = torch.from_numpy(A.astype(np.float32)).to(device)
+    pos_t = torch.from_numpy(pos).to(device)
+
+    k2 = k * k
+    inv_k = 1.0 / k
+    gravity = 1.0 / (k * float(np.sqrt(nnodes)))
+
+    ranges = pos_t.max(dim=0).values - pos_t.min(dim=0).values
+    t = float(ranges.max().item()) * 0.1
+    dt = t / (iterations + 1)
+
+    fixed_mask = None
+    if fixed is not None:
+        fixed_mask = torch.zeros(nnodes, dtype=torch.bool, device=device)
+        fixed_mask[torch.tensor(fixed, dtype=torch.long, device=device)] = True
+
+    for _ in range(iterations):
+        # Pairwise differences: N x N x dim
+        delta = pos_t.unsqueeze(1) - pos_t.unsqueeze(0)
+        # Pairwise distances: N x N
+        distance = torch.sqrt((delta**2).sum(dim=-1)).clamp(min=0.001)
+        # Combined force magnitudes: repulsive + attractive
+        force_mag = k2 / (distance * distance) - A_t * distance * inv_k
+        # Displacement: sum of directed forces
+        displacement = (delta * force_mag.unsqueeze(-1)).sum(dim=1)
+        # Gravity toward center
+        displacement = displacement - pos_t * gravity
+
+        # Limit step size by temperature
+        length = torch.sqrt((displacement**2).sum(dim=-1)).clamp(min=0.01)
+        delta_pos = displacement * (t / length).unsqueeze(-1)
+
+        if fixed_mask is not None:
+            delta_pos[fixed_mask] = 0.0
+
+        pos_t = pos_t + delta_pos
+        t -= dt
+
+        err = float(torch.sqrt((delta_pos**2).sum()).item()) / nnodes
+        if err < threshold:
+            break
+
+    return pos_t.cpu().numpy()
+
+
+def _fruchterman_reingold_layout_v2(
+    G,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    weight="weight",
+    scale=1,
+    center=None,
+    dim=2,
+    seed=None,
+):
+    """Numba-accelerated Fruchterman-Reingold layout (mod_fr2).
+
+    Drop-in replacement for _fruchterman_reingold_layout with
+    Numba JIT-compiled force computation and parallel CPU execution.
+    First call incurs ~1-2s JIT compilation overhead; subsequent
+    calls use the cached compiled kernel.
+    """
+    G, center = _process_params(G, center, dim)
+
+    if fixed is not None:
+        if pos is None:
+            raise ValueError("nodes are fixed without positions given")
+        for node in fixed:
+            if node not in pos:
+                raise ValueError("nodes are fixed without positions given")
+        nfixed = {node: i for i, node in enumerate(G)}
+        fixed = np.asarray([nfixed[node] for node in fixed])
+
+    if pos is not None:
+        dom_size = max(
+            coord for pos_tup in pos.values() for coord in pos_tup
+        )
+        if dom_size == 0:
+            dom_size = 1
+        pos_arr = seed.rand(len(G), dim) * dom_size + center
+
+        for i, n in enumerate(G):
+            if n in pos:
+                pos_arr[i] = np.asarray(pos[n])
+    else:
+        pos_arr = None
+        dom_size = 1
+
+    if len(G) == 0:
+        return {}
+    if len(G) == 1:
+        return {nx.utils.arbitrary_element(G.nodes()): center}
+
+    # Always use sparse CSR for Numba kernel
+    if int(nx.__version__[0]) > 2:
+        A = nx.to_scipy_sparse_array(G, weight=weight, dtype="f")
+    else:
+        A = nx.to_scipy_sparse_matrix(G, weight=weight, dtype="f")
+
+    if k is None and fixed is not None:
+        nnodes, _ = A.shape
+        k = dom_size / np.sqrt(nnodes)
+
+    pos = _fruchterman_reingold_numba(
+        A, k, pos_arr, fixed, iterations, threshold, dim, seed,
+    )
+
+    if fixed is None and scale is not None:
+        pos = _rescale_layout(pos, scale=scale) + center
+    pos = dict(zip(G, pos))
+    return pos
+
+
+def _fruchterman_reingold_layout_gpu(
+    G,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    weight="weight",
+    scale=1,
+    center=None,
+    dim=2,
+    seed=None,
+):
+    """PyTorch GPU-accelerated Fruchterman-Reingold layout (mod_fr2_gpu).
+
+    Uses PyTorch for GPU-accelerated (CUDA/MPS) or optimized CPU
+    computation. Automatically detects the best available device.
+    """
+    torch, device = _detect_torch_device()
+
+    G, center = _process_params(G, center, dim)
+
+    if fixed is not None:
+        if pos is None:
+            raise ValueError("nodes are fixed without positions given")
+        for node in fixed:
+            if node not in pos:
+                raise ValueError("nodes are fixed without positions given")
+        nfixed = {node: i for i, node in enumerate(G)}
+        fixed = np.asarray([nfixed[node] for node in fixed])
+
+    if pos is not None:
+        dom_size = max(
+            coord for pos_tup in pos.values() for coord in pos_tup
+        )
+        if dom_size == 0:
+            dom_size = 1
+        pos_arr = seed.rand(len(G), dim) * dom_size + center
+
+        for i, n in enumerate(G):
+            if n in pos:
+                pos_arr[i] = np.asarray(pos[n])
+    else:
+        pos_arr = None
+        dom_size = 1
+
+    if len(G) == 0:
+        return {}
+    if len(G) == 1:
+        return {nx.utils.arbitrary_element(G.nodes()): center}
+
+    # Always use dense array for GPU tensor operations
+    A = nx.to_numpy_array(G, weight=weight).astype(np.float32)
+
+    if k is None and fixed is not None:
+        nnodes, _ = A.shape
+        k = dom_size / np.sqrt(nnodes)
+
+    pos = _fruchterman_reingold_torch(
+        A, k, pos_arr, fixed, iterations, threshold, dim,
+        torch_module=torch, device=device, seed=seed,
+    )
+
+    if fixed is None and scale is not None:
+        pos = _rescale_layout(pos, scale=scale) + center
+    pos = dict(zip(G, pos))
+    return pos
+
+
 def extract_edge_weights(
     vdj: Dandelion | DandelionPolars, expanded_only: bool = False
 ) -> list:
     """
-    Retrieve edge weights (BCR levenshtein distance) from graph.
+    Retrieve edge weights from graph.
 
     Parameters
     ----------
