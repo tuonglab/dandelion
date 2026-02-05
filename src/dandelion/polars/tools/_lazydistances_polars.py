@@ -27,7 +27,7 @@ from scanpy import logging as logg
 
 from dandelion.utilities._distances import (
     Metric,
-    _prepare_sequences_with_separator,
+    prepare_sequences_with_separator,
 )
 from dandelion.utilities._utilities import (
     open_zarr_group,
@@ -124,7 +124,7 @@ def calculate_distance_matrix_zarr(
     # Convert to list of lists, prepare, then store back as single column
     seq_arrays = dat_seq_clean.select(seq_cols).to_numpy(allow_copy=True)
     seq_lists = seq_arrays.tolist()
-    prepared_seqs = _prepare_sequences_with_separator(
+    prepared_seqs = prepare_sequences_with_separator(
         seq_lists, metric=metric, pad_to_max=pad_to_max, sep="#"
     )
 
@@ -764,8 +764,12 @@ def _compute_distances_polars_native(
 
     # Pre-filter to only include groups with >= 2 cells (no point computing distances for singletons)
     group_counts = df_with_clone.group_by("membership_id").len()
-    valid_groups = group_counts.filter(pl.col("len") >= 2).select("membership_id")
-    df_with_clone = df_with_clone.join(valid_groups, on="membership_id", how="inner")
+    valid_groups = group_counts.filter(pl.col("len") >= 2).select(
+        "membership_id"
+    )
+    df_with_clone = df_with_clone.join(
+        valid_groups, on="membership_id", how="inner"
+    )
 
     if df_with_clone.height == 0:
         return

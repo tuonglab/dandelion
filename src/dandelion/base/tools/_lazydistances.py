@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from dandelion.utilities._distances import (
     Metric,
-    _prepare_sequences_with_separator,
+    prepare_sequences_with_separator,
 )
 from dandelion.utilities._utilities import (
     LocalStore,
@@ -264,7 +264,7 @@ def _compute_multicol_distances_streaming(
     # Prepare sequences once with global padding before scattering to workers
     seqs_np = dat_seq_clean.to_numpy(dtype=object)
     seqs_list = seqs_np.tolist()
-    prepared_seqs = _prepare_sequences_with_separator(
+    prepared_seqs = prepare_sequences_with_separator(
         seqs_list, metric=metric, pad_to_max=pad_to_max, sep="#"
     )
 

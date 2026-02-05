@@ -1,7 +1,6 @@
 from __future__ import annotations
 import hashlib
 import inspect
-import tempfile
 
 import numpy as np
 
@@ -12,33 +11,7 @@ from rapidfuzz import process
 from typing import Callable, Protocol, runtime_checkable
 
 
-def _create_memmap_matrix(
-    n: int, dtype=np.float32, temp_dir: str | None = None
-) -> np.memmap:
-    """
-    Create a temporary memory-mapped array for distance matrix storage.
-
-    Parameters
-    ----------
-    n : int
-        Size of the square matrix (n x n).
-    dtype : numpy dtype, optional
-        Data type for the matrix. Default is np.float32.
-    temp_dir : str or None, optional
-        Directory to create the temp file in. If None, uses system default.
-
-    Returns
-    -------
-    np.memmap
-        Memory-mapped array of shape (n, n).
-    """
-    temp_file = tempfile.NamedTemporaryFile(
-        delete=False, suffix=".dat", dir=temp_dir
-    )
-    return np.memmap(temp_file.name, dtype=dtype, mode="w+", shape=(n, n))
-
-
-def _prepare_sequences_with_separator(
+def prepare_sequences_with_separator(
     sequences: list[list[str]],
     metric: Metric,
     pad_to_max: bool = False,
@@ -75,7 +48,7 @@ def _prepare_sequences_with_separator(
     >>> from dandelion.utilities._distances import LevenshteinMetric
     >>> metric = LevenshteinMetric()
     >>> seqs = [['ACGT', 'CGAT'], ['AAAA', 'TTTT'], ['CCCC', 'AAAA']]
-    >>> prepared = _prepare_sequences_with_separator(seqs, metric, pad_to_max=False)
+    >>> prepared = prepare_sequences_with_separator(seqs, metric, pad_to_max=False)
     >>> len(prepared)
     3
     >>> prepared[0]  # Concatenated with separator
@@ -160,8 +133,6 @@ class Metric(Protocol):
         self,
         seqs: list[str],
         n_cpus: int = 1,
-        memmap: bool = False,
-        temp_dir: str | None = None,
     ) -> np.ndarray: ...
 
 
@@ -228,8 +199,6 @@ class CallableMetric:
         self,
         seqs: list[str],
         n_cpus: int = 1,
-        memmap: bool = False,
-        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Use provided vectorized function.
@@ -240,11 +209,6 @@ class CallableMetric:
         # Use custom vectorized implementation if provided
         if self._vectorized_func is not None:
             result = self._vectorized_func(seqs)
-            if memmap:
-                n = len(seqs)
-                mmap_matrix = _create_memmap_matrix(n, dtype=result.dtype, temp_dir=temp_dir)
-                mmap_matrix[:] = result
-                return mmap_matrix
             return result
 
         # Fall back to loop using pairwise function
@@ -252,10 +216,7 @@ class CallableMetric:
         if n == 0:
             return np.empty((0, 0), dtype=float)
 
-        if memmap:
-            dist_matrix = _create_memmap_matrix(n, dtype=np.float64, temp_dir=temp_dir)
-        else:
-            dist_matrix = np.zeros((n, n))
+        dist_matrix = np.zeros((n, n))
 
         for i in range(n):
             for j in range(i + 1, n):
@@ -276,8 +237,6 @@ class LevenshteinMetric:
         self,
         seqs: list[str],
         n_cpus: int = 1,
-        memmap: bool = False,
-        temp_dir: str | None = None,
     ) -> np.ndarray:
         if not seqs:
             return np.empty((0, 0), dtype=float)
@@ -289,12 +248,6 @@ class LevenshteinMetric:
             dtype=np.int32,
             workers=n_cpus if n_cpus > 1 else 1,
         ).astype(np.float32)
-
-        if memmap:
-            n = len(seqs)
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
-            mmap_matrix[:] = result
-            return mmap_matrix
 
         return result
 
@@ -319,19 +272,6 @@ class HammingMetric:
 
     def _auto_detect_backend(self):
         """Auto-detect best available backend."""
-        # Try CuPy first (CUDA)
-        try:
-            import cupy as cp
-
-            cp.cuda.Device(0).compute_capability  # Test if GPU is accessible
-            self.backend_name = "cupy"
-            self.cp = cp
-            if self.verbose:
-                print(f"Using CuPy backend with CUDA GPU")
-            return
-        except (ImportError, Exception):
-            pass
-
         # Try PyTorch with GPU (CUDA or MPS)
         try:
             import torch
@@ -375,8 +315,6 @@ class HammingMetric:
         self,
         seqs: list[str],
         n_cpus: int = 1,
-        memmap: bool = False,
-        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Compute pairwise Hamming distances using the best available backend.
@@ -403,59 +341,40 @@ class HammingMetric:
             return np.array([[]])
 
         # Route to appropriate backend
-        if self.backend_name == "cupy":
-            result = self._compute_cupy(seqs, n)
-        elif self.backend_name == "torch":
+        if self.backend_name == "torch":
             result = self._compute_torch(seqs, n)
         else:  # numpy
             result = self._compute_numpy(seqs, n)
 
-        if memmap:
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
-            mmap_matrix[:] = result
-            return mmap_matrix
-
         return result
 
-    def _compute_cupy(self, seqs: list[str], n: int) -> np.ndarray:
-        """CuPy implementation using matmul to avoid O(n^2 * L) memory."""
-        seqs_np = np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(n, -1)
-        L = seqs_np.shape[1]
-        seqs_array = self.cp.asarray(seqs_np)
-
-        match_count = self.cp.zeros((n, n), dtype=self.cp.float32)
-        for c in self.cp.unique(seqs_array):
-            mask = (seqs_array == c).astype(self.cp.float32)  # (n, L)
-            match_count += mask @ mask.T  # (n, n)
-
-        dist_matrix = self.cp.float32(L) - match_count
-        return self.cp.asnumpy(dist_matrix)
-
     def _compute_torch(self, seqs: list[str], n: int) -> np.ndarray:
-        """PyTorch implementation using matmul to avoid O(n^2 * L) memory."""
-        seqs_np = np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(n, -1)
-        L = seqs_np.shape[1]
-        seqs_tensor = self.torch.tensor(seqs_np, device=self.device)
+        """PyTorch implementation."""
+        seqs_tensor = self.torch.tensor(
+            np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(
+                n, -1
+            ),
+            device=self.device,
+        )
 
-        match_count = self.torch.zeros((n, n), device=self.device, dtype=self.torch.float32)
-        for c in self.torch.unique(seqs_tensor):
-            mask = (seqs_tensor == c).float()  # (n, L)
-            match_count += mask @ mask.T  # (n, n)
+        dist_matrix = (
+            (seqs_tensor[:, None, :] != seqs_tensor[None, :, :])
+            .sum(dim=2)
+            .float()
+        )
 
-        dist_matrix = float(L) - match_count
         return dist_matrix.cpu().numpy()
 
     def _compute_numpy(self, seqs: list[str], n: int) -> np.ndarray:
-        """NumPy implementation using matmul to avoid O(n^2 * L) memory."""
-        seqs_array = np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(n, -1)
-        L = seqs_array.shape[1]
-
-        match_count = np.zeros((n, n), dtype=np.float32)
-        for c in np.unique(seqs_array):
-            mask = (seqs_array == c).astype(np.float32)  # (n, L)
-            match_count += mask @ mask.T  # (n, n)
-
-        return (np.float32(L) - match_count)
+        """NumPy implementation."""
+        seqs_array = np.frombuffer("".join(seqs).encode(), dtype="S1").reshape(
+            n, -1
+        )
+        return (
+            (seqs_array[:, None, :] != seqs_array[None, :, :])
+            .sum(axis=2)
+            .astype(np.float32)
+        )
 
 
 class IdentityMetric:
@@ -467,19 +386,6 @@ class IdentityMetric:
 
     def _auto_detect_backend(self):
         """Auto-detect best available backend."""
-        # Try CuPy first (CUDA)
-        try:
-            import cupy as cp
-
-            cp.cuda.Device(0).compute_capability
-            self.backend_name = "cupy"
-            self.cp = cp
-            if self.verbose:
-                print("Using CuPy backend with CUDA GPU for identity")
-            return
-        except Exception:
-            pass
-
         # Try PyTorch with GPU
         try:
             import torch
@@ -536,8 +442,6 @@ class IdentityMetric:
         self,
         seqs: list[str],
         n_cpus: int = 1,
-        memmap: bool = False,
-        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Compute pairwise identity distance matrix.
@@ -548,10 +452,6 @@ class IdentityMetric:
             List of sequences to compare.
         n_cpus : int, optional
             Number of CPUs to use (currently not utilized for GPU backends).
-        memmap : bool, optional
-            Whether to use memory-mapped storage. Default is False.
-        temp_dir : str or None, optional
-            Directory to create temp memmap files in. If None, uses system default.
 
         Returns
         -------
@@ -566,17 +466,10 @@ class IdentityMetric:
 
         hashes = self._hash_sequences(seqs)
 
-        if self.backend_name == "cupy":
-            result = self._compute_cupy(hashes)
-        elif self.backend_name == "torch":
+        if self.backend_name == "torch":
             result = self._compute_torch(hashes)
         else:
             result = self._compute_numpy(hashes)
-
-        if memmap:
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
-            mmap_matrix[:] = result
-            return mmap_matrix
 
         return result
 
@@ -584,12 +477,6 @@ class IdentityMetric:
         """NumPy backend."""
         identity = hashes[:, None] == hashes[None, :]
         return (~identity).astype(np.float32)
-
-    def _compute_cupy(self, hashes: np.ndarray) -> np.ndarray:
-        """CuPy backend."""
-        h = self.cp.asarray(hashes)
-        identity = h[:, None] == h[None, :]
-        return self.cp.asnumpy((~identity).astype(self.cp.float32))
 
     def _compute_torch(self, hashes: np.ndarray) -> np.ndarray:
         """PyTorch backend."""
@@ -671,8 +558,6 @@ class SubstitutionMatrixMetric:
         self,
         seqs: list[str],
         n_cpus: int = 1,
-        memmap: bool = False,
-        temp_dir: str | None = None,
     ) -> np.ndarray:
         """
         Vectorized pairwise distance computation using substitution matrices.
@@ -686,10 +571,6 @@ class SubstitutionMatrixMetric:
             List of sequences to compare (can have different lengths).
         n_cpus : int, optional
             Number of CPUs to use (currently not utilized).
-        memmap : bool, optional
-            Whether to use memory-mapped storage. Default is False.
-        temp_dir : str or None, optional
-            Directory to create temp memmap files in. If None, uses system default.
 
         Returns
         -------
@@ -731,14 +612,11 @@ class SubstitutionMatrixMetric:
         ].sum(axis=2)
         # Distance matrix from min of self scores
         max_scores = np.minimum(self_scores[:, None], self_scores[None, :])
-        dist_matrix = np.maximum(max_scores - pair_scores, 0.0).astype(np.float32)
+        dist_matrix = np.maximum(max_scores - pair_scores, 0.0).astype(
+            np.float32
+        )
         # Ensure diagonal is exactly zero
         np.fill_diagonal(dist_matrix, 0.0)
-
-        if memmap:
-            mmap_matrix = _create_memmap_matrix(n, dtype=np.float32, temp_dir=temp_dir)
-            mmap_matrix[:] = dist_matrix
-            return mmap_matrix
 
         return dist_matrix
 

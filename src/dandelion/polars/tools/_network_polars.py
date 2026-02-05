@@ -30,7 +30,7 @@ from dandelion.polars.tools._tools_polars import vdj_sample
 from dandelion.tools._layout import generate_layout
 from dandelion.utilities._distances import (
     Metric,
-    _prepare_sequences_with_separator,
+    prepare_sequences_with_separator,
     resolve_metric,
 )
 from dandelion.utilities._utilities import (
@@ -1355,7 +1355,7 @@ def calculate_distance_matrix_original(
                 )
                 seqs = seq_series.to_list()
                 seqs_raw = [[s] for s in seqs]
-                prepared_seqs = _prepare_sequences_with_separator(
+                prepared_seqs = prepare_sequences_with_separator(
                     seqs_raw,
                     metric=metric,
                     pad_to_max=pad_to_max,
@@ -1460,7 +1460,7 @@ def calculate_distance_matrix_original_full(
 
         # Prepare sequences for single column (reshape to list of single-element lists)
         seqs_raw = [[s] for s in seq_series.to_numpy()]
-        prepared_seqs = _prepare_sequences_with_separator(
+        prepared_seqs = prepare_sequences_with_separator(
             seqs_raw,
             metric=metric,
             pad_to_max=pad_to_max,
@@ -1555,7 +1555,7 @@ def calculate_distance_matrix_long(
     # Step 2: prepare sequences (concatenate with separators, apply padding)
     # This happens ONCE upfront, not per-pair
     seqs_raw = dat_seq_clean.select(seq_cols).to_numpy().tolist()
-    prepared_seqs = _prepare_sequences_with_separator(
+    prepared_seqs = prepare_sequences_with_separator(
         seqs_raw,
         metric=metric,
         pad_to_max=pad_to_max,

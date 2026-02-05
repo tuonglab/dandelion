@@ -68,10 +68,6 @@ def find_clones(
     key_added: str | None = None,
     recalculate_length: bool = True,
     store_distances: bool = False,
-    dist_memmap: bool = False,
-    lazy: bool = False,
-    zarr_path: str | None = None,
-    compress: bool = True,
     verbose: bool = True,
 ) -> DandelionPolars:
     """
@@ -110,19 +106,6 @@ def find_clones(
         wrong). Default is True
     store_distances : bool, optional
         whether or not to store the distance matrix as a sparse matrix in `vdj.distances`. Default is False.
-    dist_memmap : bool, optional
-        whether to use memory-mapped arrays for distance computation. This reduces RAM usage by storing
-        intermediate distance matrices on disk. Default is False.
-    lazy : bool, optional
-        If True, distances are streamed to Zarr on disk rather than stored in memory. This enables memory-efficient
-        processing of very large datasets (1M+ cells). When saved with `write_zipddl()`, distances will be embedded
-        in the zipddl file automatically. Default is False.
-    zarr_path : str | None, optional
-        Path to store sparse distance matrix components in Zarr format when using lazy mode.
-        If None (default), a temporary directory is created and distances will be embedded when calling `write_zipddl()`.
-        If provided, distances are stored at this external path and will NOT be embedded in zipddl.
-    compress : bool, optional
-        Whether to compress the Zarr arrays using Blosc with zstd. Default is True.
     verbose : bool, optional
         whether or not to print progress.
 
@@ -201,61 +184,8 @@ def find_clones(
     cell_id_to_meta_idx = {cell_id: i for i, cell_id in enumerate(all_cell_ids)}
     n_cells = len(all_cell_ids)
 
-    # Initialize temp directory for memmap files (all memmaps go here for cleanup)
-    if dist_memmap:
-        _temp_dir_handle = tempfile.TemporaryDirectory(prefix="dandelion_dist_")
-        _temp_dir = _temp_dir_handle.name
-
-    # Initialize distance collection if storing distances (memmap for low memory)
-    # Separate memmaps for VDJ and VJ chains
-    if store_distances and dist_memmap:
-        # Estimate max entries per chain type - can grow if needed
-        _max_nnz_vdj = n_cells * 500
-        _max_nnz_vj = n_cells * 500
-
-        # VDJ memmaps
-        _vdj_row_mmap = np.memmap(
-            f"{_temp_dir}/vdj_rows.dat",
-            dtype=np.int32,
-            mode="w+",
-            shape=(_max_nnz_vdj,),
-        )
-        _vdj_col_mmap = np.memmap(
-            f"{_temp_dir}/vdj_cols.dat",
-            dtype=np.int32,
-            mode="w+",
-            shape=(_max_nnz_vdj,),
-        )
-        _vdj_data_mmap = np.memmap(
-            f"{_temp_dir}/vdj_data.dat",
-            dtype=np.float32,
-            mode="w+",
-            shape=(_max_nnz_vdj,),
-        )
-        _vdj_idx = 0
-
-        # VJ memmaps
-        _vj_row_mmap = np.memmap(
-            f"{_temp_dir}/vj_rows.dat",
-            dtype=np.int32,
-            mode="w+",
-            shape=(_max_nnz_vj,),
-        )
-        _vj_col_mmap = np.memmap(
-            f"{_temp_dir}/vj_cols.dat",
-            dtype=np.int32,
-            mode="w+",
-            shape=(_max_nnz_vj,),
-        )
-        _vj_data_mmap = np.memmap(
-            f"{_temp_dir}/vj_data.dat",
-            dtype=np.float32,
-            mode="w+",
-            shape=(_max_nnz_vj,),
-        )
-        _vj_idx = 0
-    elif store_distances and not dist_memmap:
-        # In-memory COO accumulation (original approach)
+    # Initialize sparse stacking lists for distance accumulation
+    if store_distances:
         _vdj_rows_list: list[np.ndarray] = []
         _vdj_cols_list: list[np.ndarray] = []
         _vdj_data_list: list[np.ndarray] = []
@@ -358,11 +288,7 @@ def find_clones(
 
                 if seqs_non_empty:
                     # Compute distances on all sequences (memmap keeps it on disk)
-                    d_mat = metric.compute_vectorized(
-                        seqs_non_empty,
-                        memmap=dist_memmap,
-                        temp_dir=_temp_dir if dist_memmap else None,
-                    )
+                    d_mat = metric.compute_vectorized(seqs_non_empty)
 
                     # Get metadata indices for these cells
                     meta_indices = np.array(
@@ -384,68 +310,15 @@ def find_clones(
                     else:
                         seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
 
-                    # Store VDJ distances if requested (write to memmap)
-                    if (
-                        store_distances
-                        and dist_memmap
-                        and len(meta_indices) > 0
-                    ):
-                        n_local = len(meta_indices)
-                        n_entries = n_local * n_local
-                        local_rows, local_cols = np.meshgrid(
-                            range(n_local), range(n_local), indexing="ij"
-                        )
-                        # Check if we need to grow VDJ memmap
-                        if _vdj_idx + n_entries > _max_nnz_vdj:
-                            new_max = max(
-                                _max_nnz_vdj * 2, _vdj_idx + n_entries
-                            )
-                            _vdj_row_mmap.flush()
-                            _vdj_col_mmap.flush()
-                            _vdj_data_mmap.flush()
-                            _vdj_row_mmap = np.memmap(
-                                f"{_temp_dir}/vdj_rows.dat",
-                                dtype=np.int32,
-                                mode="r+",
-                                shape=(new_max,),
-                            )
-                            _vdj_col_mmap = np.memmap(
-                                f"{_temp_dir}/vdj_cols.dat",
-                                dtype=np.int32,
-                                mode="r+",
-                                shape=(new_max,),
-                            )
-                            _vdj_data_mmap = np.memmap(
-                                f"{_temp_dir}/vdj_data.dat",
-                                dtype=np.float32,
-                                mode="r+",
-                                shape=(new_max,),
-                            )
-                            _max_nnz_vdj = new_max
-                        # Write to VDJ memmap
-                        _vdj_row_mmap[_vdj_idx : _vdj_idx + n_entries] = (
-                            meta_indices[local_rows.ravel()]
-                        )
-                        _vdj_col_mmap[_vdj_idx : _vdj_idx + n_entries] = (
-                            meta_indices[local_cols.ravel()]
-                        )
-                        _vdj_data_mmap[_vdj_idx : _vdj_idx + n_entries] = (
-                            d_mat.ravel()
-                        )
-                        _vdj_idx += n_entries
-                    elif (
-                        store_distances
-                        and not dist_memmap
-                        and len(meta_indices) > 0
-                    ):
-                        # In-memory COO accumulation
-                        n_local = len(meta_indices)
-                        local_rows, local_cols = np.meshgrid(
-                            range(n_local), range(n_local), indexing="ij"
-                        )
-                        _vdj_rows_list.append(meta_indices[local_rows.ravel()])
-                        _vdj_cols_list.append(meta_indices[local_cols.ravel()])
-                        _vdj_data_list.append(d_mat.ravel())
+                    # Sparse stacking: convert block to similarity, extract nonzeros
+                    if store_distances and len(meta_indices) > 0:
+                        sim_mat = np.exp(-np.asarray(d_mat, dtype=np.float32))
+                        np.fill_diagonal(sim_mat, 0)
+                        block_coo = coo_matrix(sim_mat)
+                        if block_coo.nnz > 0:
+                            _vdj_rows_list.append(meta_indices[block_coo.row])
+                            _vdj_cols_list.append(meta_indices[block_coo.col])
+                            _vdj_data_list.append(block_coo.data)
                 else:
                     # All sequences in this membership are empty - assign them together
                     if seqs_empty:
@@ -548,12 +421,8 @@ def find_clones(
                 ]
 
                 if seqs_non_empty:
-                    # Compute distances on all sequences (memmap keeps it on disk)
-                    d_mat = metric.compute_vectorized(
-                        seqs_non_empty,
-                        memmap=dist_memmap,
-                        temp_dir=_temp_dir if dist_memmap else None,
-                    )
+                    # Compute distances on sequences
+                    d_mat = metric.compute_vectorized(seqs_non_empty)
 
                     # Get metadata indices for these cells
                     meta_indices = np.array(
@@ -575,66 +444,15 @@ def find_clones(
                     else:
                         seq_tmp_dict = {seqs_non_empty[0]: (seqs_non_empty[0],)}
 
-                    # Store VJ distances if requested (write to memmap)
-                    if (
-                        store_distances
-                        and dist_memmap
-                        and len(meta_indices) > 0
-                    ):
-                        n_local = len(meta_indices)
-                        n_entries = n_local * n_local
-                        local_rows, local_cols = np.meshgrid(
-                            range(n_local), range(n_local), indexing="ij"
-                        )
-                        # Check if we need to grow VJ memmap
-                        if _vj_idx + n_entries > _max_nnz_vj:
-                            new_max = max(_max_nnz_vj * 2, _vj_idx + n_entries)
-                            _vj_row_mmap.flush()
-                            _vj_col_mmap.flush()
-                            _vj_data_mmap.flush()
-                            _vj_row_mmap = np.memmap(
-                                f"{_temp_dir}/vj_rows.dat",
-                                dtype=np.int32,
-                                mode="r+",
-                                shape=(new_max,),
-                            )
-                            _vj_col_mmap = np.memmap(
-                                f"{_temp_dir}/vj_cols.dat",
-                                dtype=np.int32,
-                                mode="r+",
-                                shape=(new_max,),
-                            )
-                            _vj_data_mmap = np.memmap(
-                                f"{_temp_dir}/vj_data.dat",
-                                dtype=np.float32,
-                                mode="r+",
-                                shape=(new_max,),
-                            )
-                            _max_nnz_vj = new_max
-                        # Write to VJ memmap
-                        _vj_row_mmap[_vj_idx : _vj_idx + n_entries] = (
-                            meta_indices[local_rows.ravel()]
-                        )
-                        _vj_col_mmap[_vj_idx : _vj_idx + n_entries] = (
-                            meta_indices[local_cols.ravel()]
-                        )
-                        _vj_data_mmap[_vj_idx : _vj_idx + n_entries] = (
-                            d_mat.ravel()
-                        )
-                        _vj_idx += n_entries
-                    elif (
-                        store_distances
-                        and not dist_memmap
-                        and len(meta_indices) > 0
-                    ):
-                        # In-memory COO accumulation
-                        n_local = len(meta_indices)
-                        local_rows, local_cols = np.meshgrid(
-                            range(n_local), range(n_local), indexing="ij"
-                        )
-                        _vj_rows_list.append(meta_indices[local_rows.ravel()])
-                        _vj_cols_list.append(meta_indices[local_cols.ravel()])
-                        _vj_data_list.append(d_mat.ravel())
+                    # Sparse stacking: convert block to similarity, extract nonzeros
+                    if store_distances and len(meta_indices) > 0:
+                        sim_mat = np.exp(-np.asarray(d_mat, dtype=np.float32))
+                        np.fill_diagonal(sim_mat, 0)
+                        block_coo = coo_matrix(sim_mat)
+                        if block_coo.nnz > 0:
+                            _vj_rows_list.append(meta_indices[block_coo.row])
+                            _vj_cols_list.append(meta_indices[block_coo.col])
+                            _vj_data_list.append(block_coo.data)
                 else:
                     # All sequences in this membership are empty - assign them together
                     if seqs_empty:
@@ -814,90 +632,37 @@ def find_clones(
     # offload memory
     vdj._cache_data()
 
-    # Assemble distance matrices from memmaps
-    if store_distances and dist_memmap:
-        # Flush memmaps to ensure all data is written
-        _vdj_row_mmap.flush()
-        _vdj_col_mmap.flush()
-        _vdj_data_mmap.flush()
-        _vj_row_mmap.flush()
-        _vj_col_mmap.flush()
-        _vj_data_mmap.flush()
-
-        # Build VDJ CSR matrix
-        if _vdj_idx > 0:
-            vdj_rows = np.array(_vdj_row_mmap[:_vdj_idx])
-            vdj_cols = np.array(_vdj_col_mmap[:_vdj_idx])
-            vdj_data = np.array(_vdj_data_mmap[:_vdj_idx])
-            # Sort by (row, col) for efficient CSR construction
-            sort_idx = np.lexsort((vdj_cols, vdj_rows))
-            vdj_coo = coo_matrix(
-                (vdj_data[sort_idx], (vdj_rows[sort_idx], vdj_cols[sort_idx])),
-                shape=(n_cells, n_cells),
-            )
-            vdj_csr = vdj_coo.tocsr()
-        else:
-            vdj_csr = csr_matrix((n_cells, n_cells), dtype=np.float32)
-
-        # Build VJ CSR matrix
-        if _vj_idx > 0:
-            vj_rows = np.array(_vj_row_mmap[:_vj_idx])
-            vj_cols = np.array(_vj_col_mmap[:_vj_idx])
-            vj_data = np.array(_vj_data_mmap[:_vj_idx])
-            # Sort by (row, col) for efficient CSR construction
-            sort_idx = np.lexsort((vj_cols, vj_rows))
-            vj_coo = coo_matrix(
-                (vj_data[sort_idx], (vj_rows[sort_idx], vj_cols[sort_idx])),
-                shape=(n_cells, n_cells),
-            )
-            vj_csr = vj_coo.tocsr()
-        else:
-            vj_csr = csr_matrix((n_cells, n_cells), dtype=np.float32)
-
-        # Store in vdj.distances
-        vdj.distances = vdj_csr + vj_csr
-
-        # Cleanup COO memmaps (temp directory cleaned up below)
-        del _vdj_row_mmap, _vdj_col_mmap, _vdj_data_mmap
-        del _vj_row_mmap, _vj_col_mmap, _vj_data_mmap
-    elif store_distances and not dist_memmap:
-        # In-memory COO assembly
-        # Build VDJ CSR matrix
+    # Assemble distance matrices via sparse stacking
+    if store_distances:
         if _vdj_rows_list:
-            vdj_rows = np.concatenate(_vdj_rows_list)
-            vdj_cols = np.concatenate(_vdj_cols_list)
-            vdj_data = np.concatenate(_vdj_data_list)
-            # Sort by (row, col) for efficient CSR construction
-            sort_idx = np.lexsort((vdj_cols, vdj_rows))
-            vdj_coo = coo_matrix(
-                (vdj_data[sort_idx], (vdj_rows[sort_idx], vdj_cols[sort_idx])),
+            vdj_csr = coo_matrix(
+                (
+                    np.concatenate(_vdj_data_list),
+                    (
+                        np.concatenate(_vdj_rows_list),
+                        np.concatenate(_vdj_cols_list),
+                    ),
+                ),
                 shape=(n_cells, n_cells),
-            )
-            vdj_csr = vdj_coo.tocsr()
+            ).tocsr()
         else:
             vdj_csr = csr_matrix((n_cells, n_cells), dtype=np.float32)
 
-        # Build VJ CSR matrix
         if _vj_rows_list:
-            vj_rows = np.concatenate(_vj_rows_list)
-            vj_cols = np.concatenate(_vj_cols_list)
-            vj_data = np.concatenate(_vj_data_list)
-            # Sort by (row, col) for efficient CSR construction
-            sort_idx = np.lexsort((vj_cols, vj_rows))
-            vj_coo = coo_matrix(
-                (vj_data[sort_idx], (vj_rows[sort_idx], vj_cols[sort_idx])),
+            vj_csr = coo_matrix(
+                (
+                    np.concatenate(_vj_data_list),
+                    (
+                        np.concatenate(_vj_rows_list),
+                        np.concatenate(_vj_cols_list),
+                    ),
+                ),
                 shape=(n_cells, n_cells),
-            )
-            vj_csr = vj_coo.tocsr()
+            ).tocsr()
         else:
             vj_csr = csr_matrix((n_cells, n_cells), dtype=np.float32)
 
-        # Store in vdj.distances
         vdj.distances = vdj_csr + vj_csr
-
-    # Cleanup temp directory (covers both COO memmaps and per-group distance memmaps)
-    if dist_memmap:
-        _temp_dir_handle.cleanup()
 
     logg.info(
         " finished",

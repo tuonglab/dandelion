@@ -28,7 +28,7 @@ from dandelion.base.core._core import Dandelion, Query
 from dandelion.tools._layout import generate_layout
 from dandelion.utilities._distances import (
     Metric,
-    _prepare_sequences_with_separator,
+    prepare_sequences_with_separator,
     resolve_metric,
 )
 from dandelion.utilities._utilities import (
@@ -941,7 +941,7 @@ def calculate_distance_matrix_original(
             )
             for col in tmp.columns:
                 seqs_raw = [[s] for s in tmp[col].values]
-                prepared_seqs = _prepare_sequences_with_separator(
+                prepared_seqs = prepare_sequences_with_separator(
                     seqs_raw,
                     metric=metric,
                     pad_to_max=pad_to_max,
@@ -1023,7 +1023,7 @@ def calculate_distance_matrix_original_full(
 
         # Prepare sequences for single column (reshape to list of single-element lists)
         seqs_raw = [[s] for s in nonnull.to_numpy(dtype=object)]
-        prepared_seqs = _prepare_sequences_with_separator(
+        prepared_seqs = prepare_sequences_with_separator(
             seqs_raw,
             metric=metric,
             pad_to_max=pad_to_max,
@@ -1087,7 +1087,7 @@ def calculate_distance_matrix_long(
     # Step 2: prepare sequences (concatenate with separators, apply padding)
     # This happens ONCE upfront, not per-pair
     seqs_raw = dat_seq_clean.values.tolist()
-    prepared_seqs = _prepare_sequences_with_separator(
+    prepared_seqs = prepare_sequences_with_separator(
         seqs_raw,
         metric=metric,
         pad_to_max=pad_to_max,
