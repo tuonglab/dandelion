@@ -58,7 +58,6 @@ def generate_layout(
     tuple[nx.Graph, nx.Graph, dict, dict]
         graphs and layout positions.
     """
-    logg.info("Generating network layout")
     if graphs is None:
         if vertices is not None:
             G = nx.Graph()
