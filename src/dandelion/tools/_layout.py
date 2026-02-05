@@ -21,7 +21,7 @@ def generate_layout(
     compute_layout: bool = True,
     layout_method: Literal[
         "mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"
-    ] = "mod_fr",
+    ] = "mod_fr2",
     expanded_only: bool = False,
     graphs: tuple[nx.Graph, nx.Graph] = None,
     **kwargs,
@@ -91,13 +91,6 @@ def generate_layout(
             pass
     if compute_layout:
         if layout_method == "mod_fr":
-            if not hasattr(generate_layout, "_has_printed"):
-                logg.info(
-                    "To benefit from faster layout computation, please install graph-tool and use layout_method='sfdp': "
-                    "conda install -c conda-forge graph-tool\n"
-                    "This message will only be shown once per session."
-                )
-                generate_layout._has_printed = True
             if not expanded_only:
                 if verbose:
                     logg.info("Computing network layout")
@@ -110,28 +103,26 @@ def generate_layout(
         elif layout_method == "mod_fr2":
             if not expanded_only:
                 if verbose:
-                    logg.info("Computing network layout (Numba-accelerated)")
+                    logg.info("Computing network layout")
                 pos = _fruchterman_reingold_layout_v2(
                     G, weight=weight, **kwargs
                 )
             else:
                 pos = None
             if verbose:
-                logg.info(
-                    "Computing expanded network layout (Numba-accelerated)"
-                )
+                logg.info("Computing expanded network layout")
             pos_ = _fruchterman_reingold_layout_v2(G_, weight=weight, **kwargs)
         elif layout_method == "mod_fr2_gpu":
             if not expanded_only:
                 if verbose:
-                    logg.info("Computing network layout (GPU-accelerated)")
+                    logg.info("Computing network layout")
                 pos = _fruchterman_reingold_layout_gpu(
                     G, weight=weight, **kwargs
                 )
             else:
                 pos = None
             if verbose:
-                logg.info("Computing expanded network layout (GPU-accelerated)")
+                logg.info("Computing expanded network layout")
             pos_ = _fruchterman_reingold_layout_gpu(G_, weight=weight, **kwargs)
         elif layout_method == "sfdp":
             try:
@@ -840,9 +831,7 @@ def _fruchterman_reingold_layout_v2(
         fixed = np.asarray([nfixed[node] for node in fixed])
 
     if pos is not None:
-        dom_size = max(
-            coord for pos_tup in pos.values() for coord in pos_tup
-        )
+        dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
         if dom_size == 0:
             dom_size = 1
         pos_arr = seed.rand(len(G), dim) * dom_size + center
@@ -870,7 +859,14 @@ def _fruchterman_reingold_layout_v2(
         k = dom_size / np.sqrt(nnodes)
 
     pos = _fruchterman_reingold_numba(
-        A, k, pos_arr, fixed, iterations, threshold, dim, seed,
+        A,
+        k,
+        pos_arr,
+        fixed,
+        iterations,
+        threshold,
+        dim,
+        seed,
     )
 
     if fixed is None and scale is not None:
@@ -911,9 +907,7 @@ def _fruchterman_reingold_layout_gpu(
         fixed = np.asarray([nfixed[node] for node in fixed])
 
     if pos is not None:
-        dom_size = max(
-            coord for pos_tup in pos.values() for coord in pos_tup
-        )
+        dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
         if dom_size == 0:
             dom_size = 1
         pos_arr = seed.rand(len(G), dim) * dom_size + center
@@ -938,8 +932,16 @@ def _fruchterman_reingold_layout_gpu(
         k = dom_size / np.sqrt(nnodes)
 
     pos = _fruchterman_reingold_torch(
-        A, k, pos_arr, fixed, iterations, threshold, dim,
-        torch_module=torch, device=device, seed=seed,
+        A,
+        k,
+        pos_arr,
+        fixed,
+        iterations,
+        threshold,
+        dim,
+        torch_module=torch,
+        device=device,
+        seed=seed,
     )
 
     if fixed is None and scale is not None:
