@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from distance import hamming
 from itertools import product
 from scanpy import logging as logg
-from scipy.sparse import coo_matrix, csr_matrix, lil_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial.distance import pdist, squareform
 
@@ -43,10 +43,6 @@ from dandelion.utilities._utilities import (
     present,
     check_same_celltype,
     Tree,
-    create_zarr_array,
-    open_zarr_group,
-    BloscCodec,
-    LocalStore,
 )
 from dandelion.utilities._distances import (
     IdentityMetric,
@@ -67,9 +63,7 @@ def find_clones(
     by_alleles: bool = False,
     key_added: str | None = None,
     recalculate_length: bool = True,
-    store_distances: bool = False,
-    distance_backend: Literal["memory", "zarr"] = "memory",
-    zarr_path: str | None = None,
+    store_distances: bool = False,    
     verbose: bool = True,
 ) -> DandelionPolars:
     """
@@ -108,11 +102,6 @@ def find_clones(
         wrong). Default is True
     store_distances : bool, optional
         whether or not to store the distance matrix as a sparse matrix in `vdj.distances`. Default is False.
-    distance_backend : Literal["memory", "zarr"], optional
-        Backend for storing distances. "memory" uses in-memory COO->CSR conversion (default).
-        "zarr" writes distances incrementally to disk using Zarr, avoiding memory spikes.
-    zarr_path : str | None, optional
-        Path to store Zarr array when distance_backend="zarr". If None, uses a temporary directory.
     verbose : bool, optional
         whether or not to print progress.
 
@@ -184,32 +173,8 @@ def find_clones(
     locus_results = {}
 
     # Initialize distance storage based on backend choice
-    if store_distances and distance_backend == "zarr":
-        # Create mapping from cell_id to metadata index for distance storage
-        metadata_for_mapping = vdj._metadata
-        if isinstance(metadata_for_mapping, pl.LazyFrame):
-            metadata_for_mapping = metadata_for_mapping.collect(
-                engine="streaming"
-            )
-        all_cell_ids = metadata_for_mapping["cell_id"].to_list()
-        cell_id_to_meta_idx = {
-            cell_id: i for i, cell_id in enumerate(all_cell_ids)
-        }
-        n_cells = len(all_cell_ids)
-
-        if zarr_path is None:
-            import tempfile
-
-            zarr_path = tempfile.mkdtemp(prefix="dandelion_distances_")
-
-        distance_writer = _ZarrDistanceWriter(
-            zarr_path=zarr_path,
-            shape=(n_cells, n_cells),
-            compress=True,
-            chunk_size=1000,
-        )
-        distance_results = None  # Not used in Zarr mode
-    elif store_distances:
+    distance_results = []
+    if store_distances:
         # Memory-based mode (original approach)
         metadata_for_mapping = vdj._metadata
         if isinstance(metadata_for_mapping, pl.LazyFrame):
@@ -221,11 +186,6 @@ def find_clones(
             cell_id: i for i, cell_id in enumerate(all_cell_ids)
         }
         n_cells = len(all_cell_ids)
-        distance_results = []
-        distance_writer = None
-    else:
-        distance_results = None
-        distance_writer = None
 
     # Process each locus
     for locus, (vdj_loci, vj_loci) in locus_dict.items():
@@ -362,28 +322,21 @@ def find_clones(
                             d_mat = d_mat_unique[
                                 np.ix_(unique_indices, unique_indices)
                             ]
-
-                            if distance_backend == "zarr":
-                                # Write directly to Zarr (disk-based)
-                                distance_writer.write_submatrix(
-                                    meta_indices, d_mat
-                                )
-                            else:
-                                # Collect COO components for in-memory assembly
-                                n_local = len(meta_indices)
-                                rows, cols = np.meshgrid(
-                                    range(n_local),
-                                    range(n_local),
-                                    indexing="ij",
-                                )
-                                rows_flat = rows.ravel()
-                                cols_flat = cols.ravel()
-                                data_flat = d_mat.ravel()
-                                global_rows = meta_indices[rows_flat]
-                                global_cols = meta_indices[cols_flat]
-                                distance_results.append(
-                                    (global_rows, global_cols, data_flat)
-                                )
+                            # Collect COO components for in-memory assembly
+                            n_local = len(meta_indices)
+                            rows, cols = np.meshgrid(
+                                range(n_local),
+                                range(n_local),
+                                indexing="ij",
+                            )
+                            rows_flat = rows.ravel()
+                            cols_flat = cols.ravel()
+                            data_flat = d_mat.ravel()
+                            global_rows = meta_indices[rows_flat]
+                            global_cols = meta_indices[cols_flat]
+                            distance_results.append(
+                                (global_rows, global_cols, data_flat)
+                            )
 
                     # Cluster on unique sequences only, then map back
                     if len(unique_seqs) > 1:
@@ -539,27 +492,21 @@ def find_clones(
                                 np.ix_(unique_indices, unique_indices)
                             ]
 
-                            if distance_backend == "zarr":
-                                # Write directly to Zarr (disk-based)
-                                distance_writer.write_submatrix(
-                                    meta_indices, d_mat
-                                )
-                            else:
-                                # Collect COO components for in-memory assembly
-                                n_local = len(meta_indices)
-                                rows, cols = np.meshgrid(
-                                    range(n_local),
-                                    range(n_local),
-                                    indexing="ij",
-                                )
-                                rows_flat = rows.ravel()
-                                cols_flat = cols.ravel()
-                                data_flat = d_mat.ravel()
-                                global_rows = meta_indices[rows_flat]
-                                global_cols = meta_indices[cols_flat]
-                                distance_results.append(
-                                    (global_rows, global_cols, data_flat)
-                                )
+                            # Collect COO components for in-memory assembly
+                            n_local = len(meta_indices)
+                            rows, cols = np.meshgrid(
+                                range(n_local),
+                                range(n_local),
+                                indexing="ij",
+                            )
+                            rows_flat = rows.ravel()
+                            cols_flat = cols.ravel()
+                            data_flat = d_mat.ravel()
+                            global_rows = meta_indices[rows_flat]
+                            global_cols = meta_indices[cols_flat]
+                            distance_results.append(
+                                (global_rows, global_cols, data_flat)
+                            )
 
                     # Cluster on unique sequences only, then map back
                     if len(unique_seqs) > 1:
@@ -751,58 +698,43 @@ def find_clones(
     vdj._cache_data()
 
     # Build sparse distance matrix from collected data
-    if store_distances:
-        if distance_backend == "zarr":
-            # Finalize Zarr writer
-            logg.info("Finalizing distance matrix on disk...")
-            zarr_array_path = distance_writer.finalize(verbose=verbose)
-            # Store path reference instead of loading into memory
-            vdj.distances = zarr_array_path
-            logg.info(f"Stored distances as Zarr array at: {zarr_array_path}")
-        else:
-            # Batched COO construction - avoids single large concatenation
-            logg.info("Storing distance matrix...")
-
-            # Get matrix dimensions
-            n_cells = len(all_cell_ids)
-
-            # Build COO matrices in batches and sum them
-            batch_size = 100  # Process 100 submatrices at a time
-            csr_dist = None
-
-            for batch_start in tqdm(
-                range(0, len(distance_results), batch_size),
-                desc="Building distance matrix (batched)",
-                disable=not verbose,
-            ):
-                batch_end = min(batch_start + batch_size, len(distance_results))
-                batch = distance_results[batch_start:batch_end]
-
-                # Build COO for this batch only
-                batch_coo = coo_matrix(
+    if store_distances:        
+        # Batched COO construction - avoids single large concatenation
+        logg.info("Storing distance matrix...")
+        # Get matrix dimensions
+        n_cells = len(all_cell_ids)
+        # Build COO matrices in batches and sum them
+        batch_size = 100  # Process 100 submatrices at a time
+        csr_dist = None
+        for batch_start in tqdm(
+            range(0, len(distance_results), batch_size),
+            desc="Building distance matrix (batched)",
+            disable=not verbose,
+        ):
+            batch_end = min(batch_start + batch_size, len(distance_results))
+            batch = distance_results[batch_start:batch_end]
+            # Build COO for this batch only
+            batch_coo = coo_matrix(
+                (
+                    np.concatenate([d for r, c, d in batch]),
                     (
-                        np.concatenate([d for r, c, d in batch]),
-                        (
-                            np.concatenate([r for r, c, d in batch]),
-                            np.concatenate([c for r, c, d in batch]),
-                        ),
+                        np.concatenate([r for r, c, d in batch]),
+                        np.concatenate([c for r, c, d in batch]),
                     ),
-                    shape=(n_cells, n_cells),
-                )
-
-                # Convert to CSR and accumulate
-                if csr_dist is None:
-                    csr_dist = batch_coo.tocsr()
-                else:
-                    csr_dist = csr_dist + batch_coo.tocsr()
-
-                del batch_coo
-
-            # Clear immediately
-            distance_results.clear()
+                ),
+                shape=(n_cells, n_cells),
+            )
+            # Convert to CSR and accumulate
+            if csr_dist is None:
+                csr_dist = batch_coo.tocsr()
+            else:
+                csr_dist = csr_dist + batch_coo.tocsr()
+            del batch_coo
+        # Clear immediately
+        distance_results.clear()
 
         # Store in vdj.distances
-        vdj.distances = csr_dist
+        vdj.distances = csr_dist.eliminate_zeros()  # Ensure no explicit zeros stored
         logg.info(
             f"Stored distances as CSR sparse matrix: {csr_dist.shape}, density={csr_dist.nnz / (n_cells**2):.2%}"
         )
@@ -1115,48 +1047,6 @@ def _flatten_and_join_loci(row: dict, locus_columns: list[str]) -> str | None:
         if locus_clones is not None:
             all_clones.extend(locus_clones)
     return "|".join(all_clones) if all_clones else None
-
-
-def _update_distance_matrix(
-    d_mat: np.ndarray,
-    cell_ids: list,
-    cell_id_to_idx: dict,
-    distance_matrix: lil_matrix,
-) -> None:
-    """
-    Update the global distance matrix with distances from a group.
-
-    Sums distances when multiple sequences from the same cell exist.
-
-    Parameters
-    ----------
-    d_mat : np.ndarray
-        Pairwise distance matrix for sequences in this group
-    cell_ids : list
-        Cell IDs corresponding to each sequence
-    cell_id_to_idx : dict
-        Mapping from cell_id to matrix index
-    distance_matrix : lil_matrix
-        Accumulated distance matrix (modified in-place)
-    """
-    n = len(cell_ids)
-
-    for i in range(n):
-        for j in range(i, n):  # Only upper triangle (symmetric)
-            cell_i = cell_ids[i]
-            cell_j = cell_ids[j]
-
-            idx_i = cell_id_to_idx[cell_i]
-            idx_j = cell_id_to_idx[cell_j]
-
-            dist = d_mat[i, j]
-
-            # Sum distance
-            distance_matrix[idx_i, idx_j] += dist
-
-            # Mirror for symmetry (unless diagonal)
-            if idx_i != idx_j:
-                distance_matrix[idx_j, idx_i] += dist
 
 
 def transfer(
@@ -3702,110 +3592,3 @@ def productive_ratio(
         time=start,
         deep=("Updated AnnData: \n" "   'uns', productive_ratio"),
     )
-
-
-class _ZarrDistanceWriter:
-    """
-    Helper class for collecting and writing distance matrix to Zarr.
-
-    Collects distance submatrices in memory, then writes them all to
-    a chunked Zarr array on disk at the end to minimize I/O operations.
-    """
-
-    def __init__(
-        self,
-        zarr_path: str,
-        shape: tuple[int, int],
-        compress: bool = True,
-        chunk_size: int = 1000,
-    ):
-        """
-        Initialize the distance writer.
-
-        Parameters
-        ----------
-        zarr_path : str
-            Path to the Zarr store directory.
-        shape : tuple[int, int]
-            Shape of the full distance matrix (n_cells, n_cells).
-        compress : bool
-            Whether to compress the array.
-        chunk_size : int
-            Chunk size for the Zarr array.
-        """
-        self.zarr_path = zarr_path
-        self.shape = shape
-        self.compress = compress
-        self.chunk_size = chunk_size
-        self._nnz = 0
-
-        # Collect submatrices in memory, write at end
-        self._pending_writes: list[tuple[np.ndarray, np.ndarray]] = []
-
-    def write_submatrix(self, indices: np.ndarray, submatrix: np.ndarray):
-        """
-        Queue a submatrix for writing.
-
-        Parameters
-        ----------
-        indices : np.ndarray
-            Cell indices (both row and column).
-        submatrix : np.ndarray
-            Square distance matrix of shape (len(indices), len(indices)).
-        """
-        if len(indices) == 0:
-            return
-
-        # Store for later batch write
-        self._pending_writes.append((indices.copy(), submatrix.copy()))
-        self._nnz += len(indices) ** 2
-
-    def finalize(self, verbose: bool = True) -> str:
-        """
-        Write all collected submatrices to Zarr and finalize.
-
-        Returns
-        -------
-        str
-            Path to the Zarr array.
-        """
-        # Create Zarr store
-        store = LocalStore(self.zarr_path + "/distance_matrix.zarr")
-        root = open_zarr_group(store, mode="w")
-
-        # Set up compression codec
-        comp = (
-            BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-            if self.compress
-            else None
-        )
-
-        # Create the full distance matrix array (filled with NaN for uncomputed)
-        dist_arr = create_zarr_array(
-            root,
-            "distance_matrix",
-            shape=self.shape,
-            chunks=(self.chunk_size, self.chunk_size),
-            dtype=np.float64,
-            fill_value=np.nan,
-            compressors=[comp] if self.compress else None,
-        )
-
-        # Write all pending submatrices
-        for indices, submatrix in tqdm(
-            self._pending_writes,
-            disable=not verbose,
-            bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-            total=len(self._pending_writes),
-        ):
-            dist_arr[np.ix_(indices, indices)] = submatrix
-
-        # Clear pending writes to free memory
-        self._pending_writes.clear()
-
-        return self.zarr_path + "/distance_matrix.zarr"
-
-    @property
-    def nnz(self) -> int:
-        """Return approximate number of non-zero elements written."""
-        return self._nnz
