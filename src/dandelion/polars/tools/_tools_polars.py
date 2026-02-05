@@ -63,7 +63,7 @@ def find_clones(
     by_alleles: bool = False,
     key_added: str | None = None,
     recalculate_length: bool = True,
-    store_distances: bool = False,    
+    store_distances: bool = False,
     verbose: bool = True,
 ) -> DandelionPolars:
     """
@@ -698,7 +698,7 @@ def find_clones(
     vdj._cache_data()
 
     # Build sparse distance matrix from collected data
-    if store_distances:        
+    if store_distances:
         # Batched COO construction - avoids single large concatenation
         logg.info("Storing distance matrix...")
         # Get matrix dimensions
@@ -734,7 +734,7 @@ def find_clones(
         distance_results.clear()
 
         # Store in vdj.distances
-        vdj.distances = csr_dist.eliminate_zeros()  # Ensure no explicit zeros stored
+        vdj.distances = csr_dist
         logg.info(
             f"Stored distances as CSR sparse matrix: {csr_dist.shape}, density={csr_dist.nnz / (n_cells**2):.2%}"
         )
@@ -746,6 +746,9 @@ def find_clones(
             "Updated Dandelion object: \n"
             "   'data', contig AIRR table\n"
             "   'metadata', cell observations table\n"
+            "   'distances', sparse distance matrix\n"
+            if store_distances
+            else ""
         ),
     )
 
