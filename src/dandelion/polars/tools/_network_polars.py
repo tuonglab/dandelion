@@ -17,7 +17,7 @@ from polyleven import levenshtein
 from scanpy import logging as logg
 from scipy.sparse.csgraph import minimum_spanning_tree as scipy_mst
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from tqdm import tqdm
 from typing import Callable, Literal, TYPE_CHECKING
 
@@ -357,14 +357,8 @@ def generate_network(
         if hasattr(vdj, "distances") and vdj.distances is not None:
             logg.info("Using pre-computed distances from .distances\n")
             total_dist = vdj.distances
-            # Convert sparse matrix to dense if needed for graph computation
-            if hasattr(total_dist, "toarray"):
-                total_dist = total_dist.toarray()
-            if lazy:
-                import dask.array as da
-
-                if not isinstance(total_dist, da.Array):
-                    total_dist = da.from_array(total_dist, chunks="auto")
+            if isinstance(total_dist, np.ndarray):
+                total_dist = csr_matrix(total_dist)
         else:
             # compute total_dist using chosen mode (original uses membership)
             logg.info(
@@ -802,6 +796,9 @@ def generate_network(
                         ).compute()
                     else:
                         actual_weights = total_dist[src_pos, tgt_pos]
+                        # CSR indexing returns np.matrix; flatten to 1-D array
+                        if hasattr(actual_weights, "A1"):
+                            actual_weights = actual_weights.A1
 
                     edge_list_final["weight"] = actual_weights
                     edge_list_final = edge_list_final.reset_index(drop=True)
@@ -844,7 +841,12 @@ def generate_network(
     # return or re-initialize vdj
     germline = getattr(vdj, "germline", None)
     if regenerate:
-        distances = total_dist if lazy else csr_matrix(total_dist)
+        if lazy:
+            distances = total_dist
+        elif isinstance(total_dist, csr_matrix):
+            distances = total_dist
+        else:
+            distances = csr_matrix(total_dist)
         if not lazy:
             distances._index_names = vdj.metadata_names
     else:
@@ -948,6 +950,8 @@ def _create_mst_edges(
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
         submat = total_dist[np.ix_(positions, positions)]
+        if hasattr(submat, "toarray"):
+            submat = submat.toarray()
 
     if submat.shape[0] < 2 or submat.shape[1] < 2:
         return None
@@ -955,7 +959,7 @@ def _create_mst_edges(
     # Compute MST directly using scipy
     values = submat.astype(float)
     shifted = values + 1.0
-    shifted[np.isnan(shifted)] = 0.0
+    np.fill_diagonal(shifted, 0.0)
 
     mst_sparse = scipy_mst(shifted)
     coo = mst_sparse.tocoo()
@@ -1012,6 +1016,8 @@ def _find_zero_dist_edges(
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
         submat = total_dist[np.ix_(positions, positions)]
+        if hasattr(submat, "toarray"):
+            submat = submat.toarray()
 
     # Find all pairs in lower triangle with distance == 0
     n = len(cell_ids)
@@ -1294,7 +1300,7 @@ def calculate_distance_matrix_original(
     metric: Metric,
     pad_to_max: bool = False,
     verbose: bool = True,
-) -> np.ndarray:
+) -> csr_matrix:
     """
     Re-implementation of original membership-based distance calculation.
 
@@ -1313,8 +1319,8 @@ def calculate_distance_matrix_original(
 
     Returns
     -------
-    total_dist : np.ndarray
-        Aggregated distance matrix across all columns; diagonal set to NaN by caller.
+    total_dist : csr_matrix
+        Sparse distance matrix; diagonal is 0 (self-distance).
     """
     # Ensure dat_seq is a DataFrame (not LazyFrame)
     if isinstance(dat_seq, pl.LazyFrame):
@@ -1401,12 +1407,11 @@ def calculate_distance_matrix_original(
         dist_matrices.append(full.values)
 
     if len(dist_matrices) == 0:
-        total_dist = np.zeros((n, n))
-    else:
-        total_dist = np.sum(dist_matrices, axis=0)
+        return csr_matrix((n, n))
 
-    np.fill_diagonal(total_dist, np.nan)
-    return total_dist
+    total_dist = np.sum(dist_matrices, axis=0)
+    np.fill_diagonal(total_dist, 0.0)
+    return csr_matrix(total_dist)
 
 
 def calculate_distance_matrix_original_full(
@@ -1415,7 +1420,7 @@ def calculate_distance_matrix_original_full(
     pad_to_max: bool = False,
     n_cpus: int = 1,
     verbose: bool = True,
-) -> np.ndarray:
+) -> csr_matrix:
     """
     Re-implementation of original membership-based distance calculation.
 
@@ -1434,8 +1439,8 @@ def calculate_distance_matrix_original_full(
 
     Returns
     -------
-    total_dist : np.ndarray
-        Aggregated distance matrix across all columns; diagonal set to NaN by caller.
+    total_dist : csr_matrix
+        Sparse distance matrix; diagonal is 0 (self-distance).
     """
     start_time = time.time()
     n = dat_seq.height
@@ -1482,13 +1487,13 @@ def calculate_distance_matrix_original_full(
 
         total_dist += results
 
-    np.fill_diagonal(total_dist, np.nan)
+    np.fill_diagonal(total_dist, 0.0)
     if verbose:
         end_time = time.time()
         logg.info(
             f"Distances calculated in {end_time - start_time:.2f} seconds"
         )
-    return total_dist
+    return csr_matrix(total_dist)
 
 
 def calculate_distance_matrix_long(
@@ -1498,7 +1503,7 @@ def calculate_distance_matrix_long(
     pad_to_max: bool = False,
     n_cpus: int = 1,
     verbose: bool = True,
-) -> np.ndarray:
+) -> csr_matrix:
     """
     Re-implementation of original membership-based distance calculation but using concatenated sequences
     using a long separator.
@@ -1523,8 +1528,8 @@ def calculate_distance_matrix_long(
 
     Returns
     -------
-    total_dist : np.ndarray (n x n)
-        Aggregated distance matrix across all columns; diagonal set to NaN by caller.
+    total_dist : csr_matrix (n x n)
+        Sparse distance matrix; diagonal is 0 (self-distance).
     """
     start_time = time.time()
 
@@ -1562,18 +1567,22 @@ def calculate_distance_matrix_long(
         sep="#",
     )
 
-    # Step 3: initialize distance matrix
+    # Step 3: initialize
     n = dat_seq_clean.height
     cell_id_list = dat_seq_clean["cell_id"].to_list()
     cell_id_to_idx = {cell_id: idx for idx, cell_id in enumerate(cell_id_list)}
-    total_dist = np.zeros((n, n))
 
     if membership is None:
-        # Step 4: compute full distance matrix at once using vectorized metric
+        # Full mode: dense computation, convert to CSR at end
         results = metric.compute_vectorized(prepared_seqs, n_cpus=n_cpus)
-        total_dist += results
+        np.fill_diagonal(results, 0.0)
+        total_dist = csr_matrix(results)
     else:
-        # Step 4: join with membership and partition by membership_id
+        # Clone mode: sparse COO accumulation — no dense N×N allocation
+        all_rows: list[np.ndarray] = []
+        all_cols: list[np.ndarray] = []
+        all_vals: list[np.ndarray] = []
+
         dat_seq_with_membership = dat_seq_clean.join(
             membership, on="cell_id", how="inner"
         )
@@ -1590,7 +1599,9 @@ def calculate_distance_matrix_long(
                 tmp_cell_ids = group_df["cell_id"].to_list()
 
                 # Map cell_ids to indices
-                indices = [cell_id_to_idx[cid] for cid in tmp_cell_ids]
+                indices = np.array(
+                    [cell_id_to_idx[cid] for cid in tmp_cell_ids]
+                )
 
                 # Extract prepared sequences for this clone
                 clone_seqs = [prepared_seqs[i] for i in indices]
@@ -1610,11 +1621,37 @@ def calculate_distance_matrix_long(
                 unique_indices = np.array(
                     [seq_to_unique_idx[seq] for seq in clone_seqs]
                 )
-                d_mat_tmp = d_mat_unique[np.ix_(unique_indices, unique_indices)]
+                d_mat_tmp = d_mat_unique[
+                    np.ix_(unique_indices, unique_indices)
+                ]
 
-                total_dist[np.ix_(indices, indices)] += d_mat_tmp
+                # Collect COO entries (exclude diagonal — self-distance is 0)
+                k = len(indices)
+                row_global = np.repeat(indices, k)
+                col_global = np.tile(indices, k)
+                vals_flat = d_mat_tmp.ravel()
+                off_diag = row_global != col_global
 
-    np.fill_diagonal(total_dist, np.nan)
+                all_rows.append(row_global[off_diag])
+                all_cols.append(col_global[off_diag])
+                all_vals.append(vals_flat[off_diag])
+
+        if all_rows:
+            total_dist = csr_matrix(
+                coo_matrix(
+                    (
+                        np.concatenate(all_vals),
+                        (
+                            np.concatenate(all_rows),
+                            np.concatenate(all_cols),
+                        ),
+                    ),
+                    shape=(n, n),
+                )
+            )
+        else:
+            total_dist = csr_matrix((n, n))
+
     if verbose:
         end_time = time.time()
         logg.info(
