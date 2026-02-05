@@ -1384,9 +1384,7 @@ class DandelionPolars:
                 vdj_col = f"_{col}_VDJ_list"
                 if vdj_col in temp_result.columns:
                     vdj_series = temp_result[vdj_col]
-                    max_vdj = max(
-                        [len(x) if x is not None else 0 for x in vdj_series]
-                    )
+                    max_vdj = vdj_series.list.len().max() or 0
                     if max_vdj > 0:
                         for i in range(max_vdj):
                             col_name = f"{key}_VDJ_{i+1}"
@@ -1399,9 +1397,7 @@ class DandelionPolars:
                     vj_col = f"_{col}_VJ_list"
                     if vj_col in temp_result.columns:
                         vj_series = temp_result[vj_col]
-                        max_vj = max(
-                            [len(x) if x is not None else 0 for x in vj_series]
-                        )
+                        max_vj = vj_series.list.len().max() or 0
                         if max_vj > 0:
                             for i in range(max_vj):
                                 col_name = f"{key}_VJ_{i+1}"

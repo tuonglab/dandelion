@@ -15,7 +15,10 @@ from joblib import Parallel, delayed
 from pathlib import Path
 from polyleven import levenshtein
 from scanpy import logging as logg
-from scipy.sparse.csgraph import minimum_spanning_tree as scipy_mst
+from scipy.sparse.csgraph import (
+    connected_components as scipy_cc,
+    minimum_spanning_tree as scipy_mst,
+)
 
 from scipy.sparse import coo_matrix, csr_matrix
 from tqdm import tqdm
@@ -43,7 +46,10 @@ def _merge_overlapping_clones(
     membership: pl.DataFrame, clone_col: str
 ) -> pl.DataFrame:
     """
-    Merge overlapping clones into single membership groups using Polars.
+    Merge overlapping clones into single membership groups.
+
+    Uses scipy connected_components on a bipartite cell-clone graph for O(n)
+    performance instead of iterative DataFrame joins.
 
     For cells with multiple clones ("|"-separated), this finds all cells that share
     any clone and assigns them to the same group.
@@ -83,37 +89,53 @@ def _merge_overlapping_clones(
             }
         )
 
-    # Assign initial group_id as minimum clone per cell
-    cell_groups = exploded.group_by("cell_id").agg(
-        pl.col("_clone").min().alias("group_id")
+    # Encode cells and clones as integer indices
+    cell_ids = exploded["cell_id"].unique().sort()
+    clone_ids = exploded["_clone"].unique().sort()
+    n_cells = cell_ids.len()
+    n_clones = clone_ids.len()
+
+    # Build lookup dicts: cell/clone string → integer index
+    cell_to_idx = dict(
+        zip(cell_ids.to_list(), range(n_cells))
+    )
+    clone_to_idx = dict(
+        zip(clone_ids.to_list(), range(n_clones))
     )
 
-    # Iteratively propagate minimum group_id through shared clones
-    for _ in range(100):  # Max iterations
-        # Get minimum group_id for each clone
-        clone_min_group = (
-            exploded.join(cell_groups, on="cell_id")
-            .group_by("_clone")
-            .agg(pl.col("group_id").min().alias("new_group"))
-        )
+    # Map exploded pairs to integer indices
+    cell_indices = np.array(
+        [cell_to_idx[c] for c in exploded["cell_id"].to_list()]
+    )
+    clone_indices = np.array(
+        [clone_to_idx[c] + n_cells for c in exploded["_clone"].to_list()]
+    )
 
-        # Update cell group_id to minimum of all its clones' groups
-        new_cell_groups = (
-            exploded.join(clone_min_group, on="_clone")
-            .group_by("cell_id")
-            .agg(pl.col("new_group").min().alias("group_id"))
-        )
+    # Build bipartite adjacency: cells [0, n_cells) ↔ clones [n_cells, n_cells+n_clones)
+    n_total = n_cells + n_clones
+    ones = np.ones(len(cell_indices), dtype=np.float32)
+    adj = csr_matrix(
+        (ones, (cell_indices, clone_indices)), shape=(n_total, n_total)
+    )
+    adj = adj + adj.T  # make symmetric
 
-        # Check for convergence
-        if new_cell_groups["group_id"].equals(cell_groups["group_id"]):
-            break
-        cell_groups = new_cell_groups
+    # Single-pass connected components
+    _, labels = scipy_cc(adj, directed=False)
 
-    # Join back to original membership
-    result = (
-        membership.select("cell_id")
-        .join(cell_groups, on="cell_id", how="left")
-        .rename({"group_id": "membership_id"})
+    # Extract labels for cell nodes only (first n_cells entries)
+    cell_labels = labels[:n_cells]
+    cell_id_list = cell_ids.to_list()
+
+    cell_groups = pl.DataFrame(
+        {
+            "cell_id": cell_id_list,
+            "membership_id": [str(lbl) for lbl in cell_labels],
+        }
+    )
+
+    # Join back to original membership order
+    result = membership.select("cell_id").join(
+        cell_groups, on="cell_id", how="left"
     )
 
     return result
@@ -332,20 +354,16 @@ def generate_network(
         # Left join to preserve metadata order, missing cells get null sequences
         dat_seq = meta_cell_ids.join(dat_seq, on="cell_id", how="left")
 
-        # Build a mapping of cell_id to row position using explicit row indexing
-        # Now positions match metadata indices
-        dat_seq_indexed = (
+        # Build a position lookup table (cell_id → row index)
+        # Positions match metadata indices
+        pos_map = (
             dat_seq.with_row_index("_row_pos")
             if isinstance(dat_seq, pl.DataFrame)
             else dat_seq.lazy()
             .with_row_index("_row_pos")
             .collect(engine="streaming")
-        )
-        cell_id_to_pos = dict(
-            zip(
-                dat_seq_indexed["cell_id"].to_list(),
-                dat_seq_indexed["_row_pos"].to_list(),
-            )
+        ).select(
+            ["cell_id", pl.col("_row_pos").cast(pl.Int64).alias("pos")]
         )
 
         if compute_graph or compute_layout or distance_mode == "clone":
@@ -518,18 +536,13 @@ def generate_network(
                 pl.col("_clone_list").list.len().gt(1).alias("_is_overlap")
             )
 
-            # Explode and add positions
+            # Explode and add positions via join (avoids slow Python dict lookup)
             meta_exploded = (
                 meta_df_split.select(["cell_id", "_clone_list"])
                 .explode("_clone_list")
                 .filter(pl.col("_clone_list") != "None")
                 .rename({"_clone_list": "clone_id"})
-                .with_columns(
-                    pl.col("cell_id")
-                    .replace(cell_id_to_pos)
-                    .cast(pl.Int64)
-                    .alias("pos")
-                )
+                .join(pos_map, on="cell_id", how="left")
             )
 
             # Get unique overlap groups with their cells
