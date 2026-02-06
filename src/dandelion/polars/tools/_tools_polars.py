@@ -1501,18 +1501,18 @@ def clone_view(
     if mode is None:
         # use the other key directly
         if connectivities_key in adata.obsp:
-            adata.obsp["connectivities"] = adata.obsp[connectivities_key].copy()
+            adata.obsp["connectivities"] = adata.obsp[connectivities_key]
         else:
             raise KeyError(f"{connectivities_key} not found in adata.obsp")
 
         if distances_key in adata.obsp:
-            adata.obsp["distances"] = adata.obsp[distances_key].copy()
+            adata.obsp["distances"] = adata.obsp[distances_key]
         else:
             raise KeyError(f"{distances_key} not found in adata.obsp")
 
         if embedding_key is not None:
             if embedding_key in adata.obsm:
-                adata.obsm["X_vdj"] = adata.obsm[embedding_key].copy()
+                adata.obsm["X_vdj"] = adata.obsm[embedding_key]
             else:
                 raise KeyError(f"{embedding_key} not found in adata.obsm")
     else:
@@ -1526,12 +1526,12 @@ def clone_view(
             dist_key = f"vdj_distances_{mode}"
             neighbors_key = None
             emb_key = f"X_vdj_{mode}" if mode != "full" else None
-        adata.obsp["connectivities"] = adata.obsp[conn_key].copy()
-        adata.obsp["distances"] = adata.obsp[dist_key].copy()
+        adata.obsp["connectivities"] = adata.obsp[conn_key]
+        adata.obsp["distances"] = adata.obsp[dist_key]
         if emb_key is not None:
-            adata.obsm["X_vdj"] = adata.obsm[emb_key].copy()
+            adata.obsm["X_vdj"] = adata.obsm[emb_key]
         if neighbors_key is not None:
-            adata.uns["neighbors"] = adata.uns[neighbors_key].copy()
+            adata.uns["neighbors"] = adata.uns[neighbors_key]
         else:
             adata.uns["neighbors"] = {
                 "connectivities_key": "connectivities",
