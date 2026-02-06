@@ -20,7 +20,7 @@ def generate_layout(
     verbose: bool = True,
     compute_layout: bool = True,
     layout_method: Literal[
-        "mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"
+        "mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"
     ] = "mod_fr2",
     expanded_only: bool = False,
     graphs: tuple[nx.Graph, nx.Graph] = None,
@@ -42,7 +42,7 @@ def generate_layout(
         whether or not to print status
     compute_layout : bool, optional
         whether or not to compute layout.
-    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"], optional
+    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"], optional
         layout method.
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clones.
@@ -123,6 +123,28 @@ def generate_layout(
             if verbose:
                 logg.info("Computing expanded network layout")
             pos_ = _fruchterman_reingold_layout_gpu(G_, weight=weight, **kwargs)
+        elif layout_method == "mod_fr_bh":
+            if not expanded_only:
+                if verbose:
+                    logg.info("Computing network layout (Barnes-Hut CPU)")
+                pos = _fruchterman_reingold_layout_bh(G, weight=weight, **kwargs)
+            else:
+                pos = None
+            if verbose:
+                logg.info("Computing expanded network layout (Barnes-Hut CPU)")
+            pos_ = _fruchterman_reingold_layout_bh(G_, weight=weight, **kwargs)
+        elif layout_method == "mod_fr_bh_gpu":
+            if not expanded_only:
+                if verbose:
+                    logg.info("Computing network layout (Barnes-Hut GPU)")
+                pos = _fruchterman_reingold_layout_bh_gpu(
+                    G, weight=weight, **kwargs
+                )
+            else:
+                pos = None
+            if verbose:
+                logg.info("Computing expanded network layout (Barnes-Hut GPU)")
+            pos_ = _fruchterman_reingold_layout_bh_gpu(G_, weight=weight, **kwargs)
         elif layout_method == "sfdp":
             try:
                 from graph_tool.all import sfdp_layout
@@ -950,6 +972,1214 @@ def _fruchterman_reingold_torch_tiled(
             break
 
     return pos_t.cpu().numpy()
+
+
+# ============================================================================
+# Barnes-Hut O(N log N) implementations for scalable force-directed layout
+# ============================================================================
+
+_numba_bh_kernels_cache = None
+
+
+def _get_numba_bh_kernels():
+    """Lazily compile Numba kernels for Barnes-Hut algorithm."""
+    global _numba_bh_kernels_cache
+    if _numba_bh_kernels_cache is not None:
+        return _numba_bh_kernels_cache
+
+    try:
+        from numba import njit, prange
+    except ImportError:
+        raise ImportError(
+            "Numba is required for Barnes-Hut layout. "
+            "Install it with: pip install numba"
+        )
+
+    @njit(cache=True)
+    def _build_quadtree(
+        pos,
+        nnodes,
+        center_x,
+        center_y,
+        half_size,
+        max_depth,
+        # Output arrays (pre-allocated)
+        node_center_x,
+        node_center_y,
+        node_half_size,
+        node_mass,
+        node_com_x,
+        node_com_y,
+        node_children,  # (max_nodes, 4) - indices of children, -1 if none
+        node_is_leaf,
+        node_particle,  # particle index if leaf with single particle, -1 otherwise
+    ):
+        """Build quadtree from positions using flat arrays.
+
+        Returns the number of nodes used.
+        """
+        # Initialize root node
+        node_center_x[0] = center_x
+        node_center_y[0] = center_y
+        node_half_size[0] = half_size
+        node_mass[0] = 0.0
+        node_com_x[0] = 0.0
+        node_com_y[0] = 0.0
+        node_is_leaf[0] = True
+        node_particle[0] = -1
+        for c in range(4):
+            node_children[0, c] = -1
+
+        next_node = 1  # Next available node index
+
+        # Insert each particle
+        for p in range(nnodes):
+            px, py = pos[p, 0], pos[p, 1]
+
+            # Start at root
+            current = 0
+            depth = 0
+
+            while depth < max_depth:
+                # Update center of mass
+                old_mass = node_mass[current]
+                node_mass[current] = old_mass + 1.0
+                if old_mass == 0:
+                    node_com_x[current] = px
+                    node_com_y[current] = py
+                else:
+                    node_com_x[current] = (
+                        node_com_x[current] * old_mass + px
+                    ) / (old_mass + 1.0)
+                    node_com_y[current] = (
+                        node_com_y[current] * old_mass + py
+                    ) / (old_mass + 1.0)
+
+                if node_is_leaf[current]:
+                    if node_particle[current] == -1:
+                        # Empty leaf - just add particle
+                        node_particle[current] = p
+                        break
+                    else:
+                        # Leaf with existing particle - need to subdivide
+                        old_p = node_particle[current]
+                        old_px, old_py = pos[old_p, 0], pos[old_p, 1]
+
+                        # Create 4 children
+                        h = node_half_size[current] / 2.0
+                        cx, cy = node_center_x[current], node_center_y[current]
+
+                        for c in range(4):
+                            child_idx = next_node + c
+                            # Quadrant centers: 0=SW, 1=SE, 2=NW, 3=NE
+                            if c == 0:
+                                node_center_x[child_idx] = cx - h
+                                node_center_y[child_idx] = cy - h
+                            elif c == 1:
+                                node_center_x[child_idx] = cx + h
+                                node_center_y[child_idx] = cy - h
+                            elif c == 2:
+                                node_center_x[child_idx] = cx - h
+                                node_center_y[child_idx] = cy + h
+                            else:
+                                node_center_x[child_idx] = cx + h
+                                node_center_y[child_idx] = cy + h
+
+                            node_half_size[child_idx] = h
+                            node_mass[child_idx] = 0.0
+                            node_com_x[child_idx] = 0.0
+                            node_com_y[child_idx] = 0.0
+                            node_is_leaf[child_idx] = True
+                            node_particle[child_idx] = -1
+                            for cc in range(4):
+                                node_children[child_idx, cc] = -1
+                            node_children[current, c] = child_idx
+
+                        next_node += 4
+                        node_is_leaf[current] = False
+                        node_particle[current] = -1
+
+                        # Re-insert old particle into appropriate child
+                        old_quad = 0
+                        if old_px >= cx:
+                            old_quad += 1
+                        if old_py >= cy:
+                            old_quad += 2
+                        old_child = node_children[current, old_quad]
+                        node_mass[old_child] = 1.0
+                        node_com_x[old_child] = old_px
+                        node_com_y[old_child] = old_py
+                        node_particle[old_child] = old_p
+
+                        # Continue with current particle
+                        # (fall through to find quadrant below)
+
+                # Find quadrant for current particle
+                cx, cy = node_center_x[current], node_center_y[current]
+                quad = 0
+                if px >= cx:
+                    quad += 1
+                if py >= cy:
+                    quad += 2
+
+                child = node_children[current, quad]
+                if child == -1:
+                    # No child yet - shouldn't happen after subdivision
+                    break
+                current = child
+                depth += 1
+
+        return next_node
+
+    @njit(parallel=True, cache=True, fastmath=True)
+    def _barnes_hut_forces(
+        pos,
+        nnodes,
+        theta,
+        k2,
+        # Tree structure
+        num_tree_nodes,
+        node_center_x,
+        node_center_y,
+        node_half_size,
+        node_mass,
+        node_com_x,
+        node_com_y,
+        node_children,
+        node_is_leaf,
+        # Output
+        displacement,
+    ):
+        """Compute repulsive forces using Barnes-Hut approximation.
+
+        For each particle, traverse tree and use center-of-mass approximation
+        when cell is far enough (size/distance < theta).
+        """
+        theta_sq = theta * theta
+
+        for i in prange(nnodes):
+            px, py = pos[i, 0], pos[i, 1]
+            fx, fy = 0.0, 0.0
+
+            # Stack-based tree traversal (avoid recursion)
+            stack = np.zeros(64, dtype=np.int64)
+            stack[0] = 0  # Start at root
+            stack_ptr = 1
+
+            while stack_ptr > 0:
+                stack_ptr -= 1
+                node = stack[stack_ptr]
+
+                if node_mass[node] == 0:
+                    continue
+
+                # Vector from node's COM to particle
+                dx = px - node_com_x[node]
+                dy = py - node_com_y[node]
+                dist_sq = dx * dx + dy * dy
+
+                if dist_sq < 1e-9:
+                    continue
+
+                # Barnes-Hut criterion: size²/dist² < theta²
+                size_sq = (2.0 * node_half_size[node]) ** 2
+
+                if node_is_leaf[node] or size_sq < theta_sq * dist_sq:
+                    # Use this node's center of mass
+                    # Repulsive force: k²/d² in direction away from COM
+                    force = k2 * node_mass[node] / dist_sq
+                    dist = np.sqrt(dist_sq)
+                    fx += force * dx / dist
+                    fy += force * dy / dist
+                else:
+                    # Traverse children
+                    for c in range(4):
+                        child = node_children[node, c]
+                        if child != -1 and stack_ptr < 64:
+                            stack[stack_ptr] = child
+                            stack_ptr += 1
+
+            displacement[i, 0] = fx
+            displacement[i, 1] = fy
+
+    @njit(parallel=True, cache=True, fastmath=True)
+    def _attractive_forces_sparse(
+        pos,
+        A_data,
+        A_indices,
+        A_indptr,
+        nnodes,
+        inv_k,
+        displacement,
+    ):
+        """Add attractive forces from sparse edges."""
+        for i in prange(nnodes):
+            for idx in range(A_indptr[i], A_indptr[i + 1]):
+                j = A_indices[idx]
+                w = A_data[idx]
+
+                dx = pos[j, 0] - pos[i, 0]
+                dy = pos[j, 1] - pos[i, 1]
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < 1e-9:
+                    continue
+
+                dist = np.sqrt(dist_sq)
+                # Attractive force: w * d / k (toward neighbor)
+                force = w * dist * inv_k
+                displacement[i, 0] += force * dx / dist
+                displacement[i, 1] += force * dy / dist
+
+    _numba_bh_kernels_cache = (
+        _build_quadtree,
+        _barnes_hut_forces,
+        _attractive_forces_sparse,
+    )
+    return _numba_bh_kernels_cache
+
+
+@random_state(7)
+def _fruchterman_reingold_barnes_hut_numba(
+    A,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    dim=2,
+    seed=None,
+    theta=0.8,
+):
+    """Barnes-Hut accelerated Fruchterman-Reingold (CPU/Numba).
+
+    O(N log N) complexity for repulsive forces using quadtree approximation.
+    Suitable for graphs with 100K-1M+ nodes.
+
+    Parameters
+    ----------
+    theta : float, optional
+        Barnes-Hut opening angle. Smaller = more accurate but slower.
+        Default 0.8. Range: 0.3 (accurate) to 1.2 (fast).
+    """
+    from scipy.sparse import csr_matrix, issparse
+
+    if dim != 2:
+        raise ValueError("Barnes-Hut currently only supports 2D layouts")
+
+    try:
+        nnodes, _ = A.shape
+    except AttributeError as e:
+        msg = "fruchterman_reingold() takes an adjacency matrix as input"
+        raise nx.NetworkXError(msg) from e
+
+    # Convert to CSR for efficient row access
+    if issparse(A):
+        A_csr = A.tocsr().astype(np.float32)
+    else:
+        A_csr = csr_matrix(A.astype(np.float32))
+
+    if pos is None:
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
+    else:
+        pos = pos.astype(np.float32)
+
+    if k is None:
+        k = np.sqrt(1.0 / nnodes)
+
+    k2 = k * k
+    inv_k = 1.0 / k
+    gravity = 1.0 / (k * np.sqrt(float(nnodes)))
+
+    t = max(float(pos[:, d].max() - pos[:, d].min()) for d in range(dim)) * 0.1
+    dt = t / float(iterations + 1)
+
+    fixed_mask = np.zeros(nnodes, dtype=np.bool_)
+    if fixed is not None:
+        fixed_mask[np.asarray(fixed)] = True
+
+    # Get compiled kernels
+    _build_quadtree, _barnes_hut_forces, _attractive_forces_sparse = (
+        _get_numba_bh_kernels()
+    )
+
+    # Pre-allocate tree arrays (max 4*N nodes should be enough)
+    max_tree_nodes = 4 * nnodes + 4
+    node_center_x = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_center_y = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_half_size = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_mass = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_com_x = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_com_y = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_children = np.full((max_tree_nodes, 4), -1, dtype=np.int64)
+    node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
+    node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
+
+    displacement = np.zeros((nnodes, dim), dtype=np.float32)
+
+    # CSR arrays
+    A_data = np.ascontiguousarray(A_csr.data)
+    A_indices = np.ascontiguousarray(A_csr.indices.astype(np.int64))
+    A_indptr = np.ascontiguousarray(A_csr.indptr.astype(np.int64))
+
+    max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
+
+    for _iter in range(iterations):
+        # Reset tree
+        node_mass[:] = 0.0
+        node_is_leaf[:] = True
+        node_particle[:] = -1
+        node_children[:] = -1
+
+        # Compute bounding box
+        min_x, min_y = pos[:, 0].min(), pos[:, 1].min()
+        max_x, max_y = pos[:, 0].max(), pos[:, 1].max()
+        margin = max(max_x - min_x, max_y - min_y) * 0.1 + 1e-6
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
+
+        # Build quadtree
+        num_tree_nodes = _build_quadtree(
+            pos.astype(np.float64),
+            nnodes,
+            center_x,
+            center_y,
+            half_size,
+            max_depth,
+            node_center_x,
+            node_center_y,
+            node_half_size,
+            node_mass,
+            node_com_x,
+            node_com_y,
+            node_children,
+            node_is_leaf,
+            node_particle,
+        )
+
+        # Compute repulsive forces via Barnes-Hut
+        displacement[:] = 0.0
+        _barnes_hut_forces(
+            pos.astype(np.float64),
+            nnodes,
+            theta,
+            k2,
+            num_tree_nodes,
+            node_center_x,
+            node_center_y,
+            node_half_size,
+            node_mass,
+            node_com_x,
+            node_com_y,
+            node_children,
+            node_is_leaf,
+            displacement,
+        )
+
+        # Add attractive forces
+        _attractive_forces_sparse(
+            pos, A_data, A_indices, A_indptr, nnodes, inv_k, displacement
+        )
+
+        # Gravity toward center
+        displacement[:, 0] -= pos[:, 0] * gravity
+        displacement[:, 1] -= pos[:, 1] * gravity
+
+        # Update positions
+        length = np.sqrt((displacement**2).sum(axis=1))
+        length = np.where(length < 0.01, 0.1, length)
+        delta_pos = displacement * (t / length)[:, np.newaxis]
+
+        if fixed is not None:
+            delta_pos[fixed_mask] = 0.0
+
+        pos += delta_pos.astype(np.float32)
+        t -= dt
+
+        err = np.sqrt((delta_pos**2).sum()) / nnodes
+        if err < threshold:
+            break
+
+    return pos
+
+
+# ============================================================================
+# Numba CUDA Barnes-Hut for GPU acceleration
+# ============================================================================
+
+_numba_cuda_bh_kernels_cache = None
+
+
+def _get_numba_cuda_bh_kernels():
+    """Lazily compile Numba CUDA kernels for Barnes-Hut algorithm."""
+    global _numba_cuda_bh_kernels_cache
+    if _numba_cuda_bh_kernels_cache is not None:
+        return _numba_cuda_bh_kernels_cache
+
+    try:
+        from numba import cuda
+        import math
+    except ImportError:
+        raise ImportError(
+            "Numba with CUDA support is required. "
+            "Install it with: pip install numba"
+        )
+
+    # Check if CUDA is available
+    if not cuda.is_available():
+        raise RuntimeError(
+            "CUDA is not available. Numba CUDA requires an NVIDIA GPU "
+            "with CUDA toolkit installed."
+        )
+
+    @cuda.jit
+    def _barnes_hut_forces_cuda(
+        pos,
+        nnodes,
+        theta_sq,
+        k2,
+        num_tree_nodes,
+        node_half_size,
+        node_mass,
+        node_com_x,
+        node_com_y,
+        node_children,
+        node_is_leaf,
+        displacement,
+    ):
+        """CUDA kernel for Barnes-Hut repulsive forces.
+
+        Each thread handles one particle, traversing the tree with a local stack.
+        """
+        i = cuda.grid(1)
+        if i >= nnodes:
+            return
+
+        px = pos[i, 0]
+        py = pos[i, 1]
+        fx = 0.0
+        fy = 0.0
+
+        # Local stack for tree traversal (in thread-local registers)
+        # Max depth is log2(N) + constant, 64 is plenty
+        stack = cuda.local.array(64, dtype=np.int64)
+        stack[0] = 0  # Start at root
+        stack_ptr = 1
+
+        while stack_ptr > 0:
+            stack_ptr -= 1
+            node = stack[stack_ptr]
+
+            if node < 0 or node >= num_tree_nodes:
+                continue
+
+            mass = node_mass[node]
+            if mass == 0:
+                continue
+
+            # Vector from node's COM to particle
+            dx = px - node_com_x[node]
+            dy = py - node_com_y[node]
+            dist_sq = dx * dx + dy * dy
+
+            if dist_sq < 1e-9:
+                continue
+
+            # Barnes-Hut criterion: size²/dist² < theta²
+            size = 2.0 * node_half_size[node]
+            size_sq = size * size
+
+            if node_is_leaf[node] or size_sq < theta_sq * dist_sq:
+                # Use this node's center of mass
+                force = k2 * mass / dist_sq
+                dist = math.sqrt(dist_sq)
+                fx += force * dx / dist
+                fy += force * dy / dist
+            else:
+                # Traverse children
+                for c in range(4):
+                    child = node_children[node, c]
+                    if child >= 0 and stack_ptr < 64:
+                        stack[stack_ptr] = child
+                        stack_ptr += 1
+
+        displacement[i, 0] = fx
+        displacement[i, 1] = fy
+
+    @cuda.jit
+    def _attractive_forces_cuda(
+        pos,
+        edge_src,
+        edge_dst,
+        edge_weight,
+        num_edges,
+        inv_k,
+        displacement,
+    ):
+        """CUDA kernel for attractive forces via edge list (COO format)."""
+        e = cuda.grid(1)
+        if e >= num_edges:
+            return
+
+        i = edge_src[e]
+        j = edge_dst[e]
+        w = edge_weight[e]
+
+        dx = pos[j, 0] - pos[i, 0]
+        dy = pos[j, 1] - pos[i, 1]
+        dist_sq = dx * dx + dy * dy
+
+        if dist_sq < 1e-9:
+            return
+
+        dist = math.sqrt(dist_sq)
+        force = w * dist * inv_k
+
+        # Atomic add to handle multiple edges per node
+        cuda.atomic.add(displacement, (i, 0), force * dx / dist)
+        cuda.atomic.add(displacement, (i, 1), force * dy / dist)
+
+    @cuda.jit
+    def _gravity_and_update_cuda(
+        pos,
+        displacement,
+        gravity,
+        t,
+        fixed_mask,
+        nnodes,
+    ):
+        """CUDA kernel for gravity and position update."""
+        i = cuda.grid(1)
+        if i >= nnodes:
+            return
+
+        if fixed_mask[i]:
+            return
+
+        # Apply gravity
+        dx = displacement[i, 0] - pos[i, 0] * gravity
+        dy = displacement[i, 1] - pos[i, 1] * gravity
+
+        # Limit displacement by temperature
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 0.01:
+            length = 0.01
+
+        scale = t / length
+        pos[i, 0] += dx * scale
+        pos[i, 1] += dy * scale
+
+    _numba_cuda_bh_kernels_cache = (
+        _barnes_hut_forces_cuda,
+        _attractive_forces_cuda,
+        _gravity_and_update_cuda,
+        cuda,
+    )
+    return _numba_cuda_bh_kernels_cache
+
+
+@random_state(8)
+def _fruchterman_reingold_barnes_hut_cuda(
+    A,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    dim=2,
+    seed=None,
+    theta=0.8,
+):
+    """Barnes-Hut accelerated Fruchterman-Reingold (GPU/Numba CUDA).
+
+    O(N log N) complexity for repulsive forces using quadtree approximation.
+    Tree is built on CPU, forces computed on GPU with CUDA kernels.
+
+    Much faster than PyTorch version due to native GPU code compilation.
+
+    Parameters
+    ----------
+    theta : float, optional
+        Barnes-Hut opening angle. Smaller = more accurate but slower.
+        Default 0.8. Range: 0.3 (accurate) to 1.2 (fast).
+    """
+    from scipy.sparse import coo_matrix, issparse
+
+    if dim != 2:
+        raise ValueError("Barnes-Hut currently only supports 2D layouts")
+
+    try:
+        nnodes, _ = A.shape
+    except AttributeError as e:
+        msg = "fruchterman_reingold() takes an adjacency matrix as input"
+        raise nx.NetworkXError(msg) from e
+
+    # Get CUDA kernels (also validates CUDA availability)
+    _barnes_hut_forces_cuda, _attractive_forces_cuda, _gravity_and_update_cuda, cuda = (
+        _get_numba_cuda_bh_kernels()
+    )
+
+    # Get CPU tree-building kernel
+    _build_quadtree, _, _ = _get_numba_bh_kernels()
+
+    # Convert to COO for edges
+    if issparse(A):
+        A_coo = A.tocoo().astype(np.float32)
+    else:
+        A_coo = coo_matrix(A.astype(np.float32))
+
+    if pos is None:
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float64)
+    else:
+        pos = pos.astype(np.float64)
+
+    if k is None:
+        k = np.sqrt(1.0 / nnodes)
+
+    k2 = k * k
+    inv_k = 1.0 / k
+    gravity = 1.0 / (k * np.sqrt(float(nnodes)))
+    theta_sq = theta * theta
+
+    t = max(float(pos[:, d].max() - pos[:, d].min()) for d in range(dim)) * 0.1
+    dt = t / float(iterations + 1)
+
+    fixed_mask = np.zeros(nnodes, dtype=np.bool_)
+    if fixed is not None:
+        fixed_mask[np.asarray(fixed)] = True
+
+    # Pre-allocate tree arrays (CPU)
+    max_tree_nodes = 4 * nnodes + 4
+    node_center_x = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_center_y = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_half_size = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_mass = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_com_x = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_com_y = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_children = np.full((max_tree_nodes, 4), -1, dtype=np.int64)
+    node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
+    node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
+
+    max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
+
+    # Allocate GPU arrays that persist across iterations
+    d_pos = cuda.to_device(pos)
+    d_displacement = cuda.device_array((nnodes, dim), dtype=np.float64)
+    d_fixed_mask = cuda.to_device(fixed_mask)
+
+    # Edge data (constant)
+    d_edge_src = cuda.to_device(A_coo.row.astype(np.int64))
+    d_edge_dst = cuda.to_device(A_coo.col.astype(np.int64))
+    d_edge_weight = cuda.to_device(A_coo.data.astype(np.float64))
+    num_edges = len(A_coo.data)
+
+    # CUDA launch configuration
+    threads_per_block = 256
+    blocks_nodes = (nnodes + threads_per_block - 1) // threads_per_block
+    blocks_edges = (num_edges + threads_per_block - 1) // threads_per_block
+
+    for _iter in range(iterations):
+        # Copy positions back to CPU for tree building
+        pos = d_pos.copy_to_host()
+
+        # Reset tree
+        node_mass[:] = 0.0
+        node_is_leaf[:] = True
+        node_particle[:] = -1
+        node_children[:] = -1
+
+        # Compute bounding box
+        min_x, min_y = pos[:, 0].min(), pos[:, 1].min()
+        max_x, max_y = pos[:, 0].max(), pos[:, 1].max()
+        margin = max(max_x - min_x, max_y - min_y) * 0.1 + 1e-6
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
+
+        # Build quadtree on CPU
+        num_tree_nodes = _build_quadtree(
+            pos,
+            nnodes,
+            center_x,
+            center_y,
+            half_size,
+            max_depth,
+            node_center_x,
+            node_center_y,
+            node_half_size,
+            node_mass,
+            node_com_x,
+            node_com_y,
+            node_children,
+            node_is_leaf,
+            node_particle,
+        )
+
+        # Transfer tree to GPU
+        d_node_half_size = cuda.to_device(node_half_size[:num_tree_nodes])
+        d_node_mass = cuda.to_device(node_mass[:num_tree_nodes])
+        d_node_com_x = cuda.to_device(node_com_x[:num_tree_nodes])
+        d_node_com_y = cuda.to_device(node_com_y[:num_tree_nodes])
+        d_node_children = cuda.to_device(node_children[:num_tree_nodes])
+        d_node_is_leaf = cuda.to_device(node_is_leaf[:num_tree_nodes])
+
+        # Reset displacement
+        d_displacement[:] = 0.0
+
+        # Compute repulsive forces on GPU
+        _barnes_hut_forces_cuda[blocks_nodes, threads_per_block](
+            d_pos,
+            nnodes,
+            theta_sq,
+            k2,
+            num_tree_nodes,
+            d_node_half_size,
+            d_node_mass,
+            d_node_com_x,
+            d_node_com_y,
+            d_node_children,
+            d_node_is_leaf,
+            d_displacement,
+        )
+
+        # Compute attractive forces on GPU
+        if num_edges > 0:
+            _attractive_forces_cuda[blocks_edges, threads_per_block](
+                d_pos,
+                d_edge_src,
+                d_edge_dst,
+                d_edge_weight,
+                num_edges,
+                inv_k,
+                d_displacement,
+            )
+
+        # Apply gravity and update positions on GPU
+        _gravity_and_update_cuda[blocks_nodes, threads_per_block](
+            d_pos,
+            d_displacement,
+            gravity,
+            t,
+            d_fixed_mask,
+            nnodes,
+        )
+
+        t -= dt
+
+        # Check convergence periodically
+        if _iter % 10 == 0:
+            displacement = d_displacement.copy_to_host()
+            err = np.sqrt((displacement**2).sum()) / nnodes
+            if err < threshold:
+                break
+
+    return d_pos.copy_to_host().astype(np.float32)
+
+
+@random_state(9)
+def _fruchterman_reingold_barnes_hut_torch(
+    A,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    dim=2,
+    torch_module=None,
+    device=None,
+    seed=None,
+    theta=0.8,
+):
+    """Barnes-Hut accelerated Fruchterman-Reingold (GPU/PyTorch).
+
+    Uses quadtree built on CPU, then vectorized force computation on GPU.
+    O(N log N) complexity for repulsive forces.
+
+    Parameters
+    ----------
+    theta : float, optional
+        Barnes-Hut opening angle. Default 0.8.
+    """
+    from scipy.sparse import issparse, coo_matrix
+
+    if dim != 2:
+        raise ValueError("Barnes-Hut currently only supports 2D layouts")
+
+    try:
+        nnodes, _ = A.shape
+    except AttributeError as e:
+        msg = "fruchterman_reingold() takes an adjacency matrix as input"
+        raise nx.NetworkXError(msg) from e
+
+    torch = torch_module
+
+    if pos is None:
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
+    else:
+        pos = pos.astype(np.float32)
+
+    if k is None:
+        k = float(np.sqrt(1.0 / nnodes))
+
+    pos_t = torch.from_numpy(pos).to(device)
+
+    # Convert sparse adjacency to COO
+    if issparse(A):
+        A_coo = A.tocoo()
+    else:
+        A_coo = coo_matrix(A)
+
+    edge_src = torch.from_numpy(A_coo.row.astype(np.int64)).to(device)
+    edge_dst = torch.from_numpy(A_coo.col.astype(np.int64)).to(device)
+    edge_weight = torch.from_numpy(A_coo.data.astype(np.float32)).to(device)
+
+    k2 = k * k
+    inv_k = 1.0 / k
+    gravity = 1.0 / (k * float(np.sqrt(nnodes)))
+    theta_sq = theta * theta
+
+    ranges = pos_t.max(dim=0).values - pos_t.min(dim=0).values
+    t = float(ranges.max().item()) * 0.1
+    dt = t / (iterations + 1)
+
+    fixed_mask = None
+    if fixed is not None:
+        fixed_mask = torch.zeros(nnodes, dtype=torch.bool, device=device)
+        fixed_mask[torch.tensor(fixed, dtype=torch.long, device=device)] = True
+
+    # Get Numba kernels for tree building (done on CPU)
+    _build_quadtree, _, _ = _get_numba_bh_kernels()
+
+    # Pre-allocate tree arrays
+    max_tree_nodes = 4 * nnodes + 4
+    node_center_x = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_center_y = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_half_size = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_mass = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_com_x = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_com_y = np.zeros(max_tree_nodes, dtype=np.float64)
+    node_children = np.full((max_tree_nodes, 4), -1, dtype=np.int64)
+    node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
+    node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
+
+    max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
+
+    for _iter in range(iterations):
+        # Get positions on CPU for tree building
+        pos_np = pos_t.cpu().numpy().astype(np.float64)
+
+        # Reset tree
+        node_mass[:] = 0.0
+        node_is_leaf[:] = True
+        node_particle[:] = -1
+        node_children[:] = -1
+
+        # Compute bounding box
+        min_x, min_y = pos_np[:, 0].min(), pos_np[:, 1].min()
+        max_x, max_y = pos_np[:, 0].max(), pos_np[:, 1].max()
+        margin = max(max_x - min_x, max_y - min_y) * 0.1 + 1e-6
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
+
+        # Build quadtree on CPU
+        num_tree_nodes = _build_quadtree(
+            pos_np,
+            nnodes,
+            center_x,
+            center_y,
+            half_size,
+            max_depth,
+            node_center_x,
+            node_center_y,
+            node_half_size,
+            node_mass,
+            node_com_x,
+            node_com_y,
+            node_children,
+            node_is_leaf,
+            node_particle,
+        )
+
+        # Transfer tree to GPU
+        t_com_x = torch.from_numpy(node_com_x[:num_tree_nodes].astype(np.float32)).to(
+            device
+        )
+        t_com_y = torch.from_numpy(node_com_y[:num_tree_nodes].astype(np.float32)).to(
+            device
+        )
+        t_mass = torch.from_numpy(node_mass[:num_tree_nodes].astype(np.float32)).to(
+            device
+        )
+        t_half_size = torch.from_numpy(
+            node_half_size[:num_tree_nodes].astype(np.float32)
+        ).to(device)
+        t_is_leaf = torch.from_numpy(node_is_leaf[:num_tree_nodes]).to(device)
+        t_children = torch.from_numpy(node_children[:num_tree_nodes]).to(device)
+
+        # Compute repulsive forces on GPU using BFS traversal
+        displacement = torch.zeros((nnodes, dim), dtype=torch.float32, device=device)
+
+        # Process tree level by level for better GPU utilization
+        # Start with all particles needing to check root
+        active_particles = torch.arange(nnodes, device=device)
+        active_nodes = torch.zeros(nnodes, dtype=torch.long, device=device)  # All start at root
+
+        max_levels = max_depth + 2
+        for _level in range(max_levels):
+            if len(active_particles) == 0:
+                break
+
+            # Get particle positions and node properties
+            p_idx = active_particles
+            n_idx = active_nodes
+
+            px = pos_t[p_idx, 0]
+            py = pos_t[p_idx, 1]
+
+            n_com_x = t_com_x[n_idx]
+            n_com_y = t_com_y[n_idx]
+            n_mass = t_mass[n_idx]
+            n_size = t_half_size[n_idx]
+            n_leaf = t_is_leaf[n_idx]
+
+            # Compute distances
+            dx = px - n_com_x
+            dy = py - n_com_y
+            dist_sq = (dx * dx + dy * dy).clamp(min=1e-9)
+            dist = torch.sqrt(dist_sq)
+
+            # Barnes-Hut criterion
+            size_sq = (2.0 * n_size) ** 2
+            use_node = n_leaf | (size_sq < theta_sq * dist_sq)
+
+            # Apply forces where we use the node
+            mask = use_node & (n_mass > 0)
+            if mask.any():
+                force = k2 * n_mass[mask] / dist_sq[mask]
+                displacement[p_idx[mask], 0] += force * dx[mask] / dist[mask]
+                displacement[p_idx[mask], 1] += force * dy[mask] / dist[mask]
+
+            # Expand nodes that don't meet criterion
+            expand_mask = ~use_node
+            if not expand_mask.any():
+                break
+
+            expand_p = p_idx[expand_mask]
+            expand_n = n_idx[expand_mask]
+
+            # Get children of nodes to expand
+            children = t_children[expand_n]  # (num_expand, 4)
+
+            # Create new particle-node pairs for valid children
+            valid_children = children >= 0  # (num_expand, 4)
+
+            new_particles = []
+            new_nodes = []
+            for c in range(4):
+                valid = valid_children[:, c]
+                if valid.any():
+                    new_particles.append(expand_p[valid])
+                    new_nodes.append(children[valid, c])
+
+            if new_particles:
+                active_particles = torch.cat(new_particles)
+                active_nodes = torch.cat(new_nodes)
+            else:
+                break
+
+        # Attractive forces via sparse edges
+        if len(edge_src) > 0:
+            src_pos = pos_t[edge_src]
+            dst_pos = pos_t[edge_dst]
+            edge_delta = src_pos - dst_pos
+            edge_dist = torch.sqrt((edge_delta**2).sum(dim=-1).clamp(min=0.001))
+            attr_mag = -edge_weight * edge_dist * inv_k
+            attr_force = attr_mag.unsqueeze(-1) * edge_delta
+            displacement.scatter_add_(
+                0, edge_src.unsqueeze(-1).expand(-1, dim), attr_force
+            )
+
+        # Gravity toward center
+        displacement = displacement - pos_t * gravity
+
+        # Update positions
+        length = torch.sqrt((displacement**2).sum(dim=-1)).clamp(min=0.01)
+        delta_pos = displacement * (t / length).unsqueeze(-1)
+
+        if fixed_mask is not None:
+            delta_pos[fixed_mask] = 0.0
+
+        pos_t = pos_t + delta_pos
+        t -= dt
+
+        err = float(torch.sqrt((delta_pos**2).sum()).item()) / nnodes
+        if err < threshold:
+            break
+
+    return pos_t.cpu().numpy()
+
+
+def _fruchterman_reingold_layout_bh(
+    G,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    weight="weight",
+    scale=1,
+    center=None,
+    dim=2,
+    seed=None,
+    theta=0.8,
+):
+    """Barnes-Hut accelerated FR layout (CPU).
+
+    O(N log N) complexity. Scales to 1M+ nodes.
+
+    Parameters
+    ----------
+    theta : float, optional
+        Opening angle. Smaller = accurate, larger = fast. Default 0.8.
+    """
+    G, center = _process_params(G, center, dim)
+
+    if fixed is not None:
+        if pos is None:
+            raise ValueError("nodes are fixed without positions given")
+        for node in fixed:
+            if node not in pos:
+                raise ValueError("nodes are fixed without positions given")
+        nfixed = {node: i for i, node in enumerate(G)}
+        fixed = np.asarray([nfixed[node] for node in fixed])
+
+    if pos is not None:
+        dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
+        if dom_size == 0:
+            dom_size = 1
+        pos_arr = seed.rand(len(G), dim) * dom_size + center
+
+        for i, n in enumerate(G):
+            if n in pos:
+                pos_arr[i] = np.asarray(pos[n])
+    else:
+        pos_arr = None
+        dom_size = 1
+
+    if len(G) == 0:
+        return {}
+    if len(G) == 1:
+        return {nx.utils.arbitrary_element(G.nodes()): center}
+
+    if int(nx.__version__[0]) > 2:
+        A = nx.to_scipy_sparse_array(G, weight=weight, dtype="f")
+    else:
+        A = nx.to_scipy_sparse_matrix(G, weight=weight, dtype="f")
+
+    if k is None and fixed is not None:
+        nnodes, _ = A.shape
+        k = dom_size / np.sqrt(nnodes)
+
+    nnodes = len(G)
+    if nnodes > 10000:
+        logg.info(f"Using Barnes-Hut CPU layout for {nnodes} nodes (theta={theta})")
+
+    pos = _fruchterman_reingold_barnes_hut_numba(
+        A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta
+    )
+
+    if fixed is None and scale is not None:
+        pos = _rescale_layout(pos, scale=scale) + center
+    pos = dict(zip(G, pos))
+    return pos
+
+
+def _fruchterman_reingold_layout_bh_gpu(
+    G,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    weight="weight",
+    scale=1,
+    center=None,
+    dim=2,
+    seed=None,
+    theta=0.8,
+):
+    """Barnes-Hut accelerated FR layout (GPU).
+
+    O(N log N) complexity. Tree built on CPU, forces computed on GPU.
+
+    Parameters
+    ----------
+    theta : float, optional
+        Opening angle. Smaller = accurate, larger = fast. Default 0.8.
+    """
+    torch, device = _detect_torch_device()
+
+    G, center = _process_params(G, center, dim)
+
+    if fixed is not None:
+        if pos is None:
+            raise ValueError("nodes are fixed without positions given")
+        for node in fixed:
+            if node not in pos:
+                raise ValueError("nodes are fixed without positions given")
+        nfixed = {node: i for i, node in enumerate(G)}
+        fixed = np.asarray([nfixed[node] for node in fixed])
+
+    if pos is not None:
+        dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
+        if dom_size == 0:
+            dom_size = 1
+        pos_arr = seed.rand(len(G), dim) * dom_size + center
+
+        for i, n in enumerate(G):
+            if n in pos:
+                pos_arr[i] = np.asarray(pos[n])
+    else:
+        pos_arr = None
+        dom_size = 1
+
+    if len(G) == 0:
+        return {}
+    if len(G) == 1:
+        return {nx.utils.arbitrary_element(G.nodes()): center}
+
+    if int(nx.__version__[0]) > 2:
+        A = nx.to_scipy_sparse_array(G, weight=weight, dtype="f")
+    else:
+        A = nx.to_scipy_sparse_matrix(G, weight=weight, dtype="f")
+
+    if k is None and fixed is not None:
+        nnodes, _ = A.shape
+        k = dom_size / np.sqrt(nnodes)
+
+    nnodes = len(G)
+    if nnodes > 10000:
+        logg.info(f"Using Barnes-Hut GPU layout for {nnodes} nodes (theta={theta})")
+
+    pos = _fruchterman_reingold_barnes_hut_torch(
+        A,
+        k,
+        pos_arr,
+        fixed,
+        iterations,
+        threshold,
+        dim,
+        torch_module=torch,
+        device=device,
+        seed=seed,
+        theta=theta,
+    )
+
+    if fixed is None and scale is not None:
+        pos = _rescale_layout(pos, scale=scale) + center
+    pos = dict(zip(G, pos))
+    return pos
 
 
 def _fruchterman_reingold_layout_v2(

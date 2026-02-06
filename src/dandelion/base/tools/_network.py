@@ -52,7 +52,7 @@ def generate_network(
     verbose: bool = True,
     compute_graph: bool = True,
     compute_layout: bool = True,
-    layout_method: Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"] = "mod_fr",
+    layout_method: Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"] = "mod_fr",
     expanded_only: bool = False,
     use_existing_graph: bool = True,
     n_cpus: int = 1,
@@ -100,11 +100,13 @@ def generate_network(
         whether or not to generate the graph after distance matrix calculation.
     compute_layout : bool, optional
         whether or not to generate the layout. May be time consuming if too many cells.
-    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"], optional
+    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"], optional
         Layout algorithm. Options:
         - 'mod_fr': Original python FR layout
         - 'mod_fr2': Numba-accelerated FR (faster CPU)
         - 'mod_fr2_gpu': PyTorch GPU FR (auto-tiles for >100K nodes)
+        - 'mod_fr_bh': Barnes-Hut O(N log N) CPU layout (scalable)
+        - 'mod_fr_bh_gpu': Barnes-Hut O(N log N) GPU layout (scalable)
         - 'sfdp': graph_tool sfdp_layout (requires graph-tool)
         - 'fa2': ForceAtlas2 (requires fa2-modified)
     expanded_only : bool, optional
