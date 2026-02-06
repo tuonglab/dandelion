@@ -1138,14 +1138,11 @@ def _get_numba_bh_kernels():
     @njit(parallel=True, cache=True, fastmath=True)
     def _barnes_hut_forces(
         pos,
-        particle_mass,  # Mass per particle (degree-weighted)
         nnodes,
         theta,
         k2,
-        # Tree structure
+        # Tree structure (mass already weighted by component size)
         num_tree_nodes,
-        node_center_x,
-        node_center_y,
         node_half_size,
         node_mass,
         node_com_x,
@@ -1160,7 +1157,7 @@ def _get_numba_bh_kernels():
         For each particle, traverse tree and use center-of-mass approximation
         when cell is far enough (size/distance < theta).
 
-        Uses degree-weighted mass so singletons have minimal impact.
+        Tree node masses are already weighted by component size from tree building.
         """
         theta_sq = theta * theta
 
@@ -1176,6 +1173,9 @@ def _get_numba_bh_kernels():
             while stack_ptr > 0:
                 stack_ptr -= 1
                 node = stack[stack_ptr]
+
+                if node < 0 or node >= num_tree_nodes:
+                    continue
 
                 if node_mass[node] == 0:
                     continue
@@ -1383,13 +1383,10 @@ def _fruchterman_reingold_barnes_hut_numba(
         displacement[:] = 0.0
         _barnes_hut_forces(
             pos.astype(np.float64),
-            particle_mass,
             nnodes,
             theta,
             k2,
             num_tree_nodes,
-            node_center_x,
-            node_center_y,
             node_half_size,
             node_mass,
             node_com_x,
@@ -1449,7 +1446,6 @@ def _get_numba_cuda_bh_kernels():
     @cuda.jit
     def _barnes_hut_forces_cuda(
         pos,
-        particle_mass,  # Mass per particle (degree-weighted)
         nnodes,
         theta_sq,
         k2,
@@ -1465,7 +1461,7 @@ def _get_numba_cuda_bh_kernels():
         """CUDA kernel for Barnes-Hut repulsive forces.
 
         Each thread handles one particle, traversing the tree with a local stack.
-        Uses degree-weighted mass so singletons have minimal impact.
+        Tree node masses are already weighted by component size from tree building.
         """
         i = cuda.grid(1)
         if i >= nnodes:
@@ -1551,9 +1547,10 @@ def _get_numba_cuda_bh_kernels():
         dist = math.sqrt(dist_sq)
         force = w * dist * inv_k
 
-        # Atomic add to handle multiple edges per node
-        cuda.atomic.add(displacement, (i, 0), force * dx / dist)
-        cuda.atomic.add(displacement, (i, 1), force * dy / dist)
+        # Attractive force: w * d^2 / k (toward neighbor)
+        # Standard FR: magnitude d^2/k, direction toward j
+        cuda.atomic.add(displacement, (i, 0), force * dx)
+        cuda.atomic.add(displacement, (i, 1), force * dy)
 
     @cuda.jit
     def _gravity_and_update_cuda(
@@ -1579,7 +1576,7 @@ def _get_numba_cuda_bh_kernels():
         # Limit displacement by temperature
         length = math.sqrt(dx * dx + dy * dy)
         if length < 0.01:
-            length = 0.01
+            length = 0.1
 
         scale = t / length
         pos[i, 0] += dx * scale
@@ -1704,9 +1701,6 @@ def _fruchterman_reingold_barnes_hut_cuda(
     d_edge_weight = cuda.to_device(A_coo.data.astype(np.float64))
     num_edges = len(A_coo.data)
 
-    # Particle mass (constant) - singletons have mass 0
-    d_particle_mass = cuda.to_device(particle_mass)
-
     # CUDA launch configuration
     threads_per_block = 256
     blocks_nodes = (nnodes + threads_per_block - 1) // threads_per_block
@@ -1764,7 +1758,6 @@ def _fruchterman_reingold_barnes_hut_cuda(
         # Compute repulsive forces on GPU
         _barnes_hut_forces_cuda[blocks_nodes, threads_per_block](
             d_pos,
-            d_particle_mass,
             nnodes,
             theta_sq,
             k2,
@@ -1810,267 +1803,6 @@ def _fruchterman_reingold_barnes_hut_cuda(
                 break
 
     return d_pos.copy_to_host().astype(np.float32)
-
-
-@random_state(9)
-def _fruchterman_reingold_barnes_hut_torch(
-    A,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    dim=2,
-    torch_module=None,
-    device=None,
-    seed=None,
-    theta=0.8,
-    singleton_mass=0.5,
-):
-    """Barnes-Hut accelerated Fruchterman-Reingold (GPU/PyTorch).
-
-    Uses quadtree built on CPU, then vectorized force computation on GPU.
-    O(N log N) complexity for repulsive forces.
-
-    Parameters
-    ----------
-    theta : float, optional
-        Barnes-Hut opening angle. Default 0.8.
-    singleton_mass : float, optional
-        Mass assigned to singleton nodes (no edges). Default 0.5.
-    """
-    if dim != 2:
-        raise ValueError("Barnes-Hut currently only supports 2D layouts")
-
-    try:
-        nnodes, _ = A.shape
-    except AttributeError as e:
-        msg = "fruchterman_reingold() takes an adjacency matrix as input"
-        raise nx.NetworkXError(msg) from e
-
-    torch = torch_module
-
-    if pos is None:
-        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
-    else:
-        pos = pos.astype(np.float32)
-
-    if k is None:
-        k = float(np.sqrt(1.0 / nnodes))
-
-    pos_t = torch.from_numpy(pos).to(device)
-
-    # Convert sparse adjacency to COO
-    if issparse(A):
-        A_coo = A.tocoo()
-    else:
-        A_coo = coo_matrix(A)
-
-    edge_src = torch.from_numpy(A_coo.row.astype(np.int64)).to(device)
-    edge_dst = torch.from_numpy(A_coo.col.astype(np.int64)).to(device)
-    edge_weight = torch.from_numpy(A_coo.data.astype(np.float32)).to(device)
-
-    k2 = k * k
-    inv_k = 1.0 / k
-    gravity = 1.0 / (k * float(np.sqrt(nnodes)))
-    theta_sq = theta * theta
-
-    ranges = pos_t.max(dim=0).values - pos_t.min(dim=0).values
-    t = float(ranges.max().item()) * 0.1
-    dt = t / (iterations + 1)
-
-    fixed_mask = None
-    if fixed is not None:
-        fixed_mask = torch.zeros(nnodes, dtype=torch.bool, device=device)
-        fixed_mask[torch.tensor(fixed, dtype=torch.long, device=device)] = True
-
-    # Get Numba kernels for tree building (done on CPU)
-    _build_quadtree, _, _ = _get_numba_bh_kernels()
-
-    # Pre-allocate tree arrays
-    max_tree_nodes = 4 * nnodes + 4
-    node_center_x = np.zeros(max_tree_nodes, dtype=np.float64)
-    node_center_y = np.zeros(max_tree_nodes, dtype=np.float64)
-    node_half_size = np.zeros(max_tree_nodes, dtype=np.float64)
-    node_mass = np.zeros(max_tree_nodes, dtype=np.float64)
-    node_com_x = np.zeros(max_tree_nodes, dtype=np.float64)
-    node_com_y = np.zeros(max_tree_nodes, dtype=np.float64)
-    node_children = np.full((max_tree_nodes, 4), -1, dtype=np.int64)
-    node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
-    node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
-
-    # Compute component-size-based mass weighting
-    # Small clones get less mass so they don't push big clones apart
-    # mass = log(component_size), singletons use singleton_mass
-
-    n_comp, labels = connected_components(A_coo.tocsr(), directed=False)
-    comp_sizes = np.bincount(labels)
-    node_comp_size = comp_sizes[labels].astype(np.float64)
-    particle_mass = np.where(
-        node_comp_size <= 1, singleton_mass, np.log(node_comp_size)
-    )
-
-    max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
-
-    for _iter in range(iterations):
-        # Get positions on CPU for tree building
-        pos_np = pos_t.cpu().numpy().astype(np.float64)
-
-        # Reset tree
-        node_mass[:] = 0.0
-        node_is_leaf[:] = True
-        node_particle[:] = -1
-        node_children[:] = -1
-
-        # Compute bounding box
-        min_x, min_y = pos_np[:, 0].min(), pos_np[:, 1].min()
-        max_x, max_y = pos_np[:, 0].max(), pos_np[:, 1].max()
-        margin = max(max_x - min_x, max_y - min_y) * 0.1 + 1e-6
-        center_x = (min_x + max_x) / 2.0
-        center_y = (min_y + max_y) / 2.0
-        half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
-
-        # Build quadtree on CPU with degree-weighted mass
-        num_tree_nodes = _build_quadtree(
-            pos_np,
-            particle_mass,
-            nnodes,
-            center_x,
-            center_y,
-            half_size,
-            max_depth,
-            node_center_x,
-            node_center_y,
-            node_half_size,
-            node_mass,
-            node_com_x,
-            node_com_y,
-            node_children,
-            node_is_leaf,
-            node_particle,
-        )
-
-        # Transfer tree to GPU
-        t_com_x = torch.from_numpy(
-            node_com_x[:num_tree_nodes].astype(np.float32)
-        ).to(device)
-        t_com_y = torch.from_numpy(
-            node_com_y[:num_tree_nodes].astype(np.float32)
-        ).to(device)
-        t_mass = torch.from_numpy(
-            node_mass[:num_tree_nodes].astype(np.float32)
-        ).to(device)
-        t_half_size = torch.from_numpy(
-            node_half_size[:num_tree_nodes].astype(np.float32)
-        ).to(device)
-        t_is_leaf = torch.from_numpy(node_is_leaf[:num_tree_nodes]).to(device)
-        t_children = torch.from_numpy(node_children[:num_tree_nodes]).to(device)
-
-        # Compute repulsive forces on GPU using BFS traversal
-        displacement = torch.zeros(
-            (nnodes, dim), dtype=torch.float32, device=device
-        )
-
-        # Process tree level by level for better GPU utilization
-        # Start with all particles needing to check root
-        active_particles = torch.arange(nnodes, device=device)
-        active_nodes = torch.zeros(
-            nnodes, dtype=torch.long, device=device
-        )  # All start at root
-
-        max_levels = max_depth + 2
-        for _level in range(max_levels):
-            if len(active_particles) == 0:
-                break
-
-            # Get particle positions and node properties
-            p_idx = active_particles
-            n_idx = active_nodes
-
-            px = pos_t[p_idx, 0]
-            py = pos_t[p_idx, 1]
-
-            n_com_x = t_com_x[n_idx]
-            n_com_y = t_com_y[n_idx]
-            n_mass = t_mass[n_idx]
-            n_size = t_half_size[n_idx]
-            n_leaf = t_is_leaf[n_idx]
-
-            # Compute distances
-            dx = px - n_com_x
-            dy = py - n_com_y
-            dist_sq = (dx * dx + dy * dy).clamp(min=1e-9)
-            dist = torch.sqrt(dist_sq)
-
-            # Barnes-Hut criterion
-            size_sq = (2.0 * n_size) ** 2
-            use_node = n_leaf | (size_sq < theta_sq * dist_sq)
-
-            # Apply forces where we use the node
-            mask = use_node & (n_mass > 0)
-            if mask.any():
-                force = k2 * n_mass[mask] / dist_sq[mask]
-                displacement[p_idx[mask], 0] += force * dx[mask] / dist[mask]
-                displacement[p_idx[mask], 1] += force * dy[mask] / dist[mask]
-
-            # Expand nodes that don't meet criterion
-            expand_mask = ~use_node
-            if not expand_mask.any():
-                break
-
-            expand_p = p_idx[expand_mask]
-            expand_n = n_idx[expand_mask]
-
-            # Get children of nodes to expand
-            children = t_children[expand_n]  # (num_expand, 4)
-
-            # Create new particle-node pairs for valid children
-            valid_children = children >= 0  # (num_expand, 4)
-
-            new_particles = []
-            new_nodes = []
-            for c in range(4):
-                valid = valid_children[:, c]
-                if valid.any():
-                    new_particles.append(expand_p[valid])
-                    new_nodes.append(children[valid, c])
-
-            if new_particles:
-                active_particles = torch.cat(new_particles)
-                active_nodes = torch.cat(new_nodes)
-            else:
-                break
-
-        # Attractive forces via sparse edges
-        if len(edge_src) > 0:
-            src_pos = pos_t[edge_src]
-            dst_pos = pos_t[edge_dst]
-            edge_delta = src_pos - dst_pos
-            edge_dist = torch.sqrt((edge_delta**2).sum(dim=-1).clamp(min=0.001))
-            attr_mag = -edge_weight * edge_dist * inv_k
-            attr_force = attr_mag.unsqueeze(-1) * edge_delta
-            displacement.scatter_add_(
-                0, edge_src.unsqueeze(-1).expand(-1, dim), attr_force
-            )
-
-        # Gravity toward center
-        displacement = displacement - pos_t * gravity
-
-        # Update positions
-        length = torch.sqrt((displacement**2).sum(dim=-1)).clamp(min=0.01)
-        delta_pos = displacement * (t / length).unsqueeze(-1)
-
-        if fixed_mask is not None:
-            delta_pos[fixed_mask] = 0.0
-
-        pos_t = pos_t + delta_pos
-        t -= dt
-
-        err = float(torch.sqrt((delta_pos**2).sum()).item()) / nnodes
-        if err < threshold:
-            break
-
-    return pos_t.cpu().numpy()
 
 
 def _fruchterman_reingold_layout_bh(
