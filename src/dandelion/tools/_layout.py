@@ -24,6 +24,7 @@ def generate_layout(
     ] = "mod_fr2",
     expanded_only: bool = False,
     graphs: tuple[nx.Graph, nx.Graph] = None,
+    singleton_mass: float = 0.5,
     **kwargs,
 ) -> tuple[nx.Graph, nx.Graph, dict, dict]:
     """Generate layout.
@@ -48,8 +49,10 @@ def generate_layout(
         whether or not to only compute layout on expanded clones.
     graphs: tuple[nx.Graph, nx.Graph], optional
         tuple of graphs.
-    dist_mat : pd.DataFrame | None, optional
-        distance matrix.
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges) in Barnes-Hut layouts.
+        Lower values reduce their impact on pushing connected components apart.
+        Default 0.5. Only used with 'mod_fr_bh' and 'mod_fr_bh_gpu'.
     **kwargs
         passed to fruchterman_reingold_layout.
 
@@ -127,24 +130,30 @@ def generate_layout(
             if not expanded_only:
                 if verbose:
                     logg.info("Computing network layout (Barnes-Hut CPU)")
-                pos = _fruchterman_reingold_layout_bh(G, weight=weight, **kwargs)
+                pos = _fruchterman_reingold_layout_bh(
+                    G, weight=weight, singleton_mass=singleton_mass, **kwargs
+                )
             else:
                 pos = None
             if verbose:
                 logg.info("Computing expanded network layout (Barnes-Hut CPU)")
-            pos_ = _fruchterman_reingold_layout_bh(G_, weight=weight, **kwargs)
+            pos_ = _fruchterman_reingold_layout_bh(
+                G_, weight=weight, singleton_mass=singleton_mass, **kwargs
+            )
         elif layout_method == "mod_fr_bh_gpu":
             if not expanded_only:
                 if verbose:
                     logg.info("Computing network layout (Barnes-Hut GPU)")
                 pos = _fruchterman_reingold_layout_bh_gpu(
-                    G, weight=weight, **kwargs
+                    G, weight=weight, singleton_mass=singleton_mass, **kwargs
                 )
             else:
                 pos = None
             if verbose:
                 logg.info("Computing expanded network layout (Barnes-Hut GPU)")
-            pos_ = _fruchterman_reingold_layout_bh_gpu(G_, weight=weight, **kwargs)
+            pos_ = _fruchterman_reingold_layout_bh_gpu(
+                G_, weight=weight, singleton_mass=singleton_mass, **kwargs
+            )
         elif layout_method == "sfdp":
             try:
                 from graph_tool.all import sfdp_layout
@@ -998,6 +1007,7 @@ def _get_numba_bh_kernels():
     @njit(cache=True)
     def _build_quadtree(
         pos,
+        particle_mass,  # Mass per particle (e.g., degree-based)
         nnodes,
         center_x,
         center_y,
@@ -1015,6 +1025,9 @@ def _get_numba_bh_kernels():
         node_particle,  # particle index if leaf with single particle, -1 otherwise
     ):
         """Build quadtree from positions using flat arrays.
+
+        Uses particle_mass for weighted center-of-mass computation.
+        Singletons (mass=0) won't contribute to repulsive forces.
 
         Returns the number of nodes used.
         """
@@ -1035,25 +1048,27 @@ def _get_numba_bh_kernels():
         # Insert each particle
         for p in range(nnodes):
             px, py = pos[p, 0], pos[p, 1]
+            pmass = particle_mass[p]
 
             # Start at root
             current = 0
             depth = 0
 
             while depth < max_depth:
-                # Update center of mass
+                # Update center of mass (weighted by particle mass)
                 old_mass = node_mass[current]
-                node_mass[current] = old_mass + 1.0
+                new_mass = old_mass + pmass
+                node_mass[current] = new_mass
                 if old_mass == 0:
                     node_com_x[current] = px
                     node_com_y[current] = py
-                else:
+                elif new_mass > 0:
                     node_com_x[current] = (
-                        node_com_x[current] * old_mass + px
-                    ) / (old_mass + 1.0)
+                        node_com_x[current] * old_mass + px * pmass
+                    ) / new_mass
                     node_com_y[current] = (
-                        node_com_y[current] * old_mass + py
-                    ) / (old_mass + 1.0)
+                        node_com_y[current] * old_mass + py * pmass
+                    ) / new_mass
 
                 if node_is_leaf[current]:
                     if node_particle[current] == -1:
@@ -1064,6 +1079,7 @@ def _get_numba_bh_kernels():
                         # Leaf with existing particle - need to subdivide
                         old_p = node_particle[current]
                         old_px, old_py = pos[old_p, 0], pos[old_p, 1]
+                        old_pmass = particle_mass[old_p]
 
                         # Create 4 children
                         h = node_half_size[current] / 2.0
@@ -1106,7 +1122,7 @@ def _get_numba_bh_kernels():
                         if old_py >= cy:
                             old_quad += 2
                         old_child = node_children[current, old_quad]
-                        node_mass[old_child] = 1.0
+                        node_mass[old_child] = old_pmass
                         node_com_x[old_child] = old_px
                         node_com_y[old_child] = old_py
                         node_particle[old_child] = old_p
@@ -1134,6 +1150,7 @@ def _get_numba_bh_kernels():
     @njit(parallel=True, cache=True, fastmath=True)
     def _barnes_hut_forces(
         pos,
+        particle_mass,  # Mass per particle (degree-weighted)
         nnodes,
         theta,
         k2,
@@ -1154,6 +1171,8 @@ def _get_numba_bh_kernels():
 
         For each particle, traverse tree and use center-of-mass approximation
         when cell is far enough (size/distance < theta).
+
+        Uses degree-weighted mass so singletons have minimal impact.
         """
         theta_sq = theta * theta
 
@@ -1249,6 +1268,7 @@ def _fruchterman_reingold_barnes_hut_numba(
     dim=2,
     seed=None,
     theta=0.8,
+    singleton_mass=0.5,
 ):
     """Barnes-Hut accelerated Fruchterman-Reingold (CPU/Numba).
 
@@ -1260,6 +1280,9 @@ def _fruchterman_reingold_barnes_hut_numba(
     theta : float, optional
         Barnes-Hut opening angle. Smaller = more accurate but slower.
         Default 0.8. Range: 0.3 (accurate) to 1.2 (fast).
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges). Lower values reduce
+        their impact on pushing connected components apart. Default 0.5.
     """
     from scipy.sparse import csr_matrix, issparse
 
@@ -1321,6 +1344,11 @@ def _fruchterman_reingold_barnes_hut_numba(
     A_indices = np.ascontiguousarray(A_csr.indices.astype(np.int64))
     A_indptr = np.ascontiguousarray(A_csr.indptr.astype(np.int64))
 
+    # Compute node degrees for mass weighting
+    # Singletons get small mass so they minimally affect layout
+    degrees = np.diff(A_indptr).astype(np.float64)
+    particle_mass = np.maximum(singleton_mass, degrees)
+
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
     for _iter in range(iterations):
@@ -1338,9 +1366,10 @@ def _fruchterman_reingold_barnes_hut_numba(
         center_y = (min_y + max_y) / 2.0
         half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
 
-        # Build quadtree
+        # Build quadtree with degree-weighted mass
         num_tree_nodes = _build_quadtree(
             pos.astype(np.float64),
+            particle_mass,
             nnodes,
             center_x,
             center_y,
@@ -1361,6 +1390,7 @@ def _fruchterman_reingold_barnes_hut_numba(
         displacement[:] = 0.0
         _barnes_hut_forces(
             pos.astype(np.float64),
+            particle_mass,
             nnodes,
             theta,
             k2,
@@ -1435,6 +1465,7 @@ def _get_numba_cuda_bh_kernels():
     @cuda.jit
     def _barnes_hut_forces_cuda(
         pos,
+        particle_mass,  # Mass per particle (degree-weighted)
         nnodes,
         theta_sq,
         k2,
@@ -1450,6 +1481,7 @@ def _get_numba_cuda_bh_kernels():
         """CUDA kernel for Barnes-Hut repulsive forces.
 
         Each thread handles one particle, traversing the tree with a local stack.
+        Uses degree-weighted mass so singletons have minimal impact.
         """
         i = cuda.grid(1)
         if i >= nnodes:
@@ -1589,6 +1621,7 @@ def _fruchterman_reingold_barnes_hut_cuda(
     dim=2,
     seed=None,
     theta=0.8,
+    singleton_mass=0.5,
 ):
     """Barnes-Hut accelerated Fruchterman-Reingold (GPU/Numba CUDA).
 
@@ -1602,6 +1635,8 @@ def _fruchterman_reingold_barnes_hut_cuda(
     theta : float, optional
         Barnes-Hut opening angle. Smaller = more accurate but slower.
         Default 0.8. Range: 0.3 (accurate) to 1.2 (fast).
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges). Default 0.5.
     """
     from scipy.sparse import coo_matrix, issparse
 
@@ -1660,6 +1695,12 @@ def _fruchterman_reingold_barnes_hut_cuda(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
+    # Compute node degrees for mass weighting (from COO)
+    # Singletons get small mass so they minimally affect layout
+    degrees = np.zeros(nnodes, dtype=np.float64)
+    np.add.at(degrees, A_coo.row, 1)
+    particle_mass = np.maximum(singleton_mass, degrees)
+
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
     # Allocate GPU arrays that persist across iterations
@@ -1672,6 +1713,9 @@ def _fruchterman_reingold_barnes_hut_cuda(
     d_edge_dst = cuda.to_device(A_coo.col.astype(np.int64))
     d_edge_weight = cuda.to_device(A_coo.data.astype(np.float64))
     num_edges = len(A_coo.data)
+
+    # Particle mass (constant) - singletons have mass 0
+    d_particle_mass = cuda.to_device(particle_mass)
 
     # CUDA launch configuration
     threads_per_block = 256
@@ -1696,9 +1740,10 @@ def _fruchterman_reingold_barnes_hut_cuda(
         center_y = (min_y + max_y) / 2.0
         half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
 
-        # Build quadtree on CPU
+        # Build quadtree on CPU with degree-weighted mass
         num_tree_nodes = _build_quadtree(
             pos,
+            particle_mass,
             nnodes,
             center_x,
             center_y,
@@ -1729,6 +1774,7 @@ def _fruchterman_reingold_barnes_hut_cuda(
         # Compute repulsive forces on GPU
         _barnes_hut_forces_cuda[blocks_nodes, threads_per_block](
             d_pos,
+            d_particle_mass,
             nnodes,
             theta_sq,
             k2,
@@ -1789,6 +1835,7 @@ def _fruchterman_reingold_barnes_hut_torch(
     device=None,
     seed=None,
     theta=0.8,
+    singleton_mass=0.5,
 ):
     """Barnes-Hut accelerated Fruchterman-Reingold (GPU/PyTorch).
 
@@ -1799,6 +1846,8 @@ def _fruchterman_reingold_barnes_hut_torch(
     ----------
     theta : float, optional
         Barnes-Hut opening angle. Default 0.8.
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges). Default 0.5.
     """
     from scipy.sparse import issparse, coo_matrix
 
@@ -1862,6 +1911,12 @@ def _fruchterman_reingold_barnes_hut_torch(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
+    # Compute node degrees for mass weighting (from COO)
+    # Singletons get small mass so they minimally affect layout
+    degrees = np.zeros(nnodes, dtype=np.float64)
+    np.add.at(degrees, A_coo.row, 1)
+    particle_mass = np.maximum(singleton_mass, degrees)
+
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
     for _iter in range(iterations):
@@ -1882,9 +1937,10 @@ def _fruchterman_reingold_barnes_hut_torch(
         center_y = (min_y + max_y) / 2.0
         half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
 
-        # Build quadtree on CPU
+        # Build quadtree on CPU with degree-weighted mass
         num_tree_nodes = _build_quadtree(
             pos_np,
+            particle_mass,
             nnodes,
             center_x,
             center_y,
@@ -2033,6 +2089,7 @@ def _fruchterman_reingold_layout_bh(
     dim=2,
     seed=None,
     theta=0.8,
+    singleton_mass=0.5,
 ):
     """Barnes-Hut accelerated FR layout (CPU).
 
@@ -2042,6 +2099,9 @@ def _fruchterman_reingold_layout_bh(
     ----------
     theta : float, optional
         Opening angle. Smaller = accurate, larger = fast. Default 0.8.
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges). Lower values reduce
+        their impact on pushing connected components apart. Default 0.5.
     """
     G, center = _process_params(G, center, dim)
 
@@ -2086,7 +2146,7 @@ def _fruchterman_reingold_layout_bh(
         logg.info(f"Using Barnes-Hut CPU layout for {nnodes} nodes (theta={theta})")
 
     pos = _fruchterman_reingold_barnes_hut_numba(
-        A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta
+        A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta, singleton_mass
     )
 
     if fixed is None and scale is not None:
@@ -2108,6 +2168,7 @@ def _fruchterman_reingold_layout_bh_gpu(
     dim=2,
     seed=None,
     theta=0.8,
+    singleton_mass=0.5,
 ):
     """Barnes-Hut accelerated FR layout (GPU).
 
@@ -2118,6 +2179,8 @@ def _fruchterman_reingold_layout_bh_gpu(
     ----------
     theta : float, optional
         Opening angle. Smaller = accurate, larger = fast. Default 0.8.
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges). Default 0.5.
     """
     # Try Numba CUDA first (fastest for NVIDIA GPUs)
     cuda_available = False
@@ -2169,7 +2232,7 @@ def _fruchterman_reingold_layout_bh_gpu(
             k = dom_size / np.sqrt(nnodes)
 
         pos = _fruchterman_reingold_barnes_hut_cuda(
-            A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta
+            A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta, singleton_mass
         )
 
         if fixed is None and scale is not None:
@@ -2195,6 +2258,7 @@ def _fruchterman_reingold_layout_bh_gpu(
         dim=dim,
         seed=seed,
         theta=theta,
+        singleton_mass=singleton_mass,
     )
 
 

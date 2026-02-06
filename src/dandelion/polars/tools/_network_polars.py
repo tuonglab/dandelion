@@ -96,12 +96,8 @@ def _merge_overlapping_clones(
     n_clones = clone_ids.len()
 
     # Build lookup dicts: cell/clone string → integer index
-    cell_to_idx = dict(
-        zip(cell_ids.to_list(), range(n_cells))
-    )
-    clone_to_idx = dict(
-        zip(clone_ids.to_list(), range(n_clones))
-    )
+    cell_to_idx = dict(zip(cell_ids.to_list(), range(n_cells)))
+    clone_to_idx = dict(zip(clone_ids.to_list(), range(n_clones)))
 
     # Map exploded pairs to integer indices
     cell_indices = np.array(
@@ -152,7 +148,16 @@ def generate_network(
     verbose: bool = True,
     compute_graph: bool = True,
     compute_layout: bool = True,
-    layout_method: Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"] = "mod_fr",
+    layout_method: Literal[
+        "mod_fr",
+        "mod_fr2",
+        "mod_fr2_gpu",
+        "mod_fr_bh",
+        "mod_fr_bh_gpu",
+        "sfdp",
+        "fa2",
+    ] = "mod_fr2",
+    singleton_mass: float = 0.5,
     expanded_only: bool = False,
     use_existing_graph: bool = True,
     n_cpus: int = 1,
@@ -199,13 +204,17 @@ def generate_network(
         whether or not to generate the layout. May be time consuming if too many cells.
     layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"], optional
         Layout algorithm. Options:
-        - 'mod_fr': Original python FR layout
-        - 'mod_fr2': Numba-accelerated FR (faster CPU)
-        - 'mod_fr2_gpu': PyTorch GPU FR (auto-tiles for >100K nodes)
-        - 'mod_fr_bh': Barnes-Hut O(N log N) CPU layout (scalable)
-        - 'mod_fr_bh_gpu': Barnes-Hut O(N log N) GPU layout (scalable)
+        - 'mod_fr': Original python modified FR layout
+        - 'mod_fr2': Numba-accelerated modified FR (faster CPU)
+        - 'mod_fr2_gpu': PyTorch GPU modified FR (auto-tiles for >100K nodes)
+        - 'mod_fr_bh': Barnes-Hut O(N log N) CPU layout (scalable for large graphs)
+        - 'mod_fr_bh_gpu': Barnes-Hut O(N log N) GPU layout (scalable for large graphs, requires CUDA)
         - 'sfdp': graph_tool sfdp_layout (requires graph-tool)
         - 'fa2': ForceAtlas2 (requires fa2-modified)
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges) in Barnes-Hut layouts.
+        Lower values reduce their impact on pushing connected components apart.
+        Default 0.5. Only used with 'mod_fr_bh' and 'mod_fr_bh_gpu'.
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clonotypes.
     use_existing_graph : bool, optional
@@ -297,6 +306,7 @@ def generate_network(
                     layout_method=layout_method,
                     expanded_only=expanded_only,
                     graphs=(vdj.graph[0], vdj.graph[1]),
+                    singleton_mass=singleton_mass,
                     **kwargs,
                 )
 
@@ -367,9 +377,7 @@ def generate_network(
             else dat_seq.lazy()
             .with_row_index("_row_pos")
             .collect(engine="streaming")
-        ).select(
-            ["cell_id", pl.col("_row_pos").cast(pl.Int64).alias("pos")]
-        )
+        ).select(["cell_id", pl.col("_row_pos").cast(pl.Int64).alias("pos")])
 
         if compute_graph or compute_layout or distance_mode == "clone":
             # Get clone membership as DataFrame and merge overlapping clones
@@ -834,6 +842,7 @@ def generate_network(
                 compute_layout=compute_layout,
                 layout_method=layout_method,
                 expanded_only=expanded_only,
+                singleton_mass=singleton_mass,
                 **kwargs,
             )
 
@@ -1639,9 +1648,7 @@ def calculate_distance_matrix_long(
                 unique_indices = np.array(
                     [seq_to_unique_idx[seq] for seq in clone_seqs]
                 )
-                d_mat_tmp = d_mat_unique[
-                    np.ix_(unique_indices, unique_indices)
-                ]
+                d_mat_tmp = d_mat_unique[np.ix_(unique_indices, unique_indices)]
 
                 # Collect COO entries (exclude diagonal — self-distance is 0)
                 k = len(indices)

@@ -52,7 +52,16 @@ def generate_network(
     verbose: bool = True,
     compute_graph: bool = True,
     compute_layout: bool = True,
-    layout_method: Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"] = "mod_fr",
+    layout_method: Literal[
+        "mod_fr",
+        "mod_fr2",
+        "mod_fr2_gpu",
+        "mod_fr_bh",
+        "mod_fr_bh_gpu",
+        "sfdp",
+        "fa2",
+    ] = "mod_fr",
+    singleton_mass: float = 0.5,
     expanded_only: bool = False,
     use_existing_graph: bool = True,
     n_cpus: int = 1,
@@ -109,6 +118,10 @@ def generate_network(
         - 'mod_fr_bh_gpu': Barnes-Hut O(N log N) GPU layout (scalable)
         - 'sfdp': graph_tool sfdp_layout (requires graph-tool)
         - 'fa2': ForceAtlas2 (requires fa2-modified)
+    singleton_mass : float, optional
+        Mass assigned to singleton nodes (no edges) in Barnes-Hut layouts.
+        Lower values reduce their impact on pushing connected components apart.
+        Default 0.5. Only used with 'mod_fr_bh' and 'mod_fr_bh_gpu'.
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clonotypes.
     use_existing_graph : bool, optional
@@ -203,6 +216,7 @@ def generate_network(
                     layout_method=layout_method,
                     expanded_only=expanded_only,
                     graphs=(vdj.graph[0], vdj.graph[1]),
+                    singleton_mass=singleton_mass,
                     **kwargs,
                 )
 
@@ -626,6 +640,7 @@ def generate_network(
                 compute_layout=compute_layout,
                 layout_method=layout_method,
                 expanded_only=expanded_only,
+                singleton_mass=singleton_mass,
                 **kwargs,
             )
 
