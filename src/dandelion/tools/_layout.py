@@ -42,7 +42,7 @@ def generate_layout(
         whether or not to print status
     compute_layout : bool, optional
         whether or not to compute layout.
-    layout_method : Literal["mod_fr", "sfdp", "open_ord"], optional
+    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"], optional
         layout method.
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clones.
@@ -553,6 +553,7 @@ def _detect_torch_device():
     return torch, device
 
 
+
 _numba_fr_kernel_cache = None
 
 
@@ -736,6 +737,9 @@ def _fruchterman_reingold_torch(
 
     Uses dense tensor operations on GPU (CUDA/MPS) or CPU.
     The O(N^2) pairwise computation maps naturally to GPU parallelism.
+
+    WARNING: Creates N×N tensors - not suitable for large graphs (>30K nodes).
+    Use _fruchterman_reingold_torch_tiled for larger graphs.
     """
     try:
         nnodes, _ = A.shape
@@ -778,6 +782,156 @@ def _fruchterman_reingold_torch(
         force_mag = k2 / (distance * distance) - A_t * distance * inv_k
         # Displacement: sum of directed forces
         displacement = (delta * force_mag.unsqueeze(-1)).sum(dim=1)
+        # Gravity toward center
+        displacement = displacement - pos_t * gravity
+
+        # Limit step size by temperature
+        length = torch.sqrt((displacement**2).sum(dim=-1)).clamp(min=0.01)
+        delta_pos = displacement * (t / length).unsqueeze(-1)
+
+        if fixed_mask is not None:
+            delta_pos[fixed_mask] = 0.0
+
+        pos_t = pos_t + delta_pos
+        t -= dt
+
+        err = float(torch.sqrt((delta_pos**2).sum()).item()) / nnodes
+        if err < threshold:
+            break
+
+    return pos_t.cpu().numpy()
+
+
+@random_state(9)
+def _fruchterman_reingold_torch_tiled(
+    A,
+    k=None,
+    pos=None,
+    fixed=None,
+    iterations=50,
+    threshold=1e-4,
+    dim=2,
+    torch_module=None,
+    device=None,
+    seed=None,
+    tile_size=4096,
+):
+    """PyTorch GPU layout with tiled repulsive force computation.
+
+    Uses tiled matrix operations to compute O(N²) repulsive forces
+    without allocating full N×N tensor. Memory: O(N × tile_size).
+
+    For 1M nodes with tile_size=4096:
+    - Full N×N would need: 1M × 1M × 4 bytes = 4TB
+    - Tiled needs: 1M × 4096 × 4 bytes × 2 = ~32GB (fits in GPU)
+
+    Parameters
+    ----------
+    tile_size : int, optional
+        Number of nodes per tile. Larger = faster but more memory.
+        Default 4096 (uses ~64MB per tile for 2D).
+    """
+    from scipy.sparse import issparse, coo_matrix
+
+    try:
+        nnodes, _ = A.shape
+    except AttributeError as e:
+        msg = "fruchterman_reingold() takes an adjacency matrix as input"
+        raise nx.NetworkXError(msg) from e
+
+    torch = torch_module
+
+    if pos is None:
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
+    else:
+        pos = pos.astype(np.float32)
+
+    if k is None:
+        k = float(np.sqrt(1.0 / nnodes))
+
+    pos_t = torch.from_numpy(pos).to(device)
+
+    # Convert sparse adjacency to COO for efficient edge iteration
+    if issparse(A):
+        A_coo = A.tocoo()
+    else:
+        A_coo = coo_matrix(A)
+
+    # Only keep non-zero edges
+    edge_src = torch.from_numpy(A_coo.row.astype(np.int64)).to(device)
+    edge_dst = torch.from_numpy(A_coo.col.astype(np.int64)).to(device)
+    edge_weight = torch.from_numpy(A_coo.data.astype(np.float32)).to(device)
+
+    k2 = k * k
+    inv_k = 1.0 / k
+    gravity = 1.0 / (k * float(np.sqrt(nnodes)))
+
+    ranges = pos_t.max(dim=0).values - pos_t.min(dim=0).values
+    t = float(ranges.max().item()) * 0.1
+    dt = t / (iterations + 1)
+
+    fixed_mask = None
+    if fixed is not None:
+        fixed_mask = torch.zeros(nnodes, dtype=torch.bool, device=device)
+        fixed_mask[torch.tensor(fixed, dtype=torch.long, device=device)] = True
+
+    for _ in range(iterations):
+        displacement = torch.zeros(
+            (nnodes, dim), dtype=torch.float32, device=device
+        )
+
+        # Tiled repulsive forces: process tile_size nodes at a time
+        for tile_start in range(0, nnodes, tile_size):
+            tile_end = min(tile_start + tile_size, nnodes)
+
+            # Positions of nodes in this tile: (tile_size, dim)
+            pos_tile = pos_t[tile_start:tile_end]
+
+            # Differences: delta[i,j] = pos_tile[i] - pos_all[j]
+            # This is the key: we only allocate tile_size × N, not N × N
+            delta = pos_tile.unsqueeze(1) - pos_t.unsqueeze(0)
+
+            # Distances: (tile_size, N)
+            distance = torch.sqrt((delta**2).sum(dim=-1)).clamp(min=0.001)
+
+            # Repulsive force magnitude: k²/d² (positive = repel)
+            # Same formula as original: k2 / (distance * distance)
+            force_mag = k2 / (distance * distance)
+
+            # Displacement from repulsive forces
+            # delta points from j to i, force_mag is positive, so this pushes i away from j
+            displacement[tile_start:tile_end] += (
+                delta * force_mag.unsqueeze(-1)
+            ).sum(dim=1)
+
+        # Attractive forces via sparse edges (vectorized)
+        if len(edge_src) > 0:
+            # Get positions of edge endpoints
+            src_pos = pos_t[edge_src]  # (E, dim)
+            dst_pos = pos_t[edge_dst]  # (E, dim)
+
+            # Edge vectors: same convention as repulsive delta[i,j] = pos[i] - pos[j]
+            # So for edge (src, dst): edge_delta = pos[src] - pos[dst]
+            edge_delta = src_pos - dst_pos  # (E, dim)
+            edge_dist = torch.sqrt(
+                (edge_delta**2).sum(dim=-1).clamp(min=0.001)
+            )  # (E,)
+
+            # Attractive force magnitude: -w * d / k
+            # Original: force_mag = k2/(d*d) - A*d/k
+            # The attractive part is: -A*d/k (negative, so it SUBTRACTS from repulsive)
+            # This means: displacement += delta * (-A*d/k)
+            # Which pulls nodes together (delta points away, negative flips it)
+            attr_mag = -edge_weight * edge_dist * inv_k  # (E,) - negative values
+
+            # Apply to edge_delta: negative * (src-dst) pulls src toward dst
+            attr_force = attr_mag.unsqueeze(-1) * edge_delta  # (E, dim)
+
+            # Scatter-add attractive forces to source nodes
+            displacement.scatter_add_(
+                0, edge_src.unsqueeze(-1).expand(-1, dim), attr_force
+            )
+
         # Gravity toward center
         displacement = displacement - pos_t * gravity
 
@@ -886,15 +1040,27 @@ def _fruchterman_reingold_layout_gpu(
     center=None,
     dim=2,
     seed=None,
+    tile_size=4096,
 ):
     """PyTorch GPU-accelerated Fruchterman-Reingold layout (mod_fr2_gpu).
 
-    Uses PyTorch for GPU-accelerated (CUDA/MPS) or optimized CPU
-    computation. Automatically detects the best available device.
+    Automatically selects between dense (fast) and tiled (memory-efficient)
+    based on graph size. Uses tiled mode for graphs with >100K nodes.
+
+    Parameters
+    ----------
+    tile_size : int, optional
+        Tile size for tiled mode. Default 4096.
     """
     torch, device = _detect_torch_device()
 
     G, center = _process_params(G, center, dim)
+    nnodes = len(G)
+
+    if nnodes == 0:
+        return {}
+    if nnodes == 1:
+        return {nx.utils.arbitrary_element(G.nodes()): center}
 
     if fixed is not None:
         if pos is None:
@@ -909,7 +1075,7 @@ def _fruchterman_reingold_layout_gpu(
         dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
         if dom_size == 0:
             dom_size = 1
-        pos_arr = seed.rand(len(G), dim) * dom_size + center
+        pos_arr = seed.rand(nnodes, dim) * dom_size + center
 
         for i, n in enumerate(G):
             if n in pos:
@@ -918,30 +1084,52 @@ def _fruchterman_reingold_layout_gpu(
         pos_arr = None
         dom_size = 1
 
-    if len(G) == 0:
-        return {}
-    if len(G) == 1:
-        return {nx.utils.arbitrary_element(G.nodes()): center}
+    # Use tiled mode for large graphs (>100K nodes)
+    use_tiled = nnodes > 100_000
 
-    # Always use dense array for GPU tensor operations
-    A = nx.to_numpy_array(G, weight=weight).astype(np.float32)
+    if use_tiled:
+        logg.info(
+            f"Using tiled GPU layout for {nnodes} nodes (tile_size={tile_size})"
+        )
+        # Get sparse matrix for tiled mode
+        if int(nx.__version__[0]) > 2:
+            A = nx.to_scipy_sparse_array(G, weight=weight, dtype="f")
+        else:
+            A = nx.to_scipy_sparse_matrix(G, weight=weight, dtype="f")
+    else:
+        # Dense mode for smaller graphs
+        A = nx.to_numpy_array(G, weight=weight).astype(np.float32)
 
     if k is None and fixed is not None:
-        nnodes, _ = A.shape
         k = dom_size / np.sqrt(nnodes)
 
-    pos = _fruchterman_reingold_torch(
-        A,
-        k,
-        pos_arr,
-        fixed,
-        iterations,
-        threshold,
-        dim,
-        torch_module=torch,
-        device=device,
-        seed=seed,
-    )
+    if use_tiled:
+        pos = _fruchterman_reingold_torch_tiled(
+            A,
+            k,
+            pos_arr,
+            fixed,
+            iterations,
+            threshold,
+            dim,
+            torch_module=torch,
+            device=device,
+            seed=seed,
+            tile_size=tile_size,
+        )
+    else:
+        pos = _fruchterman_reingold_torch(
+            A,
+            k,
+            pos_arr,
+            fixed,
+            iterations,
+            threshold,
+            dim,
+            torch_module=torch,
+            device=device,
+            seed=seed,
+        )
 
     if fixed is None and scale is not None:
         pos = _rescale_layout(pos, scale=scale) + center

@@ -52,7 +52,7 @@ def generate_network(
     verbose: bool = True,
     compute_graph: bool = True,
     compute_layout: bool = True,
-    layout_method: Literal["mod_fr", "sfdp"] = "mod_fr",
+    layout_method: Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"] = "mod_fr",
     expanded_only: bool = False,
     use_existing_graph: bool = True,
     n_cpus: int = 1,
@@ -100,10 +100,13 @@ def generate_network(
         whether or not to generate the graph after distance matrix calculation.
     compute_layout : bool, optional
         whether or not to generate the layout. May be time consuming if too many cells.
-    layout_method : Literal["sfdp", "mod_fr"], optional
-        accepts one of 'sfdp' or 'mod_fr'. 'sfdp' refers to `sfdp_layout` from `graph_tool` (C++ implementation; fast)
-        whereas 'mod_fr' refers to modified Fruchterman-Reingold layout originally implemented in dandelion (python
-        implementation; slightly slower).
+    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "sfdp", "fa2"], optional
+        Layout algorithm. Options:
+        - 'mod_fr': Original python FR layout
+        - 'mod_fr2': Numba-accelerated FR (faster CPU)
+        - 'mod_fr2_gpu': PyTorch GPU FR (auto-tiles for >100K nodes)
+        - 'sfdp': graph_tool sfdp_layout (requires graph-tool)
+        - 'fa2': ForceAtlas2 (requires fa2-modified)
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clonotypes.
     use_existing_graph : bool, optional
