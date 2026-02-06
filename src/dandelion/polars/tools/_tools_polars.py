@@ -1361,71 +1361,99 @@ def _graph_to_matrices(
     Rules:
     - If G is provided, convert edges → sparse distance matrix.
     - If a CSR distance matrix is provided, must have `._index_names`.
-    - If a DataFrame is provided, use its index/columns.
     - Reindex to `adata.obs_names` without dense conversion.
     - Compute connectivities as exp(-d) on non-zero entries.
     - Add tiny self-edge if matrix is entirely empty.
+
+    Optimized to avoid memory explosion by minimizing intermediate copies.
     """
 
     target_names = list(adata.obs_names)
     n = len(target_names)
     name_to_new = {name: i for i, name in enumerate(target_names)}
+
     # CASE A: Build distances from a NetworkX graph
     if distances is None and G is not None:
-        # Build COO arrays directly
         edges = list(G.edges(data=True))
         if not edges:
             distances = csr_matrix((n, n), dtype=np.float32)
         else:
-            u, v, w = zip(*[(u, v, d.get("weight", 1.0)) for u, v, d in edges])
-            # Filter edges where both nodes exist in target
-            mask_u = np.array([node in name_to_new for node in u])
-            mask_v = np.array([node in name_to_new for node in v])
-            mask = mask_u & mask_v  # vectorized AND
-            u = np.array(u)[mask]
-            v = np.array(v)[mask]
-            w = np.array(w, dtype=np.float32)[mask]
+            # Single-pass filtering and mapping - no intermediate arrays
+            valid_edges = []
+            for u_name, v_name, edge_data in edges:
+                u_idx = name_to_new.get(u_name)
+                v_idx = name_to_new.get(v_name)
+                if u_idx is not None and v_idx is not None:
+                    weight = edge_data.get("weight", 1.0)
+                    valid_edges.append((u_idx, v_idx, weight))
 
-            # Map names to target indices
-            u_idx = np.array([name_to_new[x] for x in u])
-            v_idx = np.array([name_to_new[x] for x in v])
+            if not valid_edges:
+                distances = csr_matrix((n, n), dtype=np.float32)
+            else:
+                # Unpack and create symmetric matrix directly
+                u_idx, v_idx, weights = zip(*valid_edges)
+                u_idx = np.array(u_idx, dtype=np.int32)
+                v_idx = np.array(v_idx, dtype=np.int32)
+                weights = np.array(weights, dtype=np.float32)
 
-            # Make symmetric
-            rows = np.concatenate([u_idx, v_idx])
-            cols = np.concatenate([v_idx, u_idx])
-            vals = np.concatenate([w, w])
-            vals += 1.0
+                # Make symmetric - concatenate once
+                rows = np.concatenate([u_idx, v_idx])
+                cols = np.concatenate([v_idx, u_idx])
+                vals = np.concatenate([weights, weights])
+                vals += 1.0
 
-            distances = csr_matrix(
-                (vals, (rows, cols)), shape=(n, n), dtype=np.float32
-            )
+                distances = csr_matrix(
+                    (vals, (rows, cols)), shape=(n, n), dtype=np.float32
+                )
+                # Clean up immediately
+                del rows, cols, vals, u_idx, v_idx, weights, valid_edges
 
     # CASE B: distances provided as a csr_matrix with _index_names
     elif isinstance(distances, csr_matrix):
         old_names = np.array(distances._index_names)
         coo = distances.tocoo()
 
-        # Map old names to target indices, missing names → -1
-        old_row_names = old_names[coo.row]
-        old_col_names = old_names[coo.col]
+        # Vectorized mapping using searchsorted (much faster than list comprehension)
+        # Build arrays for lookup
+        target_arr = np.array(target_names)
 
-        row_idx = np.array(
-            [name_to_new.get(name, -1) for name in old_row_names]
-        )
-        col_idx = np.array(
-            [name_to_new.get(name, -1) for name in old_col_names]
-        )
+        # Get unique old names and their mapping
+        unique_old = np.unique(old_names)
 
-        # Keep only edges where both row and col exist in target
-        mask = (row_idx >= 0) & (col_idx >= 0)
-        rows = row_idx[mask]
-        cols = col_idx[mask]
-        vals = coo.data[mask]
-        vals += 1.0
+        # Find which old names exist in target
+        # Use np.isin for vectorized membership test
+        old_in_target = np.isin(unique_old, target_arr)
 
-        distances = csr_matrix(
-            (vals, (rows, cols)), shape=(n, n), dtype=np.float32
-        )
+        # Create mapping for valid names only
+        valid_old_names = unique_old[old_in_target]
+        if len(valid_old_names) > 0:
+            # Create mapping using pandas for efficient lookup
+            name_series = pd.Series(
+                range(n), index=target_names, dtype=np.int32
+            )
+
+            # Map row and column names
+            old_row_names = old_names[coo.row]
+            old_col_names = old_names[coo.col]
+
+            row_idx = name_series.reindex(old_row_names, fill_value=-1).values
+            col_idx = name_series.reindex(old_col_names, fill_value=-1).values
+
+            # Keep only valid mappings
+            mask = (row_idx >= 0) & (col_idx >= 0)
+            rows = row_idx[mask]
+            cols = col_idx[mask]
+            vals = coo.data[mask]
+            vals += 1.0
+
+            distances = csr_matrix(
+                (vals, (rows, cols)), shape=(n, n), dtype=np.float32
+            )
+            # Clean up
+            del row_idx, col_idx, rows, cols, vals, mask
+        else:
+            distances = csr_matrix((n, n), dtype=np.float32)
+
     # Build connectivities = exp(-d) for non-zero entries
     connectivities = distances.copy()
     if connectivities.nnz > 0:
@@ -1434,14 +1462,15 @@ def _graph_to_matrices(
 
     distances.data -= 1.0
 
-    # Ensure matrix is not completely empty
+    # Ensure matrix is not completely empty - avoid expensive conversion
     if connectivities.nnz == 0:
-        connectivities = connectivities.tolil()
-        distances = distances.tolil()
-        connectivities[0, 0] = 1e-10
-        distances[0, 0] = 0.0
-        connectivities = connectivities.tocsr()
-        distances = distances.tocsr()
+        # Create minimal non-empty matrix directly without conversion
+        connectivities = csr_matrix(
+            ([1e-10], ([0], [0])), shape=(n, n), dtype=np.float32
+        )
+        distances = csr_matrix(
+            ([0.0], ([0], [0])), shape=(n, n), dtype=np.float32
+        )
 
     return connectivities, distances
 
