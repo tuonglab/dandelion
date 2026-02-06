@@ -1578,7 +1578,7 @@ def _get_numba_cuda_bh_kernels():
     return _numba_cuda_bh_kernels_cache
 
 
-@random_state(8)
+@random_state(7)
 def _fruchterman_reingold_barnes_hut_cuda(
     A,
     k=None,
