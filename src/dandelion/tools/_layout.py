@@ -1,8 +1,14 @@
 from __future__ import annotations
+
+import math
+
 import numpy as np
 import pandas as pd
 import networkx as nx
 
+from numba import njit, prange, cuda
+from scipy.sparse import issparse, coo_matrix, csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scanpy import logging as logg
 from typing import Literal
 
@@ -20,7 +26,13 @@ def generate_layout(
     verbose: bool = True,
     compute_layout: bool = True,
     layout_method: Literal[
-        "mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"
+        "mod_fr",
+        "mod_fr2",
+        "mod_fr2_gpu",
+        "mod_fr_bh",
+        "mod_fr_bh_gpu",
+        "sfdp",
+        "fa2",
     ] = "mod_fr2",
     expanded_only: bool = False,
     graphs: tuple[nx.Graph, nx.Graph] = None,
@@ -462,12 +474,7 @@ def _sparse_fruchterman_reingold(
     except AttributeError as e:
         msg = "fruchterman_reingold() takes an adjacency matrix as input"
         raise nx.NetworkXError(msg) from e
-    try:
-        from scipy.sparse import coo_matrix
-    except ImportError as e:
-        msg = "_sparse_fruchterman_reingold() scipy numpy: http://scipy.org/ "
-        raise ImportError(msg) from e
-    # make sure we have a LIst of Lists representation
+    # make sure we have a List of Lists representation
     try:
         A = A.tolil()
     except AttributeError:
@@ -584,7 +591,6 @@ def _detect_torch_device():
     return torch, device
 
 
-
 _numba_fr_kernel_cache = None
 
 
@@ -593,14 +599,6 @@ def _get_numba_fr_kernel():
     global _numba_fr_kernel_cache
     if _numba_fr_kernel_cache is not None:
         return _numba_fr_kernel_cache
-
-    try:
-        from numba import njit, prange
-    except ImportError:
-        raise ImportError(
-            "Numba is required for mod_fr2 layout. "
-            "Install it with: pip install numba"
-        )
 
     @njit(parallel=True, cache=True, fastmath=True)
     def _kernel(
@@ -703,8 +701,6 @@ def _fruchterman_reingold_numba(
     Separates repulsive (O(N^2)) and attractive (O(E)) forces
     with CSR sparse format for efficient edge traversal.
     """
-    from scipy.sparse import csr_matrix, issparse
-
     try:
         nnodes, _ = A.shape
     except AttributeError as e:
@@ -862,8 +858,6 @@ def _fruchterman_reingold_torch_tiled(
         Number of nodes per tile. Larger = faster but more memory.
         Default 4096 (uses ~64MB per tile for 2D).
     """
-    from scipy.sparse import issparse, coo_matrix
-
     try:
         nnodes, _ = A.shape
     except AttributeError as e:
@@ -953,7 +947,9 @@ def _fruchterman_reingold_torch_tiled(
             # The attractive part is: -A*d/k (negative, so it SUBTRACTS from repulsive)
             # This means: displacement += delta * (-A*d/k)
             # Which pulls nodes together (delta points away, negative flips it)
-            attr_mag = -edge_weight * edge_dist * inv_k  # (E,) - negative values
+            attr_mag = (
+                -edge_weight * edge_dist * inv_k
+            )  # (E,) - negative values
 
             # Apply to edge_delta: negative * (src-dst) pulls src toward dst
             attr_force = attr_mag.unsqueeze(-1) * edge_delta  # (E, dim)
@@ -995,14 +991,6 @@ def _get_numba_bh_kernels():
     global _numba_bh_kernels_cache
     if _numba_bh_kernels_cache is not None:
         return _numba_bh_kernels_cache
-
-    try:
-        from numba import njit, prange
-    except ImportError:
-        raise ImportError(
-            "Numba is required for Barnes-Hut layout. "
-            "Install it with: pip install numba"
-        )
 
     @njit(cache=True)
     def _build_quadtree(
@@ -1244,10 +1232,11 @@ def _get_numba_bh_kernels():
                     continue
 
                 dist = np.sqrt(dist_sq)
-                # Attractive force: w * d / k (toward neighbor)
+                # Attractive force: w * d^2 / k (toward neighbor)
+                # Standard FR: magnitude d^2/k, direction toward j
                 force = w * dist * inv_k
-                displacement[i, 0] += force * dx / dist
-                displacement[i, 1] += force * dy / dist
+                displacement[i, 0] += force * dx
+                displacement[i, 1] += force * dy
 
     _numba_bh_kernels_cache = (
         _build_quadtree,
@@ -1284,8 +1273,6 @@ def _fruchterman_reingold_barnes_hut_numba(
         Mass assigned to singleton nodes (no edges). Lower values reduce
         their impact on pushing connected components apart. Default 0.5.
     """
-    from scipy.sparse import csr_matrix, issparse
-
     if dim != 2:
         raise ValueError("Barnes-Hut currently only supports 2D layouts")
 
@@ -1344,10 +1331,16 @@ def _fruchterman_reingold_barnes_hut_numba(
     A_indices = np.ascontiguousarray(A_csr.indices.astype(np.int64))
     A_indptr = np.ascontiguousarray(A_csr.indptr.astype(np.int64))
 
-    # Compute node degrees for mass weighting
-    # Singletons get small mass so they minimally affect layout
-    degrees = np.diff(A_indptr).astype(np.float64)
-    particle_mass = np.maximum(singleton_mass, degrees)
+    # Compute component-size-based mass weighting
+    # Small clones get less mass so they don't push big clones apart
+    # mass = log(component_size), singletons use singleton_mass
+
+    n_comp, labels = connected_components(A_csr, directed=False)
+    comp_sizes = np.bincount(labels)
+    node_comp_size = comp_sizes[labels].astype(np.float64)
+    particle_mass = np.where(
+        node_comp_size <= 1, singleton_mass, np.log(node_comp_size)
+    )
 
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
@@ -1445,15 +1438,6 @@ def _get_numba_cuda_bh_kernels():
     global _numba_cuda_bh_kernels_cache
     if _numba_cuda_bh_kernels_cache is not None:
         return _numba_cuda_bh_kernels_cache
-
-    try:
-        from numba import cuda
-        import math
-    except ImportError:
-        raise ImportError(
-            "Numba with CUDA support is required. "
-            "Install it with: pip install numba"
-        )
 
     # Check if CUDA is available
     if not cuda.is_available():
@@ -1638,8 +1622,6 @@ def _fruchterman_reingold_barnes_hut_cuda(
     singleton_mass : float, optional
         Mass assigned to singleton nodes (no edges). Default 0.5.
     """
-    from scipy.sparse import coo_matrix, issparse
-
     if dim != 2:
         raise ValueError("Barnes-Hut currently only supports 2D layouts")
 
@@ -1650,9 +1632,12 @@ def _fruchterman_reingold_barnes_hut_cuda(
         raise nx.NetworkXError(msg) from e
 
     # Get CUDA kernels (also validates CUDA availability)
-    _barnes_hut_forces_cuda, _attractive_forces_cuda, _gravity_and_update_cuda, cuda = (
-        _get_numba_cuda_bh_kernels()
-    )
+    (
+        _barnes_hut_forces_cuda,
+        _attractive_forces_cuda,
+        _gravity_and_update_cuda,
+        cuda,
+    ) = _get_numba_cuda_bh_kernels()
 
     # Get CPU tree-building kernel
     _build_quadtree, _, _ = _get_numba_bh_kernels()
@@ -1695,11 +1680,16 @@ def _fruchterman_reingold_barnes_hut_cuda(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
-    # Compute node degrees for mass weighting (from COO)
-    # Singletons get small mass so they minimally affect layout
-    degrees = np.zeros(nnodes, dtype=np.float64)
-    np.add.at(degrees, A_coo.row, 1)
-    particle_mass = np.maximum(singleton_mass, degrees)
+    # Compute component-size-based mass weighting
+    # Small clones get less mass so they don't push big clones apart
+    # mass = log(component_size), singletons use singleton_mass
+
+    n_comp, labels = connected_components(A_coo.tocsr(), directed=False)
+    comp_sizes = np.bincount(labels)
+    node_comp_size = comp_sizes[labels].astype(np.float64)
+    particle_mass = np.where(
+        node_comp_size <= 1, singleton_mass, np.log(node_comp_size)
+    )
 
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
@@ -1849,8 +1839,6 @@ def _fruchterman_reingold_barnes_hut_torch(
     singleton_mass : float, optional
         Mass assigned to singleton nodes (no edges). Default 0.5.
     """
-    from scipy.sparse import issparse, coo_matrix
-
     if dim != 2:
         raise ValueError("Barnes-Hut currently only supports 2D layouts")
 
@@ -1911,11 +1899,16 @@ def _fruchterman_reingold_barnes_hut_torch(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
-    # Compute node degrees for mass weighting (from COO)
-    # Singletons get small mass so they minimally affect layout
-    degrees = np.zeros(nnodes, dtype=np.float64)
-    np.add.at(degrees, A_coo.row, 1)
-    particle_mass = np.maximum(singleton_mass, degrees)
+    # Compute component-size-based mass weighting
+    # Small clones get less mass so they don't push big clones apart
+    # mass = log(component_size), singletons use singleton_mass
+
+    n_comp, labels = connected_components(A_coo.tocsr(), directed=False)
+    comp_sizes = np.bincount(labels)
+    node_comp_size = comp_sizes[labels].astype(np.float64)
+    particle_mass = np.where(
+        node_comp_size <= 1, singleton_mass, np.log(node_comp_size)
+    )
 
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
@@ -1958,15 +1951,15 @@ def _fruchterman_reingold_barnes_hut_torch(
         )
 
         # Transfer tree to GPU
-        t_com_x = torch.from_numpy(node_com_x[:num_tree_nodes].astype(np.float32)).to(
-            device
-        )
-        t_com_y = torch.from_numpy(node_com_y[:num_tree_nodes].astype(np.float32)).to(
-            device
-        )
-        t_mass = torch.from_numpy(node_mass[:num_tree_nodes].astype(np.float32)).to(
-            device
-        )
+        t_com_x = torch.from_numpy(
+            node_com_x[:num_tree_nodes].astype(np.float32)
+        ).to(device)
+        t_com_y = torch.from_numpy(
+            node_com_y[:num_tree_nodes].astype(np.float32)
+        ).to(device)
+        t_mass = torch.from_numpy(
+            node_mass[:num_tree_nodes].astype(np.float32)
+        ).to(device)
         t_half_size = torch.from_numpy(
             node_half_size[:num_tree_nodes].astype(np.float32)
         ).to(device)
@@ -1974,12 +1967,16 @@ def _fruchterman_reingold_barnes_hut_torch(
         t_children = torch.from_numpy(node_children[:num_tree_nodes]).to(device)
 
         # Compute repulsive forces on GPU using BFS traversal
-        displacement = torch.zeros((nnodes, dim), dtype=torch.float32, device=device)
+        displacement = torch.zeros(
+            (nnodes, dim), dtype=torch.float32, device=device
+        )
 
         # Process tree level by level for better GPU utilization
         # Start with all particles needing to check root
         active_particles = torch.arange(nnodes, device=device)
-        active_nodes = torch.zeros(nnodes, dtype=torch.long, device=device)  # All start at root
+        active_nodes = torch.zeros(
+            nnodes, dtype=torch.long, device=device
+        )  # All start at root
 
         max_levels = max_depth + 2
         for _level in range(max_levels):
@@ -2143,10 +2140,21 @@ def _fruchterman_reingold_layout_bh(
 
     nnodes = len(G)
     if nnodes > 10000:
-        logg.info(f"Using Barnes-Hut CPU layout for {nnodes} nodes (theta={theta})")
+        logg.info(
+            f"Using Barnes-Hut CPU layout for {nnodes} nodes (theta={theta})"
+        )
 
     pos = _fruchterman_reingold_barnes_hut_numba(
-        A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta, singleton_mass
+        A,
+        k,
+        pos_arr,
+        fixed,
+        iterations,
+        threshold,
+        dim,
+        seed,
+        theta,
+        singleton_mass,
     )
 
     if fixed is None and scale is not None:
@@ -2184,12 +2192,7 @@ def _fruchterman_reingold_layout_bh_gpu(
     """
     # Try Numba CUDA first (fastest for NVIDIA GPUs)
     cuda_available = False
-    try:
-        from numba import cuda
-
-        cuda_available = cuda.is_available()
-    except ImportError:
-        pass
+    cuda_available = cuda.is_available()
 
     if cuda_available:
         logg.info(f"Using Barnes-Hut with Numba CUDA for {len(G)} nodes")
@@ -2205,7 +2208,9 @@ def _fruchterman_reingold_layout_bh_gpu(
             fixed = np.asarray([nfixed[node] for node in fixed])
 
         if pos is not None:
-            dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
+            dom_size = max(
+                coord for pos_tup in pos.values() for coord in pos_tup
+            )
             if dom_size == 0:
                 dom_size = 1
             pos_arr = seed.rand(len(G), dim) * dom_size + center
@@ -2232,7 +2237,16 @@ def _fruchterman_reingold_layout_bh_gpu(
             k = dom_size / np.sqrt(nnodes)
 
         pos = _fruchterman_reingold_barnes_hut_cuda(
-            A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta, singleton_mass
+            A,
+            k,
+            pos_arr,
+            fixed,
+            iterations,
+            threshold,
+            dim,
+            seed,
+            theta,
+            singleton_mass,
         )
 
         if fixed is None and scale is not None:
