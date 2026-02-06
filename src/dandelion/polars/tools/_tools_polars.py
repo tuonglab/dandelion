@@ -1330,7 +1330,11 @@ def transfer(
         message_parts += [
             f"wrote adata.obsp['connectivities'] & ['distances'] from graph[{main_idx}]\n",
             "stored RNA matrices under rna_* keys (stashed)\n",
-            f"stored vdj matrices under '{v_connectivities_key}' (+ '_expanded' and + '_full' if available)\n",
+            (
+                f"stored vdj matrices under '{v_connectivities_key}' (+ '_expanded')\n"
+                if main_idx != 2
+                else f"stored vdj matrices under '{v_connectivities_key}_full'\n"
+            ),
         ]
     if uns:
         message_parts += [f"added `.uns['{clone_key}']` clone-level mapping"]
