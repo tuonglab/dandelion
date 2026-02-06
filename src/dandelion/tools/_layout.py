@@ -2111,75 +2111,91 @@ def _fruchterman_reingold_layout_bh_gpu(
 ):
     """Barnes-Hut accelerated FR layout (GPU).
 
-    O(N log N) complexity. Tree built on CPU, forces computed on GPU.
+    O(N log N) complexity. Uses Numba CUDA on NVIDIA GPUs for best performance.
+    Falls back to CPU Barnes-Hut if CUDA is not available (e.g., on Mac/MPS).
 
     Parameters
     ----------
     theta : float, optional
         Opening angle. Smaller = accurate, larger = fast. Default 0.8.
     """
-    torch, device = _detect_torch_device()
+    # Try Numba CUDA first (fastest for NVIDIA GPUs)
+    cuda_available = False
+    try:
+        from numba import cuda
 
-    G, center = _process_params(G, center, dim)
+        cuda_available = cuda.is_available()
+    except ImportError:
+        pass
 
-    if fixed is not None:
-        if pos is None:
-            raise ValueError("nodes are fixed without positions given")
-        for node in fixed:
-            if node not in pos:
+    if cuda_available:
+        logg.info(f"Using Barnes-Hut with Numba CUDA for {len(G)} nodes")
+        G, center = _process_params(G, center, dim)
+
+        if fixed is not None:
+            if pos is None:
                 raise ValueError("nodes are fixed without positions given")
-        nfixed = {node: i for i, node in enumerate(G)}
-        fixed = np.asarray([nfixed[node] for node in fixed])
+            for node in fixed:
+                if node not in pos:
+                    raise ValueError("nodes are fixed without positions given")
+            nfixed = {node: i for i, node in enumerate(G)}
+            fixed = np.asarray([nfixed[node] for node in fixed])
 
-    if pos is not None:
-        dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
-        if dom_size == 0:
+        if pos is not None:
+            dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
+            if dom_size == 0:
+                dom_size = 1
+            pos_arr = seed.rand(len(G), dim) * dom_size + center
+
+            for i, n in enumerate(G):
+                if n in pos:
+                    pos_arr[i] = np.asarray(pos[n])
+        else:
+            pos_arr = None
             dom_size = 1
-        pos_arr = seed.rand(len(G), dim) * dom_size + center
 
-        for i, n in enumerate(G):
-            if n in pos:
-                pos_arr[i] = np.asarray(pos[n])
-    else:
-        pos_arr = None
-        dom_size = 1
+        if len(G) == 0:
+            return {}
+        if len(G) == 1:
+            return {nx.utils.arbitrary_element(G.nodes()): center}
 
-    if len(G) == 0:
-        return {}
-    if len(G) == 1:
-        return {nx.utils.arbitrary_element(G.nodes()): center}
+        if int(nx.__version__[0]) > 2:
+            A = nx.to_scipy_sparse_array(G, weight=weight, dtype="f")
+        else:
+            A = nx.to_scipy_sparse_matrix(G, weight=weight, dtype="f")
 
-    if int(nx.__version__[0]) > 2:
-        A = nx.to_scipy_sparse_array(G, weight=weight, dtype="f")
-    else:
-        A = nx.to_scipy_sparse_matrix(G, weight=weight, dtype="f")
+        if k is None and fixed is not None:
+            nnodes, _ = A.shape
+            k = dom_size / np.sqrt(nnodes)
 
-    if k is None and fixed is not None:
-        nnodes, _ = A.shape
-        k = dom_size / np.sqrt(nnodes)
+        pos = _fruchterman_reingold_barnes_hut_cuda(
+            A, k, pos_arr, fixed, iterations, threshold, dim, seed, theta
+        )
 
-    nnodes = len(G)
-    if nnodes > 10000:
-        logg.info(f"Using Barnes-Hut GPU layout for {nnodes} nodes (theta={theta})")
+        if fixed is None and scale is not None:
+            pos = _rescale_layout(pos, scale=scale) + center
+        pos = dict(zip(G, pos))
+        return pos
 
-    pos = _fruchterman_reingold_barnes_hut_torch(
-        A,
-        k,
-        pos_arr,
-        fixed,
-        iterations,
-        threshold,
-        dim,
-        torch_module=torch,
-        device=device,
+    # Fall back to CPU Barnes-Hut (still fast with Numba parallel)
+    logg.info(
+        f"CUDA not available, using CPU Barnes-Hut for {len(G)} nodes. "
+        "For GPU acceleration, use NVIDIA GPU with CUDA toolkit."
+    )
+    return _fruchterman_reingold_layout_bh(
+        G,
+        k=k,
+        pos=pos,
+        fixed=fixed,
+        iterations=iterations,
+        threshold=threshold,
+        weight=weight,
+        scale=scale,
+        center=center,
+        dim=dim,
         seed=seed,
         theta=theta,
     )
-
-    if fixed is None and scale is not None:
-        pos = _rescale_layout(pos, scale=scale) + center
-    pos = dict(zip(G, pos))
-    return pos
 
 
 def _fruchterman_reingold_layout_v2(
