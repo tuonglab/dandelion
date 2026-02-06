@@ -1232,11 +1232,10 @@ def _get_numba_bh_kernels():
                     continue
 
                 dist = np.sqrt(dist_sq)
-                # Attractive force: w * d^2 / k (toward neighbor)
-                # Standard FR: magnitude d^2/k, direction toward j
+                # Attractive force: w * d / k (toward neighbor)
                 force = w * dist * inv_k
-                displacement[i, 0] += force * dx
-                displacement[i, 1] += force * dy
+                displacement[i, 0] += force * dx / dist
+                displacement[i, 1] += force * dy / dist
 
     _numba_bh_kernels_cache = (
         _build_quadtree,
@@ -1545,12 +1544,10 @@ def _get_numba_cuda_bh_kernels():
             return
 
         dist = math.sqrt(dist_sq)
+        # Attractive force: w * d / k (toward neighbor)
         force = w * dist * inv_k
-
-        # Attractive force: w * d^2 / k (toward neighbor)
-        # Standard FR: magnitude d^2/k, direction toward j
-        cuda.atomic.add(displacement, (i, 0), force * dx)
-        cuda.atomic.add(displacement, (i, 1), force * dy)
+        cuda.atomic.add(displacement, (i, 0), force * dx / dist)
+        cuda.atomic.add(displacement, (i, 1), force * dy / dist)
 
     @cuda.jit
     def _gravity_and_update_cuda(
