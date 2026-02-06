@@ -440,7 +440,7 @@ def _fruchterman_reingold(
         displacement = displacement - pos / (k * np.sqrt(nnodes))
         # update positions
         length = np.linalg.norm(displacement, axis=-1)
-        length = np.where(length < 0.01, 0.1, length)
+        length = np.where(length < 0.01, 0.01, length)
         delta_pos = np.einsum("ij,i->ij", displacement, t / length)
         if fixed is not None:
             # don't change positions of fixed nodes
@@ -523,7 +523,7 @@ def _sparse_fruchterman_reingold(
         displacement = displacement - pos / (k * np.sqrt(nnodes))
         # update positions
         length = np.sqrt((displacement**2).sum(axis=0))
-        length = np.where(length < 0.01, 0.1, length)
+        length = np.where(length < 0.01, 0.01, length)
         delta_pos = (displacement * t / length).T
         pos += delta_pos
         # cool temperature
@@ -667,7 +667,7 @@ def _get_numba_fr_kernel():
                     length_sq += displacement[i, d] ** 2
                 length = np.sqrt(length_sq)
                 if length < 0.01:
-                    length = 0.1
+                    length = 0.01
                 scale = t / length
                 for d in range(dim):
                     dp = displacement[i, d] * scale
@@ -1284,14 +1284,14 @@ def _fruchterman_reingold_barnes_hut_numba(
 
     # Convert to CSR for efficient row access
     if issparse(A):
-        A_csr = A.tocsr().astype(np.float32)
+        A_csr = A.tocsr().astype(np.float64)
     else:
-        A_csr = csr_matrix(A.astype(np.float32))
+        A_csr = csr_matrix(A.astype(np.float64))
 
     if pos is None:
-        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float32)
+        pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float64)
     else:
-        pos = pos.astype(np.float32)
+        pos = pos.astype(np.float64)
 
     if k is None:
         k = np.sqrt(1.0 / nnodes)
@@ -1324,7 +1324,7 @@ def _fruchterman_reingold_barnes_hut_numba(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
-    displacement = np.zeros((nnodes, dim), dtype=np.float32)
+    displacement = np.zeros((nnodes, dim), dtype=np.float64)
 
     # CSR arrays
     A_data = np.ascontiguousarray(A_csr.data)
@@ -1361,7 +1361,7 @@ def _fruchterman_reingold_barnes_hut_numba(
 
         # Build quadtree with degree-weighted mass
         num_tree_nodes = _build_quadtree(
-            pos.astype(np.float64),
+            pos,
             particle_mass,
             nnodes,
             center_x,
@@ -1382,7 +1382,7 @@ def _fruchterman_reingold_barnes_hut_numba(
         # Compute repulsive forces via Barnes-Hut
         displacement[:] = 0.0
         _barnes_hut_forces(
-            pos.astype(np.float64),
+            pos,
             nnodes,
             theta,
             k2,
@@ -1407,20 +1407,20 @@ def _fruchterman_reingold_barnes_hut_numba(
 
         # Update positions
         length = np.sqrt((displacement**2).sum(axis=1))
-        length = np.where(length < 0.01, 0.1, length)
+        length = np.where(length < 0.01, 0.01, length)
         delta_pos = displacement * (t / length)[:, np.newaxis]
 
         if fixed is not None:
             delta_pos[fixed_mask] = 0.0
 
-        pos += delta_pos.astype(np.float32)
+        pos += delta_pos
         t -= dt
 
         err = np.sqrt((delta_pos**2).sum()) / nnodes
         if err < threshold:
             break
 
-    return pos
+    return pos.astype(np.float32)
 
 
 # ============================================================================
@@ -1576,7 +1576,7 @@ def _get_numba_cuda_bh_kernels():
         # Limit displacement by temperature
         length = math.sqrt(dx * dx + dy * dy)
         if length < 0.01:
-            length = 0.1
+            length = 0.01
 
         scale = t / length
         pos[i, 0] += dx * scale
@@ -1641,9 +1641,9 @@ def _fruchterman_reingold_barnes_hut_cuda(
 
     # Convert to COO for edges
     if issparse(A):
-        A_coo = A.tocoo().astype(np.float32)
+        A_coo = A.tocoo().astype(np.float64)
     else:
-        A_coo = coo_matrix(A.astype(np.float32))
+        A_coo = coo_matrix(A.astype(np.float64))
 
     if pos is None:
         pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float64)
@@ -1795,10 +1795,11 @@ def _fruchterman_reingold_barnes_hut_cuda(
 
         t -= dt
 
-        # Check convergence periodically
+        # Check convergence periodically (every 10 iters to limit GPU->CPU copies)
         if _iter % 10 == 0:
-            displacement = d_displacement.copy_to_host()
-            err = np.sqrt((displacement**2).sum()) / nnodes
+            pos_new = d_pos.copy_to_host()
+            delta_pos = pos_new - pos
+            err = np.sqrt((delta_pos**2).sum()) / nnodes
             if err < threshold:
                 break
 
