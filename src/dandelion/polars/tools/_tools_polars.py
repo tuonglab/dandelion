@@ -1055,7 +1055,7 @@ def _flatten_and_join_loci(row: dict, locus_columns: list[str]) -> str | None:
 def transfer(
     adata: AnnData | MuData,
     vdj: DandelionPolars,
-    expanded: bool = False,
+    main_view: Literal["all", "expanded", "full"] = "all",
     gex_key: str | None = None,
     vdj_key: str | None = None,
     clone_key: str | None = None,
@@ -1071,7 +1071,7 @@ def transfer(
     Transfers both graphs:
       - graph[0] -> adata.obsm['X_vdj_all']
       - graph[1] -> adata.obsm['X_vdj_expanded']
-    The `expanded` flag controls which graph becomes the *main* adjacency written to
+    The `main_view` flag controls which graph becomes the *main* adjacency written to
     adata.obsp['connectivities'] / ['distances'] (but both graphs are stored).
 
     Parameters
@@ -1080,8 +1080,9 @@ def transfer(
         AnnData object or `MuData` object.
     dandelion : DandelionPolars
         Dandelion object.
-    expanded : bool, optional
-        Whether or not to transfer the embedding with all cells with BCR (False) or only for expanded clones (True).
+    main_view : Literal["all", "expanded", "full"], optional
+        Which graph becomes the *main* adjacency written to adata.obsp['connectivities'] / ['distances'].
+        If 'full', the full distance matrix from Dandelion is transferred and stored in adata.obsp and no graph is transferred to obsm.
     gex_key : str | None, optional
         prefix for stashed RNA connectivities and distances.
     vdj_key : str | None, optional
@@ -1139,7 +1140,7 @@ def transfer(
     # also check that all the cells in dandelion are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)
     # subset to common cells only
-    vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
+    vdj = vdj[vdj._metadata.index.isin(common_cells)]
 
     # If there's no graph, we're done with metadata only
     if vdj.graph is None:
@@ -1164,63 +1165,64 @@ def transfer(
             # preferred stash from obsp if exist
             recipient.obsp[g_connectivities_key] = recipient.obsp[
                 "connectivities"
-            ].copy()
-            recipient.obsp[g_distances_key] = recipient.obsp["distances"].copy()
+            ]
+            recipient.obsp[g_distances_key] = recipient.obsp["distances"]
             g_neighbors_key = f"{gex_key}_{neighbors_key}"
-            recipient.uns[g_neighbors_key] = recipient.uns[neighbors_key].copy()
+            recipient.uns[g_neighbors_key] = recipient.uns[neighbors_key]
 
     # --- 3) Convert both graphs ---
     graph_connectivities, graph_distances = {}, {}
-    # handle graph[0] and graph[1]
-    for idx in (0, 1):
-        G = None
-        if vdj.graph is not None:
-            try:
-                G = vdj.graph[idx]
-            except Exception:
-                pass
-
-        if G is not None:
-            graph_connectivities[idx], graph_distances[idx] = (
-                _graph_to_matrices(G, recipient, None)
+    if main_view == "full":
+        main_idx = 2
+        # explicitly only transfer full distance matrix if requested
+        if getattr(vdj, "distances", None) is not None:
+            graph_connectivities[2], graph_distances[2] = _graph_to_matrices(
+                None, recipient, vdj.distances
             )
+    else:
+        # handle graph[0] and graph[1]
+        for idx in (0, 1):
+            G = None
+            if vdj.graph is not None:
+                try:
+                    G = vdj.graph[idx]
+                except Exception:
+                    pass
 
-    # handle precomputed distances (sparse or DataFrame)
-    if getattr(vdj, "distances", None) is not None:
-        graph_connectivities[2], graph_distances[2] = _graph_to_matrices(
-            None, recipient, vdj.distances
-        )
-
-    # Determine main graph index
-    main_idx = 1 if expanded else 0
-    if main_idx not in graph_connectivities:
-        main_idx = next(iter(graph_connectivities.keys()))
+            if G is not None:
+                graph_connectivities[idx], graph_distances[idx] = (
+                    _graph_to_matrices(G, recipient, None)
+                )
+        # Determine main graph index
+        main_idx = 1 if main_view == "expanded" else 0
+        if main_idx not in graph_connectivities:
+            main_idx = next(iter(graph_connectivities.keys()))
 
     if obsp:
         # --- 4) Update recipient.obsp ---
-        recipient.obsp["connectivities"] = graph_connectivities[main_idx].copy()
-        recipient.obsp["distances"] = graph_distances[main_idx].copy()
+        recipient.obsp["connectivities"] = graph_connectivities[main_idx]
+        recipient.obsp["distances"] = graph_distances[main_idx]
 
-        # store the all (graph[0]) and expanded graph (graph[1]) if available
-        if 0 in graph_connectivities:
-            recipient.obsp[f"{v_connectivities_key}_all"] = (
-                graph_connectivities[0].copy()
-            )
-            recipient.obsp[f"{v_distances_key}_all"] = graph_distances[0].copy()
-        if 1 in graph_connectivities:
-            recipient.obsp[f"{v_connectivities_key}_expanded"] = (
-                graph_connectivities[1].copy()
-            )
-            recipient.obsp[f"{v_distances_key}_expanded"] = graph_distances[
-                1
-            ].copy()
-        if 2 in graph_connectivities:
-            recipient.obsp[f"{v_connectivities_key}_full"] = (
-                graph_connectivities[2].copy()
-            )
-            recipient.obsp[f"{v_distances_key}_full"] = graph_distances[
-                2
-            ].copy()
+        if main_idx != 2:
+            # store the all (graph[0]) and expanded graph (graph[1]) if available
+            if 0 in graph_connectivities:
+                recipient.obsp[f"{v_connectivities_key}_all"] = (
+                    graph_connectivities[0]
+                )
+                recipient.obsp[f"{v_distances_key}_all"] = graph_distances[0]
+            if 1 in graph_connectivities:
+                recipient.obsp[f"{v_connectivities_key}_expanded"] = (
+                    graph_connectivities[1]
+                )
+                recipient.obsp[f"{v_distances_key}_expanded"] = graph_distances[
+                    1
+                ]
+        else:
+            if 2 in graph_connectivities:
+                recipient.obsp[f"{v_connectivities_key}_full"] = (
+                    graph_connectivities[2]
+                )
+                recipient.obsp[f"{v_distances_key}_full"] = graph_distances[2]
         recipient.uns[neighbors_key] = {
             "connectivities_key": "connectivities",
             "distances_key": "distances",
@@ -1237,9 +1239,7 @@ def transfer(
 
         if not collapse_nodes:
             for idx in graph_connectivities:
-                graph_connectivities[idx][
-                    graph_connectivities[idx].nonzero()
-                ] = 1
+                graph_connectivities[idx].data[:] = 1
             cell_indices = {
                 str(i): np.array([k])
                 for i, k in zip(
@@ -1314,10 +1314,9 @@ def transfer(
                 stored_embeddings[idx] = obsm_name
 
             # Set the "active" embedding safely
-            main_idx = 1 if expanded else 0
             active_obsm = stored_embeddings.get(main_idx)
             if active_obsm is not None:
-                recipient.obsm["X_vdj"] = recipient.obsm[active_obsm].copy()
+                recipient.obsm["X_vdj"] = recipient.obsm[active_obsm]
 
     # break up the message depending on which parts were executed
     message_parts = []
