@@ -986,38 +986,55 @@ def _fruchterman_reingold_torch_tiled(
 _numba_bh_kernels_cache = None
 
 
-def _get_numba_bh_kernels():
-    """Lazily compile Numba kernels for Barnes-Hut algorithm."""
+def _get_numba_bh_kernels() -> tuple:
+    """Lazily compile Numba CPU kernels for Barnes-Hut algorithm.
+
+    Returns
+    -------
+    tuple
+        (_build_quadtree, _barnes_hut_forces, _attractive_forces, _gravity_and_update)
+    """
     global _numba_bh_kernels_cache
     if _numba_bh_kernels_cache is not None:
         return _numba_bh_kernels_cache
 
     @njit(cache=True)
     def _build_quadtree(
-        pos,
-        particle_mass,  # Mass per particle (e.g., degree-based)
-        nnodes,
-        center_x,
-        center_y,
-        half_size,
-        max_depth,
-        # Output arrays (pre-allocated)
-        node_center_x,
-        node_center_y,
-        node_half_size,
-        node_mass,
-        node_com_x,
-        node_com_y,
-        node_children,  # (max_nodes, 4) - indices of children, -1 if none
-        node_is_leaf,
-        node_particle,  # particle index if leaf with single particle, -1 otherwise
+        pos,            # (nnodes, 2) float64 particle positions
+        particle_mass,  # (nnodes,) float64 mass per particle
+        nnodes,         # int, number of particles
+        center_x,       # float, x center of root cell
+        center_y,       # float, y center of root cell
+        half_size,      # float, half-width of root cell
+        max_depth,      # int, maximum tree depth
+        # Output arrays (pre-allocated, max_tree_nodes each)
+        node_center_x,   # (max_tree_nodes,) float64
+        node_center_y,   # (max_tree_nodes,) float64
+        node_half_size,   # (max_tree_nodes,) float64
+        node_mass,        # (max_tree_nodes,) float64
+        node_com_x,       # (max_tree_nodes,) float64
+        node_com_y,       # (max_tree_nodes,) float64
+        node_children,    # (max_tree_nodes, 4) int64, child indices (-1 = empty)
+        node_is_leaf,     # (max_tree_nodes,) bool
+        node_particle,    # (max_tree_nodes,) int64, particle index (-1 = none)
     ):
-        """Build quadtree from positions using flat arrays.
+        """Build a quadtree from 2D positions using flat arrays.
 
-        Uses particle_mass for weighted center-of-mass computation.
-        Singletons (mass=0) won't contribute to repulsive forces.
+        Inserts each particle into the tree, subdividing leaf cells when they
+        already contain a particle. Center-of-mass is computed using
+        particle_mass weights.
 
-        Returns the number of nodes used.
+        Parameters
+        ----------
+        pos : np.ndarray
+            (nnodes, 2) particle positions.
+        particle_mass : np.ndarray
+            (nnodes,) mass per particle (degree-based; singletons use singleton_mass).
+
+        Returns
+        -------
+        int
+            Number of tree nodes used.
         """
         # Initialize root node
         node_center_x[0] = center_x
@@ -1137,34 +1154,33 @@ def _get_numba_bh_kernels():
 
     @njit(parallel=True, cache=True, fastmath=True)
     def _barnes_hut_forces(
-        pos,
-        nnodes,
-        theta,
-        k2,
-        # Tree structure (mass already weighted by component size)
-        num_tree_nodes,
-        node_half_size,
-        node_mass,
-        node_com_x,
-        node_com_y,
-        node_children,
-        node_is_leaf,
-        # Output
-        displacement,
+        pos,              # (nnodes, 2) float64 particle positions
+        nnodes,           # int, number of particles
+        theta_sq,         # float, theta² (opening angle squared)
+        k2,               # float, k² (optimal distance squared)
+        num_tree_nodes,   # int, number of active tree nodes
+        node_half_size,   # (num_tree_nodes,) float64
+        node_mass,        # (num_tree_nodes,) float64
+        node_com_x,       # (num_tree_nodes,) float64
+        node_com_y,       # (num_tree_nodes,) float64
+        node_children,    # (num_tree_nodes, 4) int64
+        node_is_leaf,     # (num_tree_nodes,) bool
+        displacement,     # (nnodes, 2) float64, output repulsive forces
     ):
-        """Compute repulsive forces using Barnes-Hut approximation.
+        """Compute repulsive forces via Barnes-Hut tree traversal (CPU).
 
-        For each particle, traverse tree and use center-of-mass approximation
-        when cell is far enough (size/distance < theta).
+        Each particle traverses the quadtree with a stack. If a cell is
+        far enough (size²/dist² < theta²), its center-of-mass is used
+        as an approximation. Otherwise, children are expanded.
 
-        Tree node masses are already weighted by component size from tree building.
+        Repulsive force: k² * mass / d, direction away from center-of-mass.
         """
-        theta_sq = theta * theta
-
         for i in prange(nnodes):
-            px, py = pos[i, 0], pos[i, 1]
-            fx, fy = 0.0, 0.0
-
+            px = pos[i, 0]
+            py = pos[i, 1]
+            fx = 0.0
+            fy = 0.0
+            
             # Stack-based tree traversal (avoid recursion)
             stack = np.zeros(64, dtype=np.int64)
             stack[0] = 0  # Start at root
@@ -1177,10 +1193,10 @@ def _get_numba_bh_kernels():
                 if node < 0 or node >= num_tree_nodes:
                     continue
 
-                if node_mass[node] == 0:
+                mass = node_mass[node]
+                if mass == 0:
                     continue
 
-                # Vector from node's COM to particle
                 dx = px - node_com_x[node]
                 dy = py - node_com_y[node]
                 dist_sq = dx * dx + dy * dy
@@ -1188,21 +1204,19 @@ def _get_numba_bh_kernels():
                 if dist_sq < 1e-9:
                     continue
 
-                # Barnes-Hut criterion: size²/dist² < theta²
-                size_sq = (2.0 * node_half_size[node]) ** 2
+                size = 2.0 * node_half_size[node]
+                size_sq = size * size
 
+                # Barnes-Hut criterion: size²/dist² < theta²
                 if node_is_leaf[node] or size_sq < theta_sq * dist_sq:
-                    # Use this node's center of mass
-                    # Repulsive force: k²/d² in direction away from COM
-                    force = k2 * node_mass[node] / dist_sq
+                    force = k2 * mass / dist_sq
                     dist = np.sqrt(dist_sq)
                     fx += force * dx / dist
                     fy += force * dy / dist
                 else:
-                    # Traverse children
                     for c in range(4):
                         child = node_children[node, c]
-                        if child != -1 and stack_ptr < 64:
+                        if child >= 0 and stack_ptr < 64:
                             stack[stack_ptr] = child
                             stack_ptr += 1
 
@@ -1210,16 +1224,20 @@ def _get_numba_bh_kernels():
             displacement[i, 1] = fy
 
     @njit(parallel=True, cache=True, fastmath=True)
-    def _attractive_forces_sparse(
-        pos,
-        A_data,
-        A_indices,
-        A_indptr,
-        nnodes,
-        inv_k,
-        displacement,
+    def _attractive_forces(
+        pos,           # (nnodes, 2) float64 particle positions
+        A_data,        # (nnz,) float64 edge weights
+        A_indices,     # (nnz,) int64 column indices (CSR)
+        A_indptr,      # (nnodes+1,) int64 row pointers (CSR)
+        nnodes,        # int, number of particles
+        inv_k,         # float, 1/k
+        displacement,  # (nnodes, 2) float64, in/out accumulated forces
     ):
-        """Add attractive forces from sparse edges."""
+        """Add attractive forces from sparse edges (CSR, CPU).
+
+        Attractive force: w * d / k toward neighbour.
+        Uses CSR with prange over nodes (race-free) instead of COO with atomics.
+        """
         for i in prange(nnodes):
             for idx in range(A_indptr[i], A_indptr[i + 1]):
                 j = A_indices[idx]
@@ -1228,49 +1246,99 @@ def _get_numba_bh_kernels():
                 dx = pos[j, 0] - pos[i, 0]
                 dy = pos[j, 1] - pos[i, 1]
                 dist_sq = dx * dx + dy * dy
+
                 if dist_sq < 1e-9:
                     continue
 
                 dist = np.sqrt(dist_sq)
-                # Attractive force: w * d / k (toward neighbor)
                 force = w * dist * inv_k
                 displacement[i, 0] += force * dx / dist
                 displacement[i, 1] += force * dy / dist
 
+    @njit(parallel=True, cache=True, fastmath=True)
+    def _gravity_and_update(
+        pos,           # (nnodes, 2) float64 positions, modified in-place
+        displacement,  # (nnodes, 2) float64 accumulated forces
+        gravity,       # float, gravity strength toward origin
+        t,             # float, current temperature (max step size)
+        fixed_mask,    # (nnodes,) bool, True for fixed nodes
+        nnodes,        # int, number of particles
+    ):
+        """Apply gravity toward origin and update positions (CPU).
+
+        For each non-fixed node: subtract gravity pull from displacement,
+        clamp step length, and move the node.
+        """
+        for i in prange(nnodes):
+            if fixed_mask[i]:
+                continue
+
+            dx = displacement[i, 0] - pos[i, 0] * gravity
+            dy = displacement[i, 1] - pos[i, 1] * gravity
+
+            length = np.sqrt(dx * dx + dy * dy)
+            if length < 0.01:
+                length = 0.01
+
+            scale = t / length
+            pos[i, 0] += dx * scale
+            pos[i, 1] += dy * scale
+
     _numba_bh_kernels_cache = (
         _build_quadtree,
         _barnes_hut_forces,
-        _attractive_forces_sparse,
+        _attractive_forces,
+        _gravity_and_update,
     )
     return _numba_bh_kernels_cache
 
 
 @random_state(7)
 def _fruchterman_reingold_barnes_hut_numba(
-    A,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    dim=2,
-    seed=None,
-    theta=0.8,
-    singleton_mass=0.5,
-):
-    """Barnes-Hut accelerated Fruchterman-Reingold (CPU/Numba).
+    A: np.ndarray,
+    k: float | None = None,
+    pos: np.ndarray | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    dim: int = 2,
+    seed: int | None = None,
+    theta: float = 0.8,
+    singleton_mass: float = 0.5,
+) -> np.ndarray:
+    """Barnes-Hut accelerated Fruchterman-Reingold layout (CPU/Numba).
 
-    O(N log N) complexity for repulsive forces using quadtree approximation.
-    Suitable for graphs with 100K-1M+ nodes.
+    O(N log N) per iteration. Mirrors the CUDA version exactly but runs
+    on CPU with Numba parallel JIT.
 
     Parameters
     ----------
-    theta : float, optional
-        Barnes-Hut opening angle. Smaller = more accurate but slower.
-        Default 0.8. Range: 0.3 (accurate) to 1.2 (fast).
-    singleton_mass : float, optional
-        Mass assigned to singleton nodes (no edges). Lower values reduce
-        their impact on pushing connected components apart. Default 0.5.
+    A : np.ndarray or sparse matrix
+        Adjacency matrix.
+    k : float, optional
+        Optimal node distance. Default ``sqrt(1/N)``.
+    pos : np.ndarray, optional
+        (N, dim) initial positions. Random if None.
+    fixed : list, optional
+        Indices of nodes whose positions should not change.
+    iterations : int
+        Maximum number of iterations.
+    threshold : float
+        Convergence threshold on displacement norm.
+    dim : int
+        Must be 2 (only 2-D supported).
+    seed : int, optional
+        Random state for reproducibility.
+    theta : float
+        Barnes-Hut opening angle. Smaller = more accurate, larger = faster.
+    singleton_mass : float
+        Mass assigned to degree-0 nodes. Lower values reduce their
+        repulsive impact on connected components.
+
+    Returns
+    -------
+    np.ndarray
+        (N, 2) float32 node positions.
     """
     if dim != 2:
         raise ValueError("Barnes-Hut currently only supports 2D layouts")
@@ -1281,11 +1349,20 @@ def _fruchterman_reingold_barnes_hut_numba(
         msg = "fruchterman_reingold() takes an adjacency matrix as input"
         raise nx.NetworkXError(msg) from e
 
-    # Convert to CSR for efficient row access
+    # Get compiled kernels
+    (
+        _build_quadtree,
+        _barnes_hut_forces,
+        _attractive_forces,
+        _gravity_and_update,
+    ) = _get_numba_bh_kernels()
+
+    # Convert to COO (same as CUDA) then to CSR for CPU iteration
     if issparse(A):
-        A_csr = A.tocsr().astype(np.float64)
+        A_coo = A.tocoo().astype(np.float32)
     else:
-        A_csr = csr_matrix(A.astype(np.float64))
+        A_coo = coo_matrix(A.astype(np.float32))
+    A_csr = A_coo.tocsr()
 
     if pos is None:
         pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float64)
@@ -1298,6 +1375,7 @@ def _fruchterman_reingold_barnes_hut_numba(
     k2 = k * k
     inv_k = 1.0 / k
     gravity = 1.0 / (k * np.sqrt(float(nnodes)))
+    theta_sq = theta * theta
 
     t = max(float(pos[:, d].max() - pos[:, d].min()) for d in range(dim)) * 0.1
     dt = t / float(iterations + 1)
@@ -1306,12 +1384,7 @@ def _fruchterman_reingold_barnes_hut_numba(
     if fixed is not None:
         fixed_mask[np.asarray(fixed)] = True
 
-    # Get compiled kernels
-    _build_quadtree, _barnes_hut_forces, _attractive_forces_sparse = (
-        _get_numba_bh_kernels()
-    )
-
-    # Pre-allocate tree arrays (max 4*N nodes should be enough)
+    # Pre-allocate tree arrays
     max_tree_nodes = 4 * nnodes + 4
     node_center_x = np.zeros(max_tree_nodes, dtype=np.float64)
     node_center_y = np.zeros(max_tree_nodes, dtype=np.float64)
@@ -1323,25 +1396,20 @@ def _fruchterman_reingold_barnes_hut_numba(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
-    displacement = np.zeros((nnodes, dim), dtype=np.float64)
+    # Compute node degrees for mass weighting (from COO)
+    # Singletons get small mass so they minimally affect layout
+    degrees = np.zeros(nnodes, dtype=np.float64)
+    np.add.at(degrees, A_coo.row, 1)
+    particle_mass = np.maximum(singleton_mass, degrees)
 
-    # CSR arrays
-    A_data = np.ascontiguousarray(A_csr.data)
+    max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
+
+    # Pre-extract CSR arrays
+    A_data = np.ascontiguousarray(A_csr.data.astype(np.float64))
     A_indices = np.ascontiguousarray(A_csr.indices.astype(np.int64))
     A_indptr = np.ascontiguousarray(A_csr.indptr.astype(np.int64))
 
-    # Compute component-size-based mass weighting
-    # Small clones get less mass so they don't push big clones apart
-    # mass = log(component_size), singletons use singleton_mass
-
-    n_comp, labels = connected_components(A_csr, directed=False)
-    comp_sizes = np.bincount(labels)
-    node_comp_size = comp_sizes[labels].astype(np.float64)
-    particle_mass = np.where(
-        node_comp_size <= 1, singleton_mass, np.log(node_comp_size)
-    )
-
-    max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
+    displacement = np.zeros((nnodes, dim), dtype=np.float64)
 
     for _iter in range(iterations):
         # Reset tree
@@ -1358,7 +1426,7 @@ def _fruchterman_reingold_barnes_hut_numba(
         center_y = (min_y + max_y) / 2.0
         half_size = max(max_x - min_x, max_y - min_y) / 2.0 + margin
 
-        # Build quadtree with degree-weighted mass
+        # Build quadtree on CPU with degree-weighted mass
         num_tree_nodes = _build_quadtree(
             pos,
             particle_mass,
@@ -1378,46 +1446,42 @@ def _fruchterman_reingold_barnes_hut_numba(
             node_particle,
         )
 
-        # Compute repulsive forces via Barnes-Hut
+        # Reset displacement
         displacement[:] = 0.0
+
+        # Compute repulsive forces via Barnes-Hut
         _barnes_hut_forces(
             pos,
             nnodes,
-            theta,
+            theta_sq,
             k2,
             num_tree_nodes,
-            node_half_size,
-            node_mass,
-            node_com_x,
-            node_com_y,
-            node_children,
-            node_is_leaf,
+            node_half_size[:num_tree_nodes],
+            node_mass[:num_tree_nodes],
+            node_com_x[:num_tree_nodes],
+            node_com_y[:num_tree_nodes],
+            node_children[:num_tree_nodes],
+            node_is_leaf[:num_tree_nodes],
             displacement,
         )
 
-        # Add attractive forces
-        _attractive_forces_sparse(
+        # Compute attractive forces
+        _attractive_forces(
             pos, A_data, A_indices, A_indptr, nnodes, inv_k, displacement
         )
 
-        # Gravity toward center
-        displacement[:, 0] -= pos[:, 0] * gravity
-        displacement[:, 1] -= pos[:, 1] * gravity
+        # Apply gravity and update positions
+        _gravity_and_update(
+            pos, displacement, gravity, t, fixed_mask, nnodes
+        )
 
-        # Update positions
-        length = np.sqrt((displacement**2).sum(axis=1))
-        length = np.where(length < 0.01, 0.01, length)
-        delta_pos = displacement * (t / length)[:, np.newaxis]
-
-        if fixed is not None:
-            delta_pos[fixed_mask] = 0.0
-
-        pos += delta_pos
         t -= dt
 
-        err = np.sqrt((delta_pos**2).sum()) / nnodes
-        if err < threshold:
-            break
+        # Check convergence periodically
+        if _iter % 10 == 0:
+            err = np.sqrt((displacement**2).sum()) / nnodes
+            if err < threshold:
+                break
 
     return pos.astype(np.float32)
 
@@ -1429,8 +1493,15 @@ def _fruchterman_reingold_barnes_hut_numba(
 _numba_cuda_bh_kernels_cache = None
 
 
-def _get_numba_cuda_bh_kernels():
-    """Lazily compile Numba CUDA kernels for Barnes-Hut algorithm."""
+def _get_numba_cuda_bh_kernels() -> tuple:
+    """Lazily compile Numba CUDA kernels for Barnes-Hut algorithm.
+
+    Returns
+    -------
+    tuple
+        (_barnes_hut_forces_cuda, _attractive_forces_cuda,
+         _gravity_and_update_cuda, cuda)
+    """
     global _numba_cuda_bh_kernels_cache
     if _numba_cuda_bh_kernels_cache is not None:
         return _numba_cuda_bh_kernels_cache
@@ -1444,23 +1515,23 @@ def _get_numba_cuda_bh_kernels():
 
     @cuda.jit
     def _barnes_hut_forces_cuda(
-        pos,
-        nnodes,
-        theta_sq,
-        k2,
-        num_tree_nodes,
-        node_half_size,
-        node_mass,
-        node_com_x,
-        node_com_y,
-        node_children,
-        node_is_leaf,
-        displacement,
+        pos,              # (nnodes, 2) float64 particle positions
+        nnodes,           # int, number of particles
+        theta_sq,         # float, theta² (opening angle squared)
+        k2,               # float, k² (optimal distance squared)
+        num_tree_nodes,   # int, number of active tree nodes
+        node_half_size,   # (num_tree_nodes,) float64
+        node_mass,        # (num_tree_nodes,) float64
+        node_com_x,       # (num_tree_nodes,) float64
+        node_com_y,       # (num_tree_nodes,) float64
+        node_children,    # (num_tree_nodes, 4) int64
+        node_is_leaf,     # (num_tree_nodes,) bool
+        displacement,     # (nnodes, 2) float64, output repulsive forces
     ):
-        """CUDA kernel for Barnes-Hut repulsive forces.
+        """Compute repulsive forces via Barnes-Hut tree traversal (CUDA).
 
-        Each thread handles one particle, traversing the tree with a local stack.
-        Tree node masses are already weighted by component size from tree building.
+        One thread per particle. Each traverses the quadtree with a local
+        stack. Repulsive force: k² * mass / d, direction away from COM.
         """
         i = cuda.grid(1)
         if i >= nnodes:
@@ -1519,15 +1590,19 @@ def _get_numba_cuda_bh_kernels():
 
     @cuda.jit
     def _attractive_forces_cuda(
-        pos,
-        edge_src,
-        edge_dst,
-        edge_weight,
-        num_edges,
-        inv_k,
-        displacement,
+        pos,           # (nnodes, 2) float64 particle positions
+        edge_src,      # (num_edges,) int64 source node indices (COO)
+        edge_dst,      # (num_edges,) int64 destination node indices (COO)
+        edge_weight,   # (num_edges,) float64 edge weights
+        num_edges,     # int, number of edges
+        inv_k,         # float, 1/k
+        displacement,  # (nnodes, 2) float64, in/out accumulated forces
     ):
-        """CUDA kernel for attractive forces via edge list (COO format)."""
+        """Add attractive forces from edges (COO format, CUDA).
+
+        One thread per edge. Attractive force: w * d / k toward neighbour.
+        Uses atomic adds since multiple edges may target the same node.
+        """
         e = cuda.grid(1)
         if e >= num_edges:
             return
@@ -1544,21 +1619,26 @@ def _get_numba_cuda_bh_kernels():
             return
 
         dist = math.sqrt(dist_sq)
-        # Attractive force: w * d / k (toward neighbor)
         force = w * dist * inv_k
+
+        # Atomic add to handle multiple edges per node
         cuda.atomic.add(displacement, (i, 0), force * dx / dist)
         cuda.atomic.add(displacement, (i, 1), force * dy / dist)
 
     @cuda.jit
     def _gravity_and_update_cuda(
-        pos,
-        displacement,
-        gravity,
-        t,
-        fixed_mask,
-        nnodes,
+        pos,           # (nnodes, 2) float64 positions, modified in-place
+        displacement,  # (nnodes, 2) float64 accumulated forces
+        gravity,       # float, gravity strength toward origin
+        t,             # float, current temperature (max step size)
+        fixed_mask,    # (nnodes,) bool, True for fixed nodes
+        nnodes,        # int, number of particles
     ):
-        """CUDA kernel for gravity and position update."""
+        """Apply gravity toward origin and update positions (CUDA).
+
+        One thread per node. For each non-fixed node: subtract gravity pull
+        from displacement, clamp step length, and move the node.
+        """
         i = cuda.grid(1)
         if i >= nnodes:
             return
@@ -1590,31 +1670,50 @@ def _get_numba_cuda_bh_kernels():
 
 @random_state(7)
 def _fruchterman_reingold_barnes_hut_cuda(
-    A,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    dim=2,
-    seed=None,
-    theta=0.8,
-    singleton_mass=0.5,
-):
-    """Barnes-Hut accelerated Fruchterman-Reingold (GPU/Numba CUDA).
+    A: np.ndarray,
+    k: float | None = None,
+    pos: np.ndarray | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    dim: int = 2,
+    seed: int | None = None,
+    theta: float = 0.8,
+    singleton_mass: float = 0.5,
+) -> np.ndarray:
+    """Barnes-Hut accelerated Fruchterman-Reingold layout (GPU/Numba CUDA).
 
-    O(N log N) complexity for repulsive forces using quadtree approximation.
-    Tree is built on CPU, forces computed on GPU with CUDA kernels.
-
-    Much faster than PyTorch version due to native GPU code compilation.
+    O(N log N) per iteration. Quadtree is built on CPU each iteration;
+    force computation and position updates run on GPU via Numba CUDA kernels.
 
     Parameters
     ----------
-    theta : float, optional
-        Barnes-Hut opening angle. Smaller = more accurate but slower.
-        Default 0.8. Range: 0.3 (accurate) to 1.2 (fast).
-    singleton_mass : float, optional
-        Mass assigned to singleton nodes (no edges). Default 0.5.
+    A : np.ndarray or sparse matrix
+        Adjacency matrix.
+    k : float, optional
+        Optimal node distance. Default ``sqrt(1/N)``.
+    pos : np.ndarray, optional
+        (N, dim) initial positions. Random if None.
+    fixed : list, optional
+        Indices of nodes whose positions should not change.
+    iterations : int
+        Maximum number of iterations.
+    threshold : float
+        Convergence threshold on displacement norm.
+    dim : int
+        Must be 2 (only 2-D supported).
+    seed : int, optional
+        Random state for reproducibility.
+    theta : float
+        Barnes-Hut opening angle. Smaller = more accurate, larger = faster.
+    singleton_mass : float
+        Mass assigned to degree-0 nodes. Lower values reduce their
+        repulsive impact on connected components.
+
+    Returns
+    -------
+    np.ndarray
+        (N, 2) float32 node positions.
     """
     if dim != 2:
         raise ValueError("Barnes-Hut currently only supports 2D layouts")
@@ -1633,14 +1732,14 @@ def _fruchterman_reingold_barnes_hut_cuda(
         cuda,
     ) = _get_numba_cuda_bh_kernels()
 
-    # Get CPU tree-building kernel
-    _build_quadtree, _, _ = _get_numba_bh_kernels()
+    # Get CPU tree-building kernel (shared with CPU BH version)
+    _build_quadtree, _, _, _ = _get_numba_bh_kernels()
 
     # Convert to COO for edges
     if issparse(A):
-        A_coo = A.tocoo().astype(np.float64)
+        A_coo = A.tocoo().astype(np.float32)
     else:
-        A_coo = coo_matrix(A.astype(np.float64))
+        A_coo = coo_matrix(A.astype(np.float32))
 
     if pos is None:
         pos = np.asarray(seed.rand(nnodes, dim), dtype=np.float64)
@@ -1674,16 +1773,11 @@ def _fruchterman_reingold_barnes_hut_cuda(
     node_is_leaf = np.ones(max_tree_nodes, dtype=np.bool_)
     node_particle = np.full(max_tree_nodes, -1, dtype=np.int64)
 
-    # Compute component-size-based mass weighting
-    # Small clones get less mass so they don't push big clones apart
-    # mass = log(component_size), singletons use singleton_mass
-
-    n_comp, labels = connected_components(A_coo.tocsr(), directed=False)
-    comp_sizes = np.bincount(labels)
-    node_comp_size = comp_sizes[labels].astype(np.float64)
-    particle_mass = np.where(
-        node_comp_size <= 1, singleton_mass, np.log(node_comp_size)
-    )
+    # Compute node degrees for mass weighting (from COO)
+    # Singletons get small mass so they minimally affect layout
+    degrees = np.zeros(nnodes, dtype=np.float64)
+    np.add.at(degrees, A_coo.row, 1)
+    particle_mass = np.maximum(singleton_mass, degrees)
 
     max_depth = int(np.ceil(np.log2(nnodes + 1))) + 4
 
@@ -1792,11 +1886,10 @@ def _fruchterman_reingold_barnes_hut_cuda(
 
         t -= dt
 
-        # Check convergence periodically (every 10 iters to limit GPU->CPU copies)
+        # Check convergence periodically
         if _iter % 10 == 0:
-            pos_new = d_pos.copy_to_host()
-            delta_pos = pos_new - pos
-            err = np.sqrt((delta_pos**2).sum()) / nnodes
+            displacement = d_displacement.copy_to_host()
+            err = np.sqrt((displacement**2).sum()) / nnodes
             if err < threshold:
                 break
 
@@ -1804,31 +1897,57 @@ def _fruchterman_reingold_barnes_hut_cuda(
 
 
 def _fruchterman_reingold_layout_bh(
-    G,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    weight="weight",
-    scale=1,
-    center=None,
-    dim=2,
-    seed=None,
-    theta=0.8,
-    singleton_mass=0.5,
-):
-    """Barnes-Hut accelerated FR layout (CPU).
+    G: nx.Graph,
+    k: float | None = None,
+    pos: dict | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    weight: str = "weight",
+    scale: float = 1,
+    center: np.ndarray | None = None,
+    dim: int = 2,
+    seed: int | None = None,
+    theta: float = 0.8,
+    singleton_mass: float = 0.5,
+) -> dict:
+    """Barnes-Hut accelerated Fruchterman-Reingold layout (CPU).
 
-    O(N log N) complexity. Scales to 1M+ nodes.
+    O(N log N) per iteration via quadtree approximation. Scales to 1M+ nodes.
 
     Parameters
     ----------
-    theta : float, optional
-        Opening angle. Smaller = accurate, larger = fast. Default 0.8.
-    singleton_mass : float, optional
-        Mass assigned to singleton nodes (no edges). Lower values reduce
-        their impact on pushing connected components apart. Default 0.5.
+    G : nx.Graph
+        Input graph.
+    k : float, optional
+        Optimal node distance. Default ``sqrt(1/N)``.
+    pos : dict, optional
+        ``{node: (x, y)}`` initial positions.
+    fixed : list, optional
+        Nodes whose positions should not change.
+    iterations : int
+        Maximum number of iterations.
+    threshold : float
+        Convergence threshold.
+    weight : str
+        Edge attribute key for weights.
+    scale : float
+        Scale factor for final positions.
+    center : np.ndarray, optional
+        Center of the layout.
+    dim : int
+        Must be 2.
+    seed : int, optional
+        Random state for reproducibility.
+    theta : float
+        Barnes-Hut opening angle (0.3 = accurate, 1.2 = fast).
+    singleton_mass : float
+        Mass for degree-0 nodes. Lower = less repulsive impact.
+
+    Returns
+    -------
+    dict
+        ``{node: np.ndarray}`` position mapping.
     """
     G, center = _process_params(G, center, dim)
 
@@ -1894,31 +2013,58 @@ def _fruchterman_reingold_layout_bh(
 
 
 def _fruchterman_reingold_layout_bh_gpu(
-    G,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    weight="weight",
-    scale=1,
-    center=None,
-    dim=2,
-    seed=None,
-    theta=0.8,
-    singleton_mass=0.5,
-):
-    """Barnes-Hut accelerated FR layout (GPU).
+    G: nx.Graph,
+    k: float | None = None,
+    pos: dict | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    weight: str = "weight",
+    scale: float = 1,
+    center: np.ndarray | None = None,
+    dim: int = 2,
+    seed: int | None = None,
+    theta: float = 0.8,
+    singleton_mass: float = 0.5,
+) -> dict:
+    """Barnes-Hut accelerated Fruchterman-Reingold layout (GPU).
 
-    O(N log N) complexity. Uses Numba CUDA on NVIDIA GPUs for best performance.
-    Falls back to CPU Barnes-Hut if CUDA is not available (e.g., on Mac/MPS).
+    O(N log N) per iteration. Uses Numba CUDA on NVIDIA GPUs for best
+    performance. Falls back to CPU Barnes-Hut if CUDA is not available.
 
     Parameters
     ----------
-    theta : float, optional
-        Opening angle. Smaller = accurate, larger = fast. Default 0.8.
-    singleton_mass : float, optional
-        Mass assigned to singleton nodes (no edges). Default 0.5.
+    G : nx.Graph
+        Input graph.
+    k : float, optional
+        Optimal node distance. Default ``sqrt(1/N)``.
+    pos : dict, optional
+        ``{node: (x, y)}`` initial positions.
+    fixed : list, optional
+        Nodes whose positions should not change.
+    iterations : int
+        Maximum number of iterations.
+    threshold : float
+        Convergence threshold.
+    weight : str
+        Edge attribute key for weights.
+    scale : float
+        Scale factor for final positions.
+    center : np.ndarray, optional
+        Center of the layout.
+    dim : int
+        Must be 2.
+    seed : int, optional
+        Random state for reproducibility.
+    theta : float
+        Barnes-Hut opening angle (0.3 = accurate, 1.2 = fast).
+    singleton_mass : float
+        Mass for degree-0 nodes. Lower = less repulsive impact.
+
+    Returns
+    -------
+    dict
+        ``{node: np.ndarray}`` position mapping.
     """
     # Try Numba CUDA first (fastest for NVIDIA GPUs)
     cuda_available = False
