@@ -1857,8 +1857,10 @@ def reassign_alleles(
             [pl.lit(None).alias(c) for c in missing_in_light]
         )
 
-    # Enforce identical column order across both frames
-    all_cols = sorted(list(heavy_cols | light_cols))
+    # Enforce identical column order across both frames, preserving original order
+    heavy_col_order = heavy.collect_schema().names()
+    extra_from_light = [c for c in light.collect_schema().names() if c not in heavy_cols]
+    all_cols = heavy_col_order + extra_from_light
     heavy = heavy.select(all_cols)
     light = light.select(all_cols)
 
