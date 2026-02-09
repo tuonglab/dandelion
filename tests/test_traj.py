@@ -8,7 +8,6 @@ import sys
 import pytest
 from unittest.mock import patch
 
-
 FILE = "demo-pseudobulk.h5ad"
 FNAME = "ftp://ftp.sanger.ac.uk/pub/users/kp9/" + FILE
 

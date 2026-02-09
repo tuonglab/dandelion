@@ -24,7 +24,6 @@ from dandelion.logging import (
 )
 from dandelion import logging
 
-
 __all__ = [
     "__author__",
     "__classifiers__",
