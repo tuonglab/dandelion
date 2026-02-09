@@ -5,10 +5,8 @@ import json
 import os
 import re
 import tempfile
-import zarr
 
 import networkx as nx
-from packaging import version
 import pandas as pd
 import polars as pl
 
