@@ -49,6 +49,14 @@ def _trajectory_context(
     # Track original obs
     original_obs = adata.obs.copy()
 
+    # change from lazy to eager to avoid issues with context manager and polars dataframes
+    if isinstance(vdj._data, pl.LazyFrame) or isinstance(
+        vdj._metadata, pl.LazyFrame
+    ):
+        vdj.to_eager()
+        original_lazy = True
+    else:
+        original_lazy = False
     try:
         # Add chain_status if available in vdj metadata
         if vdj._metadata is not None:
@@ -65,9 +73,13 @@ def _trajectory_context(
 
             # Add productive columns
             if "productive_VDJ" in productive_vdj_pd.columns:
-                adata.obs[f"productive_{mode}_VDJ"] = productive_vdj_pd["productive_VDJ"]
+                adata.obs[f"productive_{mode}_VDJ"] = productive_vdj_pd[
+                    "productive_VDJ"
+                ]
             if "productive_VJ" in productive_vdj_pd.columns:
-                adata.obs[f"productive_{mode}_VJ"] = productive_vdj_pd["productive_VJ"]
+                adata.obs[f"productive_{mode}_VJ"] = productive_vdj_pd[
+                    "productive_VJ"
+                ]
 
             # Extract v_call, d_call, j_call for VDJ and VJ
             v_call = vdj._split_first(
@@ -83,8 +95,16 @@ def _trajectory_context(
             # Merge all splits into one dataframe
             merged = (
                 v_call.drop("celltype_group", strict=False)
-                .join(d_call.drop("celltype_group", strict=False), on="cell_id", how="left")
-                .join(j_call.drop("celltype_group", strict=False), on="cell_id", how="left")
+                .join(
+                    d_call.drop("celltype_group", strict=False),
+                    on="cell_id",
+                    how="left",
+                )
+                .join(
+                    j_call.drop("celltype_group", strict=False),
+                    on="cell_id",
+                    how="left",
+                )
             )
 
             # Convert to pandas and set index
@@ -106,9 +126,8 @@ def _trajectory_context(
                 d_call = vdj._split_first(cols="d_call", key_added="d_call")
                 j_call = vdj._split_first(cols="j_call", key_added="j_call")
 
-                merged = (
-                    v_call.join(d_call, on="cell_id", how="left")
-                    .join(j_call, on="cell_id", how="left")
+                merged = v_call.join(d_call, on="cell_id", how="left").join(
+                    j_call, on="cell_id", how="left"
                 )
 
                 merged_pd = merged.to_pandas().set_index("cell_id")
@@ -127,14 +146,22 @@ def _trajectory_context(
 
                     # Try to extract this column from vdj
                     if base_col in ["v_call", "d_call", "j_call"]:
-                        extracted = vdj._split_first(cols=base_col, key_added=base_col)
-                        extracted_pd = extracted.to_pandas().set_index("cell_id")
+                        extracted = vdj._split_first(
+                            cols=base_col, key_added=base_col
+                        )
+                        extracted_pd = extracted.to_pandas().set_index(
+                            "cell_id"
+                        )
                         for extracted_col in extracted_pd.columns:
-                            adata.obs[extracted_col] = extracted_pd[extracted_col]
+                            adata.obs[extracted_col] = extracted_pd[
+                                extracted_col
+                            ]
 
             # Handle productive columns if provided
             if productive_cols is not None:
-                productive = vdj._split_first(cols="productive", key_added="productive")
+                productive = vdj._split_first(
+                    cols="productive", key_added="productive"
+                )
                 productive_pd = productive.to_pandas().set_index("cell_id")
                 for col in productive_pd.columns:
                     adata.obs[col] = productive_pd[col]
@@ -144,6 +171,9 @@ def _trajectory_context(
     finally:
         # Clean up: restore original obs
         adata.obs = original_obs
+        # Restore original laziness of vdj if we changed it
+        if original_lazy:
+            vdj.to_lazy()
 
 
 def _filter_cells(
@@ -157,7 +187,7 @@ def _filter_cells(
     offending cells or masks the matched values with a uniform value of `col+"_missing"`.
     """
     # find filter pattern hits in our column of interest
-    mask = adata.obs[col].str.contains(filter_pattern)
+    mask = adata.obs[col].str.contains(filter_pattern).fillna(False)
     if remove_missing:
         # remove the cells
         adata = adata[~mask].copy()
@@ -242,21 +272,34 @@ def setup_vdj_pseudobulk(
         filtered cell adata object.
     """
     # Use context manager to temporarily add VDJ columns
-    with _trajectory_context(adata, vdj, mode, extract_cols, productive_cols) as adata_:
+    with _trajectory_context(
+        adata, vdj, mode, extract_cols, productive_cols
+    ) as adata_:
         # keep ony relevant cells (ones with a pair of chains) based on productive column
         if mode is not None:
             if productive_vdj:
-                adata_ = adata_[
-                    adata_.obs["productive_" + mode + "_VDJ"].str.startswith("T")
-                ].copy()
+                mask_vdj = (
+                    adata_.obs["productive_" + mode + "_VDJ"]
+                    .str.startswith("T", na=False)
+                    .astype(bool)
+                )
+                adata_ = adata_[mask_vdj].copy()
             if productive_vj:
-                adata_ = adata_[
-                    adata_.obs["productive_" + mode + "_VJ"].str.startswith("T")
-                ].copy()
+                mask_vj = (
+                    adata_.obs["productive_" + mode + "_VJ"]
+                    .str.startswith("T", na=False)
+                    .astype(bool)
+                )
+                adata_ = adata_[mask_vj].copy()
         else:
             if productive_cols is not None:
                 for col in productive_cols:
-                    adata_ = adata_[adata_.obs[col].str.startswith("T")].copy()
+                    mask_col = (
+                        adata_.obs[col]
+                        .str.startswith("T", na=False)
+                        .astype(bool)
+                    )
+                    adata_ = adata_[mask_col].copy()
 
         if any([re.search("_VDJ_main|_VJ_main", i) for i in adata_.obs]):
             if check_vdj_mapping is not None:
@@ -275,53 +318,52 @@ def setup_vdj_pseudobulk(
             adata_ = adata_[adata_.obs[subsetby].isin(groups)].copy()
 
         if extract_cols is None:
-            if not any([re.search("_VDJ_main|_VJ_main", i) for i in adata_.obs]):
-                if mode is not None:
-                    adata_.obs["v_call_" + mode + "_VDJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["v_call_" + mode + "_VDJ"]
-                    ]
-                    adata_.obs["d_call_" + mode + "_VDJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["d_call_" + mode + "_VDJ"]
-                    ]
-                    adata_.obs["j_call_" + mode + "_VDJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["j_call_" + mode + "_VDJ"]
-                    ]
-                    adata_.obs["v_call_" + mode + "_VJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["v_call_" + mode + "_VJ"]
-                    ]
-                    adata_.obs["j_call_" + mode + "_VJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["j_call_" + mode + "_VJ"]
-                    ]
-                else:
-                    adata_.obs["v_call_VDJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["v_call_VDJ"]
-                    ]
-                    adata_.obs["d_call_VDJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["d_call_VDJ"]
-                    ]
-                    adata_.obs["j_call_VDJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["j_call_VDJ"]
-                    ]
-                    adata_.obs["v_call_VJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["v_call_VJ"]
-                    ]
-                    adata_.obs["j_call_VJ_main"] = [
-                        x.split("|")[0] if x != "None" else "None"
-                        for x in adata_.obs["j_call_VJ"]
-                    ]
+            if mode is not None:
+                adata_.obs["v_call_" + mode + "_VDJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["v_call_" + mode + "_VDJ"]
+                ]
+                adata_.obs["d_call_" + mode + "_VDJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["d_call_" + mode + "_VDJ"]
+                ]
+                adata_.obs["j_call_" + mode + "_VDJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["j_call_" + mode + "_VDJ"]
+                ]
+                adata_.obs["v_call_" + mode + "_VJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["v_call_" + mode + "_VJ"]
+                ]
+                adata_.obs["j_call_" + mode + "_VJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["j_call_" + mode + "_VJ"]
+                ]
+            else:
+                adata_.obs["v_call_VDJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["v_call_VDJ"]
+                ]
+                adata_.obs["d_call_VDJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["d_call_VDJ"]
+                ]
+                adata_.obs["j_call_VDJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["j_call_VDJ"]
+                ]
+                adata_.obs["v_call_VJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["v_call_VJ"]
+                ]
+                adata_.obs["j_call_VJ_main"] = [
+                    x.split("|")[0] if str(x) != "None" else "None"
+                    for x in adata_.obs["j_call_VJ"]
+                ]
         else:
             for col in extract_cols:
                 adata_.obs[col + "_main"] = [
-                    x.split("|")[0] if x != "None" else "None"
+                    x.split("|")[0] if str(x) != "None" else "None"
                     for x in adata_.obs[col]
                 ]
 
@@ -509,7 +551,9 @@ def vdj_pseudobulk(
     needs_context = False
     if extract_cols is not None:
         # Check if any of the extract_cols are missing from adata.obs
-        needs_context = any(col not in adata.obs.columns for col in extract_cols)
+        needs_context = any(
+            col not in adata.obs.columns for col in extract_cols
+        )
     elif mode is not None:
         # Check for mode-specific columns
         expected_cols = [
@@ -518,7 +562,9 @@ def vdj_pseudobulk(
             f"v_call_{mode}_VJ_main",
             f"j_call_{mode}_VJ_main",
         ]
-        needs_context = any(col not in adata.obs.columns for col in expected_cols)
+        needs_context = any(
+            col not in adata.obs.columns for col in expected_cols
+        )
 
     if needs_context:
         if vdj is None:

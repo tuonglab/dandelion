@@ -100,11 +100,22 @@ def setup_dandelion_tutorial_trajectory(path: Path | str | None = None) -> None:
     base.mkdir(parents=True, exist_ok=True)
 
     gex_id = "1-LbAinwhAhJW3Y60wpO9GWJJcaMa_liy"
-    # Destination filenames
-    gex_path = base / "demo-pseudobulk.h5ad"
-    if not gex_path.exists():
-        url = f"https://drive.google.com/uc?id={gex_id}"
-        gdown.download(url, str(gex_path), quiet=False)
+    vdj_id = "1lyScJWdGopW2nLoIhZmfUGVSWLWI_qWg"
+    datasets = {
+        "panfetal_trajectory": {
+            "demo-pseudobulk.h5ad": f"https://drive.google.com/uc?id={gex_id}",
+            "demo-vdj-traj.tsv.gz": f"https://drive.google.com/uc?id={vdj_id}",
+        }
+    }
+    for dirname, files in datasets.items():
+        dirpath = base / dirname
+        dirpath.mkdir(parents=True, exist_ok=True)
+        for filename, url in files.items():
+            outfile = dirpath / filename
+            if outfile.exists():
+                continue
+            print(f"Downloading {filename} → {outfile}")
+            gdown.download(url, str(outfile), quiet=False)
 
 
 def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:

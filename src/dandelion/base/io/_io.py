@@ -1,6 +1,7 @@
 import h5py
 import json
 import os
+import pickle
 import re
 
 import networkx as nx
@@ -63,45 +64,98 @@ def read_h5ddl(
     AttributeError
         if `data` not found in `.h5ddl` file.
     """
-    data = decode(load_data(_read_h5_group(filename, group="data")))
-    # final decode to ensure all byte strings are converted to str
-    metadata = _read_h5_group(filename, group="metadata")
-    metadata_names = _read_h5_group(filename, group="metadata_names")
-    metadata.index = metadata_names
+    # Detect legacy (PyTables) vs new format
+    with h5py.File(filename, "r") as hf:
+        is_legacy = isinstance(hf["data"], h5py.Group)
 
-    try:
-        g_0 = _read_h5_csr_matrix(filename, group="graph/graph_0", as_df=True)
-        g_1 = _read_h5_csr_matrix(filename, group="graph/graph_1", as_df=True)
-        graph0 = _create_graph(g_0, adjust_adjacency=1, fillna=0)
-        graph1 = _create_graph(g_1, adjust_adjacency=1, fillna=0)
-        graph = (graph0, graph1)
-    except KeyError:
-        pass
-
-    try:
-        distances = _read_h5_csr_matrix(
-            filename, group="distances", as_df=False
+    if is_legacy:
+        data = decode(
+            load_data(_read_h5_group_legacy(filename, group="data"))
         )
-        distances._index_names = metadata.index
-    except KeyError:
-        if distance_zarr is not None:
-            import dask.array as da
+        metadata = _read_h5_group_legacy(filename, group="metadata")
 
-            distances = da.from_zarr(str(distance_zarr) + "/distance_matrix")
+        try:
+            g_0 = _read_h5_group_legacy(filename, group="graph/graph_0")
+            g_1 = _read_h5_group_legacy(filename, group="graph/graph_1")
+            graph0 = _create_graph(g_0, adjust_adjacency=1, fillna=0)
+            graph1 = _create_graph(g_1, adjust_adjacency=1, fillna=0)
+            graph = (graph0, graph1)
+        except KeyError:
+            pass
 
-    try:
-        layout0 = _read_h5_dict(filename, group="layout/layout_0")
-        layout1 = _read_h5_dict(filename, group="layout/layout_1")
-        layout = (layout0, layout1)
-    except KeyError:
-        pass
+        try:
+            distances = _read_h5_csr_matrix(
+                filename, group="distances", as_df=False
+            )
+            distances._index_names = metadata.index
+        except KeyError:
+            if distance_zarr is not None:
+                import dask.array as da
 
-    try:
-        germline = _read_h5_zip(
-            filename, group="germline", key_group="keys", value_group="values"
-        )
-    except KeyError:
-        pass
+                distances = da.from_zarr(
+                    str(distance_zarr) + "/distance_matrix"
+                )
+
+        try:
+            layout0 = _read_h5_dict(filename, group="layout/layout_0")
+            layout1 = _read_h5_dict(filename, group="layout/layout_1")
+            layout = (layout0, layout1)
+        except KeyError:
+            pass
+
+        try:
+            germline = _read_h5_zip_legacy(filename, group="germline")
+        except KeyError:
+            pass
+    else:
+        data = decode(load_data(_read_h5_group(filename, group="data")))
+        # final decode to ensure all byte strings are converted to str
+        metadata = _read_h5_group(filename, group="metadata")
+        metadata_names = _read_h5_group(filename, group="metadata_names")
+        metadata.index = metadata_names
+
+        try:
+            g_0 = _read_h5_csr_matrix(
+                filename, group="graph/graph_0", as_df=True
+            )
+            g_1 = _read_h5_csr_matrix(
+                filename, group="graph/graph_1", as_df=True
+            )
+            graph0 = _create_graph(g_0, adjust_adjacency=1, fillna=0)
+            graph1 = _create_graph(g_1, adjust_adjacency=1, fillna=0)
+            graph = (graph0, graph1)
+        except KeyError:
+            pass
+
+        try:
+            distances = _read_h5_csr_matrix(
+                filename, group="distances", as_df=False
+            )
+            distances._index_names = metadata.index
+        except KeyError:
+            if distance_zarr is not None:
+                import dask.array as da
+
+                distances = da.from_zarr(
+                    str(distance_zarr) + "/distance_matrix"
+                )
+
+        try:
+            layout0 = _read_h5_dict(filename, group="layout/layout_0")
+            layout1 = _read_h5_dict(filename, group="layout/layout_1")
+            layout = (layout0, layout1)
+        except KeyError:
+            pass
+
+        try:
+            germline = _read_h5_zip(
+                filename,
+                group="germline",
+                key_group="keys",
+                value_group="values",
+            )
+        except KeyError:
+            pass
 
     constructor = {}
     constructor["data"] = data
@@ -988,7 +1042,10 @@ def read_h5ddl_legacy(
 
 def _read_h5_group_legacy(filename: Path | str, group: str) -> pd.DataFrame:
     """
-    Read a specific group from an H5 file in legacy format.
+    Read a specific group from an H5 file in legacy (PyTables) format.
+
+    Supports both 'fixed' format (block-based with axis0/axis1/blockN_*)
+    and 'table' format (structured array with column metadata in attrs).
 
     Parameters
     ----------
@@ -1007,9 +1064,100 @@ def _read_h5_group_legacy(filename: Path | str, group: str) -> pd.DataFrame:
     KeyError
         If the specified group is not found in the H5 file.
     """
-    data = pd.read_hdf(filename, group)
+    with h5py.File(filename, "r") as hf:
+        grp = hf[group]
 
-    return data
+        if "table" in grp:
+            # Table format: structured array with column names in attrs
+            return _read_pytables_table_format(grp)
+        elif "axis0" in grp:
+            # Fixed format: block-based with axis0/axis1/blockN_*
+            return _read_pytables_fixed_format(grp)
+        else:
+            raise KeyError(
+                f"Unrecognized legacy format for group '{group}'"
+            )
+
+
+def _read_pytables_fixed_format(grp: h5py.Group) -> pd.DataFrame:
+    """Read PyTables fixed format (block-based) from h5py Group."""
+    _decode_bytes = np.vectorize(
+        lambda x: x.decode("utf-8") if isinstance(x, bytes) else x
+    )
+
+    columns = _decode_bytes(grp["axis0"][:])
+    index = _decode_bytes(grp["axis1"][:])
+
+    # Collect all blocks
+    block_num = 0
+    frames = []
+    while f"block{block_num}_items" in grp:
+        items = _decode_bytes(grp[f"block{block_num}_items"][:])
+        vals_ds = grp[f"block{block_num}_values"]
+        if vals_ds.dtype == object:
+            # Object block: stored as pickled numpy array
+            raw = vals_ds[0]
+            values = pickle.loads(raw.tobytes())
+        else:
+            values = vals_ds[:]
+        df_block = pd.DataFrame(values, columns=items, index=index)
+        frames.append(df_block)
+        block_num += 1
+
+    if frames:
+        result = pd.concat(frames, axis=1)
+        # Reorder columns to match original order
+        result = result[columns]
+    else:
+        result = pd.DataFrame(index=index, columns=columns)
+
+    return result
+
+
+def _read_pytables_table_format(grp: h5py.Group) -> pd.DataFrame:
+    """Read PyTables table format (structured array) from h5py Group."""
+    table_ds = grp["table"]
+    table_data = table_ds[:]
+    attrs = dict(table_ds.attrs)
+
+    # Extract index
+    index_raw = table_data["index"]
+    index = np.array(
+        [x.decode("utf-8") if isinstance(x, bytes) else x for x in index_raw]
+    )
+
+    # Extract each values_block and its column names from attrs
+    frames = []
+    block_num = 0
+    while f"values_block_{block_num}_kind" in attrs:
+        kind_raw = attrs[f"values_block_{block_num}_kind"]
+        if isinstance(kind_raw, bytes):
+            kind_raw = kind_raw.decode("utf-8")
+        col_names = pickle.loads(kind_raw.encode("latin-1"))
+
+        field_name = f"values_block_{block_num}"
+        block_values = table_data[field_name]
+
+        # Decode byte strings if needed
+        if block_values.dtype.kind == "S" or block_values.dtype.kind == "O":
+            decoded = np.vectorize(
+                lambda x: x.decode("utf-8") if isinstance(x, bytes) else x
+            )(block_values)
+            df_block = pd.DataFrame(decoded, columns=col_names, index=index)
+        else:
+            df_block = pd.DataFrame(
+                block_values, columns=col_names, index=index
+            )
+
+        frames.append(df_block)
+        block_num += 1
+
+    if frames:
+        result = pd.concat(frames, axis=1)
+    else:
+        result = pd.DataFrame(index=index)
+
+    return result
 
 
 def _read_h5_zip_legacy(filename: Path | str, group: str) -> dict:
