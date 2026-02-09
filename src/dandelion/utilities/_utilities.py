@@ -19,7 +19,6 @@ from pathlib import Path
 from subprocess import run
 from typing import TypeVar, Literal, Callable
 
-
 ZARR_V3 = version.parse(zarr.__version__) >= version.parse("3.0.0")
 if ZARR_V3:
     from zarr.storage import LocalStore, ZipStore

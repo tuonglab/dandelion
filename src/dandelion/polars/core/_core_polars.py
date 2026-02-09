@@ -50,7 +50,6 @@ from dandelion.utilities._utilities import (
     create_zarr_dataset,
 )
 
-
 # Enable string cache for Polars to optimize repeated string operations
 pl.enable_string_cache()
 

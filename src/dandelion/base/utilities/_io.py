@@ -22,7 +22,6 @@ from dandelion.utilities._utilities import (
     Contig,
 )
 
-
 AIRR = [
     "cell_id",
     "sequence_id",
