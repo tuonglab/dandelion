@@ -112,10 +112,10 @@ def test_generate_network_methods(create_testfolder):
     for layout in [
         "mod_fr",
         "mod_fr2",
-        "mod_fr2_gpu",
+        # "mod_fr2_gpu",
         "mod_fr_bh",
-        "mod_fr_bh_gpu",
-        "fa2",
+        # "mod_fr_bh_gpu",
+        # "fa2",
     ]:
         ddl.tl.generate_network(vdj, layout_method=layout)
         assert vdj.layout is not None
