@@ -4,7 +4,6 @@ channels:
   - bioconda
 dependencies:
   - numpy
-  - numba
   - setuptools
   - pandas
   - pandoc
@@ -19,5 +18,7 @@ dependencies:
   - tbb
   - pip:
       - changeo
+      - numba
+      - airr
       - pytest-cov
       - .[docs,scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
