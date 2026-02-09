@@ -1000,23 +1000,23 @@ def _get_numba_bh_kernels() -> tuple:
 
     @njit(cache=True)
     def _build_quadtree(
-        pos,            # (nnodes, 2) float64 particle positions
+        pos,  # (nnodes, 2) float64 particle positions
         particle_mass,  # (nnodes,) float64 mass per particle
-        nnodes,         # int, number of particles
-        center_x,       # float, x center of root cell
-        center_y,       # float, y center of root cell
-        half_size,      # float, half-width of root cell
-        max_depth,      # int, maximum tree depth
+        nnodes,  # int, number of particles
+        center_x,  # float, x center of root cell
+        center_y,  # float, y center of root cell
+        half_size,  # float, half-width of root cell
+        max_depth,  # int, maximum tree depth
         # Output arrays (pre-allocated, max_tree_nodes each)
-        node_center_x,   # (max_tree_nodes,) float64
-        node_center_y,   # (max_tree_nodes,) float64
-        node_half_size,   # (max_tree_nodes,) float64
-        node_mass,        # (max_tree_nodes,) float64
-        node_com_x,       # (max_tree_nodes,) float64
-        node_com_y,       # (max_tree_nodes,) float64
-        node_children,    # (max_tree_nodes, 4) int64, child indices (-1 = empty)
-        node_is_leaf,     # (max_tree_nodes,) bool
-        node_particle,    # (max_tree_nodes,) int64, particle index (-1 = none)
+        node_center_x,  # (max_tree_nodes,) float64
+        node_center_y,  # (max_tree_nodes,) float64
+        node_half_size,  # (max_tree_nodes,) float64
+        node_mass,  # (max_tree_nodes,) float64
+        node_com_x,  # (max_tree_nodes,) float64
+        node_com_y,  # (max_tree_nodes,) float64
+        node_children,  # (max_tree_nodes, 4) int64, child indices (-1 = empty)
+        node_is_leaf,  # (max_tree_nodes,) bool
+        node_particle,  # (max_tree_nodes,) int64, particle index (-1 = none)
     ):
         """Build a quadtree from 2D positions using flat arrays.
 
@@ -1154,18 +1154,18 @@ def _get_numba_bh_kernels() -> tuple:
 
     @njit(parallel=True, cache=True, fastmath=True)
     def _barnes_hut_forces(
-        pos,              # (nnodes, 2) float64 particle positions
-        nnodes,           # int, number of particles
-        theta_sq,         # float, theta² (opening angle squared)
-        k2,               # float, k² (optimal distance squared)
-        num_tree_nodes,   # int, number of active tree nodes
-        node_half_size,   # (num_tree_nodes,) float64
-        node_mass,        # (num_tree_nodes,) float64
-        node_com_x,       # (num_tree_nodes,) float64
-        node_com_y,       # (num_tree_nodes,) float64
-        node_children,    # (num_tree_nodes, 4) int64
-        node_is_leaf,     # (num_tree_nodes,) bool
-        displacement,     # (nnodes, 2) float64, output repulsive forces
+        pos,  # (nnodes, 2) float64 particle positions
+        nnodes,  # int, number of particles
+        theta_sq,  # float, theta² (opening angle squared)
+        k2,  # float, k² (optimal distance squared)
+        num_tree_nodes,  # int, number of active tree nodes
+        node_half_size,  # (num_tree_nodes,) float64
+        node_mass,  # (num_tree_nodes,) float64
+        node_com_x,  # (num_tree_nodes,) float64
+        node_com_y,  # (num_tree_nodes,) float64
+        node_children,  # (num_tree_nodes, 4) int64
+        node_is_leaf,  # (num_tree_nodes,) bool
+        displacement,  # (nnodes, 2) float64, output repulsive forces
     ):
         """Compute repulsive forces via Barnes-Hut tree traversal (CPU).
 
@@ -1180,7 +1180,7 @@ def _get_numba_bh_kernels() -> tuple:
             py = pos[i, 1]
             fx = 0.0
             fy = 0.0
-            
+
             # Stack-based tree traversal (avoid recursion)
             stack = np.zeros(64, dtype=np.int64)
             stack[0] = 0  # Start at root
@@ -1225,12 +1225,12 @@ def _get_numba_bh_kernels() -> tuple:
 
     @njit(parallel=True, cache=True, fastmath=True)
     def _attractive_forces(
-        pos,           # (nnodes, 2) float64 particle positions
-        A_data,        # (nnz,) float64 edge weights
-        A_indices,     # (nnz,) int64 column indices (CSR)
-        A_indptr,      # (nnodes+1,) int64 row pointers (CSR)
-        nnodes,        # int, number of particles
-        inv_k,         # float, 1/k
+        pos,  # (nnodes, 2) float64 particle positions
+        A_data,  # (nnz,) float64 edge weights
+        A_indices,  # (nnz,) int64 column indices (CSR)
+        A_indptr,  # (nnodes+1,) int64 row pointers (CSR)
+        nnodes,  # int, number of particles
+        inv_k,  # float, 1/k
         displacement,  # (nnodes, 2) float64, in/out accumulated forces
     ):
         """Add attractive forces from sparse edges (CSR, CPU).
@@ -1257,12 +1257,12 @@ def _get_numba_bh_kernels() -> tuple:
 
     @njit(parallel=True, cache=True, fastmath=True)
     def _gravity_and_update(
-        pos,           # (nnodes, 2) float64 positions, modified in-place
+        pos,  # (nnodes, 2) float64 positions, modified in-place
         displacement,  # (nnodes, 2) float64 accumulated forces
-        gravity,       # float, gravity strength toward origin
-        t,             # float, current temperature (max step size)
-        fixed_mask,    # (nnodes,) bool, True for fixed nodes
-        nnodes,        # int, number of particles
+        gravity,  # float, gravity strength toward origin
+        t,  # float, current temperature (max step size)
+        fixed_mask,  # (nnodes,) bool, True for fixed nodes
+        nnodes,  # int, number of particles
     ):
         """Apply gravity toward origin and update positions (CPU).
 
@@ -1471,9 +1471,7 @@ def _fruchterman_reingold_barnes_hut_numba(
         )
 
         # Apply gravity and update positions
-        _gravity_and_update(
-            pos, displacement, gravity, t, fixed_mask, nnodes
-        )
+        _gravity_and_update(pos, displacement, gravity, t, fixed_mask, nnodes)
 
         t -= dt
 
@@ -1515,18 +1513,18 @@ def _get_numba_cuda_bh_kernels() -> tuple:
 
     @cuda.jit
     def _barnes_hut_forces_cuda(
-        pos,              # (nnodes, 2) float64 particle positions
-        nnodes,           # int, number of particles
-        theta_sq,         # float, theta² (opening angle squared)
-        k2,               # float, k² (optimal distance squared)
-        num_tree_nodes,   # int, number of active tree nodes
-        node_half_size,   # (num_tree_nodes,) float64
-        node_mass,        # (num_tree_nodes,) float64
-        node_com_x,       # (num_tree_nodes,) float64
-        node_com_y,       # (num_tree_nodes,) float64
-        node_children,    # (num_tree_nodes, 4) int64
-        node_is_leaf,     # (num_tree_nodes,) bool
-        displacement,     # (nnodes, 2) float64, output repulsive forces
+        pos,  # (nnodes, 2) float64 particle positions
+        nnodes,  # int, number of particles
+        theta_sq,  # float, theta² (opening angle squared)
+        k2,  # float, k² (optimal distance squared)
+        num_tree_nodes,  # int, number of active tree nodes
+        node_half_size,  # (num_tree_nodes,) float64
+        node_mass,  # (num_tree_nodes,) float64
+        node_com_x,  # (num_tree_nodes,) float64
+        node_com_y,  # (num_tree_nodes,) float64
+        node_children,  # (num_tree_nodes, 4) int64
+        node_is_leaf,  # (num_tree_nodes,) bool
+        displacement,  # (nnodes, 2) float64, output repulsive forces
     ):
         """Compute repulsive forces via Barnes-Hut tree traversal (CUDA).
 
@@ -1590,12 +1588,12 @@ def _get_numba_cuda_bh_kernels() -> tuple:
 
     @cuda.jit
     def _attractive_forces_cuda(
-        pos,           # (nnodes, 2) float64 particle positions
-        edge_src,      # (num_edges,) int64 source node indices (COO)
-        edge_dst,      # (num_edges,) int64 destination node indices (COO)
-        edge_weight,   # (num_edges,) float64 edge weights
-        num_edges,     # int, number of edges
-        inv_k,         # float, 1/k
+        pos,  # (nnodes, 2) float64 particle positions
+        edge_src,  # (num_edges,) int64 source node indices (COO)
+        edge_dst,  # (num_edges,) int64 destination node indices (COO)
+        edge_weight,  # (num_edges,) float64 edge weights
+        num_edges,  # int, number of edges
+        inv_k,  # float, 1/k
         displacement,  # (nnodes, 2) float64, in/out accumulated forces
     ):
         """Add attractive forces from edges (COO format, CUDA).
@@ -1627,12 +1625,12 @@ def _get_numba_cuda_bh_kernels() -> tuple:
 
     @cuda.jit
     def _gravity_and_update_cuda(
-        pos,           # (nnodes, 2) float64 positions, modified in-place
+        pos,  # (nnodes, 2) float64 positions, modified in-place
         displacement,  # (nnodes, 2) float64 accumulated forces
-        gravity,       # float, gravity strength toward origin
-        t,             # float, current temperature (max step size)
-        fixed_mask,    # (nnodes,) bool, True for fixed nodes
-        nnodes,        # int, number of particles
+        gravity,  # float, gravity strength toward origin
+        t,  # float, current temperature (max step size)
+        fixed_mask,  # (nnodes,) bool, True for fixed nodes
+        nnodes,  # int, number of particles
     ):
         """Apply gravity toward origin and update positions (CUDA).
 
@@ -2382,7 +2380,7 @@ def extract_edge_weights(
 
 
 # from https://bbengfort.github.io/2016/06/graph-tool-from-networkx/
-def nx2gt(nxG: nx.Graph) -> "gt.Graph":
+def nx2gt(nxG: nx.Graph) -> gt.Graph:
     """Convert a networkx graph to a graph-tool graph."""
     try:
         import graph_tool as gt

@@ -159,7 +159,9 @@ def test_calculate_distance_matrix_with_padding():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -211,7 +213,9 @@ def test_calculate_distance_matrix_with_empty_sequences():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -288,7 +292,9 @@ def test_calculate_distance_matrix_multiple_clones():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -343,7 +349,9 @@ def test_calculate_distance_matrix_original_full_polars_vs_pandas():
     )
 
     # Compare results
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -386,7 +394,9 @@ def test_calculate_distance_matrix_full_with_empty_sequences():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -425,7 +435,9 @@ def test_calculate_distance_matrix_full_with_padding():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -483,7 +495,9 @@ def test_calculate_distance_matrix_full_multicore():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -554,7 +568,9 @@ def test_calculate_distance_matrix_long_clone_mode_polars_vs_pandas():
     )
 
     # Compare results
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -620,7 +636,9 @@ def test_calculate_distance_matrix_long_full_mode_polars_vs_pandas():
     )
 
     # Compare results
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -676,7 +694,9 @@ def test_calculate_distance_matrix_long_with_padding():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -740,7 +760,9 @@ def test_calculate_distance_matrix_long_multicore():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],
@@ -794,7 +816,9 @@ def test_calculate_distance_matrix_long_with_empty_sequences():
     )
 
     # Compare
-    assert np.array_equal(np.isnan(result_pandas), np.isnan(_to_dense(result_polars)))
+    assert np.array_equal(
+        np.isnan(result_pandas), np.isnan(_to_dense(result_polars))
+    )
     non_nan_mask = ~np.isnan(result_pandas)
     np.testing.assert_allclose(
         result_pandas[non_nan_mask],

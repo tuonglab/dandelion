@@ -3752,7 +3752,7 @@ def _classify_locus_pair_noiso() -> pl.Expr:
             loc1_len > 1
         )  # Changed from >= to > (only flag as extra if MORE than 1)
         .then(
-            pl.when((loc1_all_trb_trd & (loc1_unique_len <= 2)))
+            pl.when(loc1_all_trb_trd & (loc1_unique_len <= 2))
             .then(pl.lit("Extra VDJ-exception"))
             .otherwise(pl.lit("Extra VDJ"))
         )

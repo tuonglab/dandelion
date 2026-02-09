@@ -69,9 +69,7 @@ def read_h5ddl(
         is_legacy = isinstance(hf["data"], h5py.Group)
 
     if is_legacy:
-        data = decode(
-            load_data(_read_h5_group_legacy(filename, group="data"))
-        )
+        data = decode(load_data(_read_h5_group_legacy(filename, group="data")))
         metadata = _read_h5_group_legacy(filename, group="metadata")
 
         try:
@@ -1074,9 +1072,7 @@ def _read_h5_group_legacy(filename: Path | str, group: str) -> pd.DataFrame:
             # Fixed format: block-based with axis0/axis1/blockN_*
             return _read_pytables_fixed_format(grp)
         else:
-            raise KeyError(
-                f"Unrecognized legacy format for group '{group}'"
-            )
+            raise KeyError(f"Unrecognized legacy format for group '{group}'")
 
 
 def _read_pytables_fixed_format(grp: h5py.Group) -> pd.DataFrame:
