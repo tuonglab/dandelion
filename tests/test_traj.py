@@ -46,10 +46,10 @@ def test_setup_polars(airr_reannotated, dummy_adata):
     cdata = setup_vdj_pseudobulk_polars(adata, vdj, mode=None)
 
 
-# @pytest.mark.skipif(
-#     sys.platform == "darwin",
-#     reason="macos CI stalls.",
-# )
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macos CI stalls.",
+)
 # Only test if python >=3.12
 @pytest.mark.skipif(
     sys.version_info < (3, 12),
@@ -104,10 +104,10 @@ def test_trajectory(mock_show, create_testfolder):
     bdata = project_pseudotime_to_cell(adata, pb_adata, terminal_states.values)
 
 
-# @pytest.mark.skipif(
-#     sys.platform == "darwin",
-#     reason="macos CI stalls.",
-# )
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macos CI stalls.",
+)
 # Only test if python >=3.12
 @pytest.mark.skipif(
     sys.version_info < (3, 12),
@@ -139,10 +139,10 @@ def test_trajectory_setup(create_testfolder):
     )
 
 
-# @pytest.mark.skipif(
-#     sys.platform == "darwin",
-#     reason="macos CI stalls.",
-# )
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macos CI stalls.",
+)
 # Only test if python >=3.12
 @pytest.mark.skipif(
     sys.version_info < (3, 12),
@@ -201,10 +201,10 @@ def test_trajectory_polars(mock_show, create_testfolder):
     )
 
 
-# @pytest.mark.skipif(
-#     sys.platform == "darwin",
-#     reason="macos CI stalls.",
-# )
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macos CI stalls.",
+)
 # Only test if python >=3.12
 @pytest.mark.skipif(
     sys.version_info < (3, 12),
