@@ -88,7 +88,8 @@ dependencies = [
   "nxviz>=0.7",
   "rapidfuzz>3.12.1",
   "zarr>=2.18.7",
-]name = "sc-dandelion"
+]
+name = "sc-dandelion"
 dynamic = ["version"]
 authors = [{ name = "zktuong", email = "z.tuong@uq.edu.au" }]
 description = "sc-TCR/BCR-seq analysis tool"
