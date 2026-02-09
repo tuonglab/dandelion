@@ -1,0 +1,27 @@
+name: dandelion
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - numpy
+  - pandas
+  - pandoc
+  - pyyaml
+  - seaborn
+  - statsmodels
+  - pytables>=3.8.0
+  - pytest
+  - graph-tool
+  - blast
+  - rpy2
+  - bioconductor-edger
+  - pip
+  - tbb
+  - pip:
+      - numba
+      - changeo
+      - matplotlib
+      - nbsphinx
+      - sphinx-autodoc-typehints
+      - pytest-cov
+      - .[scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
