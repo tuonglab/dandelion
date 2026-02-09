@@ -264,7 +264,7 @@ References
    :target: https://github.com/tuonglab/dandelion/tree/master
 .. |MasterTest| image:: https://github.com/tuonglab/dandelion/actions/workflows/tests.yml/badge.svg?branch=master
    :target: https://github.com/tuonglab/dandelion/actions/workflows/tests.yml
-.. |CodeCov| image:: https://codecov.io/gh/tuonglab/dandelion/branch/master/graph/badge.svg?token=661BMU1FBO
+.. |CodeCov| .. image:: https://codecov.io/gh/tuonglab/dandelion/graph/badge.svg?token=i2BhIz2a4r 
    :target: https://codecov.io/gh/tuonglab/dandelion
 .. |Colab| image:: https://colab.research.google.com/assets/colab-badge.svg
    :target: https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb
