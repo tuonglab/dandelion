@@ -4,6 +4,7 @@ channels:
   - bioconda
 dependencies:
   - numpy
+  - setuptools
   - pandas
   - pandoc
   - pyyaml
@@ -20,7 +21,6 @@ dependencies:
   - pip:
       - numba
       - airr
-      - setuptools
       - changeo
       - matplotlib
       - nbsphinx
