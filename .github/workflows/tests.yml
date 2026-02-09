@@ -165,7 +165,7 @@ jobs:
           coverage report
 
       - name: Upload coverage to Codecov
-        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version == '3.13' &&  github.actor == 'zktuong' && github.repository == 'zktuong/dandelion'
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version == '3.11' && github.repository == 'tuonglab/dandelion'
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
