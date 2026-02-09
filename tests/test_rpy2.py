@@ -140,7 +140,7 @@ def test_scoper_h(create_testfolder):
 
 @pytest.mark.usefixtures("create_testfolder")
 # @pytest.mark.skipif(sys.platform == "darwin", reason="macos CI stalls.")
-def test_scoper_h(create_testfolder):
+def test_scoper_spectral(create_testfolder):
     """test spectral clones from scoper"""
     f = create_testfolder / "test.tsv"
     vdj = Dandelion(f)
