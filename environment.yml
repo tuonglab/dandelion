@@ -19,10 +19,5 @@ dependencies:
   - tbb
   - pip:
       - numba
-      - airr
-      - changeo
-      - matplotlib
-      - nbsphinx
-      - sphinx-autodoc-typehints
       - pytest-cov
-      - .[scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
+      - .[docs,scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
