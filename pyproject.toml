@@ -63,22 +63,10 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sc-dandelion"
-dynamic = ["version"]
-authors = [{ name = "zktuong", email = "z.tuong@uq.edu.au" }]
-description = "sc-TCR/BCR-seq analysis tool"
-readme = { file = "README.md", content-type = "text/markdown" }
-license = { text = "GNU Affero General Public License v3 or later (AGPLv3+)" }
-classifiers = [
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
-]
-keywords = ["dandelion", "single-cell", "immune", "TCR", "BCR"]
 dependencies = [
-  "airr",
+  "setuptools",
   "setuptools_scm[toml]>=6.0",
+  "airr",
   "numpy>=1.23",
   "pandas>=1.4",
   "changeo>=1.1",
@@ -100,7 +88,19 @@ dependencies = [
   "nxviz>=0.7",
   "rapidfuzz>3.12.1",
   "zarr>=2.18.7",
+]name = "sc-dandelion"
+dynamic = ["version"]
+authors = [{ name = "zktuong", email = "z.tuong@uq.edu.au" }]
+description = "sc-TCR/BCR-seq analysis tool"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "GNU Affero General Public License v3 or later (AGPLv3+)" }
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
 ]
+keywords = ["dandelion", "single-cell", "immune", "TCR", "BCR"]
 
 [project.urls]
 homepage = "https://github.com/zktuong/dandelion/"
