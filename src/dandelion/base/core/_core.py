@@ -1258,7 +1258,7 @@ class Dandelion:
             if type(corrected) is dict:
                 personalized_ref_dict = corrected
             elif os.path.isfile(str(corrected)):
-                personalized_ref_dict = readGermlines([corrected])
+                personalized_ref_dict = readGermlines([str(corrected)])
             # update with the personalized germline database
             if "personalized_ref_dict" in locals():
                 germline_ref.update(personalized_ref_dict)
