@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 from dandelion.base.tools._tools import vdj_sample
 from dandelion.base.core._core import Dandelion, Query
-from dandelion.tools._layout import generate_layout
+from dandelion.utilities._layout import generate_layout
 from dandelion.utilities._distances import (
     Metric,
     prepare_sequences_with_separator,

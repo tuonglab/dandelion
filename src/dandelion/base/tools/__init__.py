@@ -21,7 +21,7 @@ from dandelion.base.tools._diversity import clone_diversity, clone_rarefaction
 
 from dandelion.external.immcantation.base.changeo import define_clones
 
-from dandelion.tools._layout import extract_edge_weights
+from dandelion.utilities._layout import extract_edge_weights
 from dandelion.base.tools._trajectory import (
     project_pseudotime_to_cell,
     pseudobulk_gex,

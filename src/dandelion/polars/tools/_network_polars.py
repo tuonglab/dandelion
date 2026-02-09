@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 from dandelion.polars.core._core_polars import DandelionPolars
 from dandelion.polars.tools._tools_polars import vdj_sample
 
-from dandelion.tools._layout import generate_layout
+from dandelion.utilities._layout import generate_layout
 from dandelion.utilities._distances import (
     Metric,
     prepare_sequences_with_separator,
@@ -390,6 +390,9 @@ def generate_network(
             total_dist = vdj.distances
             if isinstance(total_dist, np.ndarray):
                 total_dist = csr_matrix(total_dist)
+            # also force lazy=F if pre-computed distance is a csr_matrix
+            if isinstance(total_dist, csr_matrix):
+                lazy = False
         else:
             # compute total_dist using chosen mode (original uses membership)
             logg.info(
