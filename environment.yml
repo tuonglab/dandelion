@@ -10,6 +10,7 @@ dependencies:
   - pyyaml
   - seaborn
   - statsmodels
+  - pytables>=3.8.0
   - pytest
   - blast
   - rpy2
@@ -17,8 +18,11 @@ dependencies:
   - pip
   - tbb
   - pip:
-      - changeo
       - numba
       - airr
+      - changeo
+      - matplotlib
+      - nbsphinx
+      - sphinx-autodoc-typehints
       - pytest-cov
-      - .[docs,scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
+      - .[scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
