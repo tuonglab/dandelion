@@ -1859,7 +1859,9 @@ def reassign_alleles(
 
     # Enforce identical column order across both frames, preserving original order
     heavy_col_order = heavy.collect_schema().names()
-    extra_from_light = [c for c in light.collect_schema().names() if c not in heavy_cols]
+    extra_from_light = [
+        c for c in light.collect_schema().names() if c not in heavy_cols
+    ]
     all_cols = heavy_col_order + extra_from_light
     heavy = heavy.select(all_cols)
     light = light.select(all_cols)
