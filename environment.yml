@@ -19,6 +19,8 @@ dependencies:
   - tbb
   - pip:
       - numba
+      - airr
+      - setuptools
       - changeo
       - matplotlib
       - nbsphinx
