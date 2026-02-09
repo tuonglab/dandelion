@@ -52,7 +52,8 @@ filterwarnings = [
   "ignore::PendingDeprecationWarning",
   "ignore::FutureWarning",
 ]
-addopts = "--cov src/dandelion --cov-report=xml -rP"
+addopts = "--cov src/dandelion --cov-report=xml --junitxml=junit.xml -rP"
+junit_family = "legacy"
 testpaths = ["tests"]
 
 [tool.coverage.run]

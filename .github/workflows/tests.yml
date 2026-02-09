@@ -177,3 +177,13 @@ jobs:
           fail_ci_if_error: false
           path_to_write_report: ./coverage/codecov_report.txt
           verbose: true
+
+      - name: Upload test results to Codecov
+        if: matrix.config.os == 'ubuntu-latest'
+          && matrix.config.python-version == '3.11'
+          && github.repository == 'tuonglab/dandelion'
+          && !cancelled()
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./junit.xml
