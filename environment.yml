@@ -25,4 +25,5 @@ dependencies:
       - nbsphinx
       - sphinx-autodoc-typehints
       - pytest-cov
+      - setuptools
       - .[scirpy,scrublet,palantir,dask,polars,tests] # This installs the current directory as a package
