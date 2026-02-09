@@ -154,7 +154,6 @@ def generate_network(
         "mod_fr2_gpu",
         "mod_fr_bh",
         "mod_fr_bh_gpu",
-        "sfdp",
         "fa2",
     ] = "mod_fr2",
     singleton_mass: float = 0.5,
@@ -202,14 +201,13 @@ def generate_network(
         whether or not to generate the graph after distance matrix calculation.
     compute_layout : bool, optional
         whether or not to generate the layout. May be time consuming if too many cells.
-    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "sfdp", "fa2"], optional
+    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "fa2"], optional
         Layout algorithm. Options:
         - 'mod_fr': Original python modified FR layout
         - 'mod_fr2': Numba-accelerated modified FR (faster CPU)
         - 'mod_fr2_gpu': PyTorch GPU modified FR (auto-tiles for >100K nodes)
         - 'mod_fr_bh': Barnes-Hut O(N log N) CPU layout (scalable for large graphs)
         - 'mod_fr_bh_gpu': Barnes-Hut O(N log N) GPU layout (scalable for large graphs, requires CUDA)
-        - 'sfdp': graph_tool sfdp_layout (requires graph-tool)
         - 'fa2': ForceAtlas2 (requires fa2-modified)
     singleton_mass : float, optional
         Mass assigned to singleton nodes (no edges) in Barnes-Hut layouts.
@@ -258,8 +256,7 @@ def generate_network(
     random_state : int | np.random.RandomState | None, optional
         Random state for reproducible sampling.
     **kwargs
-        additional kwargs passed to options specified in `networkx.drawing.layout.spring_layout` or
-        `graph_tool.draw.sfdp_layout`.
+        additional kwargs passed to layout functions in `generate_layout`.
 
     Returns
     -------

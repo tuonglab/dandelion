@@ -4,14 +4,14 @@ channels:
   - bioconda
 dependencies:
   - python=3.13
+  - setuptools
   - seaborn
   - scikit-learn
   - statsmodels
   - numba
-  - pytables
+  - polars
   - python-igraph
   - leidenalg
-  - graph-tool>=2.77
   - pip
   - pytest
   - tbb

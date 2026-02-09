@@ -4,6 +4,7 @@ channels:
   - bioconda
 dependencies:
   - python=3.13
+  - setuptools
   - seaborn
   - scikit-learn
   - statsmodels
@@ -11,7 +12,6 @@ dependencies:
   - pytables
   - python-igraph
   - leidenalg
-  - graph-tool>=2.77
   - pip
   - pytest
   - tbb
@@ -26,6 +26,6 @@ dependencies:
   - blast
   - pip:
       - scanpy>=1.7.0
-      - git+https://www.github.com/zktuong/dandelion.git
+      - git+https://www.github.com/tuonglab/dandelion.git
       - biopython
       - receptor-utils

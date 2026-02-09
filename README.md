@@ -64,7 +64,6 @@ singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta
 Start off by creating a conda environment containing scanpy, following [official scanpy instructions](https://scanpy.readthedocs.io/en/stable/installation.html). Once done, run the following:
 
 ```bash
-conda install -c conda-forge graph-tool
 pip install sc-dandelion
 ```
 
@@ -143,7 +142,6 @@ pytables>=3.6.1 (conda-forge)
 seaborn>=0.10.1 (conda-forge)
 leidenalg>=0.8.0 (conda-forge)
 plotnine>=0.6.0 (conda-forge)
-graph-tool>=2.3.5 (conda-forge) # optional
 
 # Other executables (through conda)
 blast>=2.10.1 (bioconda)
