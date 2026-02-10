@@ -7,11 +7,11 @@ Imports from the top-level ``dandelion`` namespace so that the active backend
 is exercised.  CI runs this file once per backend to cover both
 ``dandelion.base`` and ``dandelion.polars``.
 """
+
 import pytest
 import scanpy as sc
 
 import dandelion as ddl
-
 
 # -- core / preprocessing ----------------------------------------------------
 
@@ -100,18 +100,14 @@ def test_extract_edge_weights(create_testfolder):
 def test_diversity_anndata(create_testfolder, method):
     f = create_testfolder / "test_backend.h5ad"
     adata = sc.read_h5ad(f)
-    ddl.tl.clone_diversity(
-        adata, groupby="sample_id", method=method, n_boot=5
-    )
+    ddl.tl.clone_diversity(adata, groupby="sample_id", method=method, n_boot=5)
 
 
 @pytest.mark.usefixtures("create_testfolder")
 def test_diversity_ddl(create_testfolder):
     f = create_testfolder / "test_backend.ddl"
     vdj = ddl.read(f)
-    ddl.tl.clone_diversity(
-        vdj, groupby="sample_id", key="sequence", n_boot=5
-    )
+    ddl.tl.clone_diversity(vdj, groupby="sample_id", key="sequence", n_boot=5)
 
 
 @pytest.mark.usefixtures("create_testfolder")
