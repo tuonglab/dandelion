@@ -29,11 +29,13 @@ def test_write_fasta(create_testfolder, fasta_10x_mouse):
     out_fasta = create_testfolder / "filtered_contig.fasta"
     # Verify file exists and has expected number of sequences
     assert out_fasta.exists()
-    # Verify content by checking we can read it back
+    # Verify content by counting FASTA headers efficiently
+    header_count = 0
     with open(out_fasta, 'r') as f:
-        content = f.read()
-        # Check we have FASTA headers for expected sequences
-        assert content.count('>') == len(fasta_10x_mouse)
+        for line in f:
+            if line.startswith('>'):
+                header_count += 1
+    assert header_count == len(fasta_10x_mouse)
 
 
 @pytest.mark.usefixtures("setup_testfolder_files", "annotation_10x_mouse")
