@@ -276,14 +276,14 @@ class HammingMetric:
         try:
             import torch
 
-            if torch.cuda.is_available():
+            if torch.cuda.is_available():  # pragma: no cover
                 self.backend_name = "torch"
                 self.torch = torch
                 self.device = torch.device("cuda")
                 if self.verbose:
                     print(f"Using PyTorch backend with CUDA GPU")
                 return
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available():  # pragma: no cover
                 self.backend_name = "torch"
                 self.torch = torch
                 self.device = torch.device("mps")
@@ -341,14 +341,14 @@ class HammingMetric:
             return np.array([[]])
 
         # Route to appropriate backend
-        if self.backend_name == "torch":
+        if self.backend_name == "torch":  # pragma: no cover
             result = self._compute_torch(seqs, n)
         else:  # numpy
             result = self._compute_numpy(seqs, n)
 
         return result
 
-    def _compute_torch(self, seqs: list[str], n: int) -> np.ndarray:
+    def _compute_torch(self, seqs: list[str], n: int) -> np.ndarray:  # pragma: no cover
         """PyTorch implementation."""
         seqs_tensor = self.torch.tensor(
             np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(
@@ -390,14 +390,14 @@ class IdentityMetric:
         try:
             import torch
 
-            if torch.cuda.is_available():
+            if torch.cuda.is_available():  # pragma: no cover
                 self.backend_name = "torch"
                 self.torch = torch
                 self.device = torch.device("cuda")
                 if self.verbose:
                     print("Using PyTorch backend with CUDA GPU for identity")
                 return
-            elif torch.backends.mps.is_available():
+            elif torch.backends.mps.is_available():  # pragma: no cover
                 self.backend_name = "torch"
                 self.torch = torch
                 self.device = torch.device("mps")
@@ -466,7 +466,7 @@ class IdentityMetric:
 
         hashes = self._hash_sequences(seqs)
 
-        if self.backend_name == "torch":
+        if self.backend_name == "torch":  # pragma: no cover
             result = self._compute_torch(hashes)
         else:
             result = self._compute_numpy(hashes)
@@ -478,7 +478,7 @@ class IdentityMetric:
         identity = hashes[:, None] == hashes[None, :]
         return (~identity).astype(np.float32)
 
-    def _compute_torch(self, hashes: np.ndarray) -> np.ndarray:
+    def _compute_torch(self, hashes: np.ndarray) -> np.ndarray:  # pragma: no cover
         """PyTorch backend."""
         h = self.torch.as_tensor(hashes, device=self.device)
         identity = h[:, None] == h[None, :]
