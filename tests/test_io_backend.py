@@ -7,6 +7,7 @@ Imports from the top-level ``dandelion`` namespace so that the active backend
 is exercised.  CI runs this file once per backend to cover both
 ``dandelion.base`` and ``dandelion.polars``.
 """
+
 import json
 import os
 import pytest
@@ -14,7 +15,6 @@ import pytest
 import dandelion as ddl
 
 from dandelion.utilities._utilities import write_fasta
-
 
 # -- read functions -----------------------------------------------------------
 
