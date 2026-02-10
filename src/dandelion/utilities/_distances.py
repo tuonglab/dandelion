@@ -348,7 +348,9 @@ class HammingMetric:
 
         return result
 
-    def _compute_torch(self, seqs: list[str], n: int) -> np.ndarray:  # pragma: no cover
+    def _compute_torch(
+        self, seqs: list[str], n: int
+    ) -> np.ndarray:  # pragma: no cover
         """PyTorch implementation."""
         seqs_tensor = self.torch.tensor(
             np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(
@@ -478,7 +480,9 @@ class IdentityMetric:
         identity = hashes[:, None] == hashes[None, :]
         return (~identity).astype(np.float32)
 
-    def _compute_torch(self, hashes: np.ndarray) -> np.ndarray:  # pragma: no cover
+    def _compute_torch(
+        self, hashes: np.ndarray
+    ) -> np.ndarray:  # pragma: no cover
         """PyTorch backend."""
         h = self.torch.as_tensor(hashes, device=self.device)
         identity = h[:, None] == h[None, :]
