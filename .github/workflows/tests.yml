@@ -57,6 +57,7 @@ jobs:
           - { python-version: "3.11", os: macos-latest }
           - { python-version: "3.12", os: macos-latest }
           - { python-version: "3.13", os: macos-latest }
+          - { python-version: "3.11", os: ubuntu-latest, backend: pandas }
     runs-on: ${{ matrix.config.os }}
     env:
       R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
@@ -157,8 +158,14 @@ jobs:
           pip install rpy2
 
       - name: Test with pytest
+        env:
+          DANDELION_BACKEND: ${{ matrix.config.backend || 'auto' }}
         run: |
-          pytest
+          if [ "$DANDELION_BACKEND" = "pandas" ]; then
+            pytest --ignore-glob='*polars*'
+          else
+            pytest
+          fi
 
       - name: Show coverage
         run: |
@@ -172,7 +179,7 @@ jobs:
           files: ./coverage.xml
           directory: ./coverage/reports/
           env_vars: ${{ format('OS={0},PYTHON={1}', matrix.config.os, matrix.config.python-version) }}
-          flags: unittests
+          flags: ${{ matrix.config.backend || 'polars' }}
           name: codecov-umbrella
           fail_ci_if_error: false
           path_to_write_report: ./coverage/codecov_report.txt

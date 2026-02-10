@@ -3,9 +3,15 @@ Backend API utility for dynamic import of polars or base modules/classes.
 Usage:
     MyClass = import_backend_class('tools', 'MyClass')
     my_instance = MyClass(...)
+
+Set the environment variable ``DANDELION_BACKEND`` to ``"pandas"`` to force
+the base (pandas) backend even when polars is installed.
 """
 
 import importlib
+import os
+
+_BACKEND = os.environ.get("DANDELION_BACKEND", "auto").lower()
 
 
 def import_backend_class(module: str, class_name: str):
@@ -17,12 +23,14 @@ def import_backend_class(module: str, class_name: str):
     Returns:
         type: Imported class or function
     """
-    try:
-        mod = importlib.import_module(f"dandelion.polars.{module}")
-        return getattr(mod, class_name)
-    except (ImportError, AttributeError):
-        mod = importlib.import_module(f"dandelion.base.{module}")
-        return getattr(mod, class_name)
+    if _BACKEND != "pandas":
+        try:
+            mod = importlib.import_module(f"dandelion.polars.{module}")
+            return getattr(mod, class_name)
+        except (ImportError, AttributeError):
+            pass
+    mod = importlib.import_module(f"dandelion.base.{module}")
+    return getattr(mod, class_name)
 
 
 def import_backend_module(module: str):
@@ -33,7 +41,9 @@ def import_backend_module(module: str):
     Returns:
         module: Imported module
     """
-    try:
-        return importlib.import_module(f"dandelion.polars.{module}")
-    except ImportError:
-        return importlib.import_module(f"dandelion.base.{module}")
+    if _BACKEND != "pandas":
+        try:
+            return importlib.import_module(f"dandelion.polars.{module}")
+        except ImportError:
+            pass
+    return importlib.import_module(f"dandelion.base.{module}")
