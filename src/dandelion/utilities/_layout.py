@@ -8,9 +8,8 @@ import networkx as nx
 
 from numba import njit, prange, cuda
 from scipy.sparse import issparse, coo_matrix, csr_matrix
-from scipy.sparse.csgraph import connected_components
 from scanpy import logging as logg
-from typing import Literal
+from typing import Any, Literal
 
 try:
     from networkx.utils import np_random_state as random_state
@@ -125,7 +124,7 @@ def generate_layout(
             if verbose:
                 logg.info("Computing expanded network layout")
             pos_ = _fruchterman_reingold_layout_v2(G_, weight=weight, **kwargs)
-        elif layout_method == "mod_fr2_gpu":
+        elif layout_method == "mod_fr2_gpu":  # pragma: no cover
             if not expanded_only:
                 if verbose:
                     logg.info("Computing network layout")
@@ -151,7 +150,7 @@ def generate_layout(
             pos_ = _fruchterman_reingold_layout_bh(
                 G_, weight=weight, singleton_mass=singleton_mass, **kwargs
             )
-        elif layout_method == "mod_fr_bh_gpu":
+        elif layout_method == "mod_fr_bh_gpu":  # pragma: no cover
             if not expanded_only:
                 if verbose:
                     logg.info("Computing network layout (Barnes-Hut GPU)")
@@ -170,7 +169,7 @@ def generate_layout(
                 from fa2_modified import ForceAtlas2
             except ImportError:
                 logg.info(
-                    "Please install ForceAtlas2 to use fa2 layout:"
+                    "Please install ForceAtlas2 to use fa2 layout: "
                     "pip install fa2-modified"
                 )
             fa2_layout = ForceAtlas2(**kwargs)
@@ -198,12 +197,27 @@ def generate_layout(
 
 # when dealing with a lot of unconnected vertices, the pieces fly out to infinity and the original fr layout can't be
 # used
-# work around from https://stackoverflow.com/questions/14283341/how-to-increase-node-spacing-for-networkx-spring-layout
+# workaround from https://stackoverflow.com/questions/14283341/how-to-increase-node-spacing-for-networkx-spring-layout
 # code chunk from networkx's layout.py https://github.com/networkx/networkx/blob/master/networkx/drawing/layout.py
 def _process_params(
     G: nx.Graph, center: np.ndarray | None, dim: int
 ) -> tuple[nx.Graph, np.ndarray]:
-    """Some boilerplate code."""
+    """Validate graph input and center coordinates for layout computation.
+
+    Parameters
+    ----------
+    G : nx.Graph
+        Input graph. If not a Graph instance, nodes are extracted into one.
+    center : np.ndarray | None
+        Coordinate pair around which to center the layout. If None, uses origin.
+    dim : int
+        Dimension of the layout space.
+
+    Returns
+    -------
+    tuple[nx.Graph, np.ndarray]
+        Validated graph and center array.
+    """
     if not isinstance(G, nx.Graph):
         empty_graph = nx.Graph()
         empty_graph.add_nodes_from(G)
@@ -371,7 +385,7 @@ def _fruchterman_reingold(
     threshold: float = 1e-4,
     dim: int = 2,
     seed: int | np.random.RandomState | None = None,
-):
+) -> np.ndarray:
     """Fruchterman Reingold algorithm."""
     # Position nodes in adjacency matrix A using Fruchterman-Reingold
     # Entry point for NetworkX graph is fruchterman_reingold_layout()
@@ -441,7 +455,7 @@ def _sparse_fruchterman_reingold(
     threshold: float = 1e-4,
     dim: int = 2,
     seed: int | np.random.RandomState | None = None,
-):
+) -> np.ndarray:
     """Sparse Fruchterman Reingold algorithm."""
     # Position nodes in adjacency matrix A using Fruchterman-Reingold
     # Entry point for NetworkX graph is fruchterman_reingold_layout()
@@ -547,7 +561,7 @@ def _rescale_layout(pos: np.ndarray, scale: float = 1) -> np.ndarray:
     return pos
 
 
-def _detect_torch_device():
+def _detect_torch_device() -> tuple[Any, Any]:  # pragma: no cover
     """Detect best available PyTorch device for layout computation."""
     try:
         import torch
@@ -571,8 +585,14 @@ def _detect_torch_device():
 _numba_fr_kernel_cache = None
 
 
-def _get_numba_fr_kernel():
-    """Lazily compile the Numba-accelerated FR force computation kernel."""
+def _get_numba_fr_kernel() -> Any:
+    """Lazily compile the Numba-accelerated FR force computation kernel.
+
+    Returns
+    -------
+    Any
+        Numba JIT-compiled kernel function for FR force computation.
+    """
     global _numba_fr_kernel_cache
     if _numba_fr_kernel_cache is not None:
         return _numba_fr_kernel_cache
@@ -663,20 +683,44 @@ def _get_numba_fr_kernel():
 
 @random_state(7)
 def _fruchterman_reingold_numba(
-    A,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    dim=2,
-    seed=None,
-):
+    A: np.ndarray | csr_matrix,
+    k: float | None = None,
+    pos: np.ndarray | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    dim: int = 2,
+    seed: int | np.random.RandomState | None = None,
+) -> np.ndarray:
     """Numba-accelerated Fruchterman-Reingold algorithm.
 
     Uses parallel CPU execution via Numba JIT compilation.
     Separates repulsive (O(N^2)) and attractive (O(E)) forces
     with CSR sparse format for efficient edge traversal.
+
+    Parameters
+    ----------
+    A : np.ndarray | csr_matrix
+        Adjacency matrix (dense or sparse).
+    k : float | None, optional
+        Optimal distance between nodes. If None, defaults to ``sqrt(1/N)``.
+    pos : np.ndarray | None, optional
+        Initial positions as (N, dim) array. Random if None.
+    fixed : list | None, optional
+        Indices of nodes whose positions should not change.
+    iterations : int, optional
+        Maximum number of iterations.
+    threshold : float, optional
+        Convergence threshold on relative position change.
+    dim : int, optional
+        Dimension of layout.
+    seed : int | np.random.RandomState | None, optional
+        Random state for deterministic layouts.
+
+    Returns
+    -------
+    np.ndarray
+        (N, dim) array of node positions.
     """
     try:
         nnodes, _ = A.shape
@@ -726,24 +770,52 @@ def _fruchterman_reingold_numba(
 
 @random_state(9)
 def _fruchterman_reingold_torch(
-    A,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    dim=2,
-    torch_module=None,
-    device=None,
-    seed=None,
-):
+    A: np.ndarray,
+    k: float | None = None,
+    pos: np.ndarray | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    dim: int = 2,
+    torch_module: Any = None,
+    device: Any = None,
+    seed: int | np.random.RandomState | None = None,
+) -> np.ndarray:  # pragma: no cover
     """PyTorch GPU-accelerated Fruchterman-Reingold algorithm.
 
     Uses dense tensor operations on GPU (CUDA/MPS) or CPU.
     The O(N^2) pairwise computation maps naturally to GPU parallelism.
 
-    WARNING: Creates N×N tensors - not suitable for large graphs (>30K nodes).
-    Use _fruchterman_reingold_torch_tiled for larger graphs.
+    WARNING: Creates N x N tensors - not suitable for large graphs (>30K nodes).
+    Use ``_fruchterman_reingold_torch_tiled`` for larger graphs.
+
+    Parameters
+    ----------
+    A : np.ndarray
+        Dense adjacency matrix.
+    k : float | None, optional
+        Optimal distance between nodes. If None, defaults to ``sqrt(1/N)``.
+    pos : np.ndarray | None, optional
+        Initial positions as (N, dim) array. Random if None.
+    fixed : list | None, optional
+        Indices of nodes whose positions should not change.
+    iterations : int, optional
+        Maximum number of iterations.
+    threshold : float, optional
+        Convergence threshold on relative position change.
+    dim : int, optional
+        Dimension of layout.
+    torch_module : Any, optional
+        The ``torch`` module (passed to avoid top-level import).
+    device : Any, optional
+        PyTorch device (e.g. ``torch.device("cuda")``).
+    seed : int | np.random.RandomState | None, optional
+        Random state for deterministic layouts.
+
+    Returns
+    -------
+    np.ndarray
+        (N, dim) array of node positions.
     """
     try:
         nnodes, _ = A.shape
@@ -808,32 +880,57 @@ def _fruchterman_reingold_torch(
 
 @random_state(9)
 def _fruchterman_reingold_torch_tiled(
-    A,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    dim=2,
-    torch_module=None,
-    device=None,
-    seed=None,
-    tile_size=4096,
-):
+    A: np.ndarray | csr_matrix,
+    k: float | None = None,
+    pos: np.ndarray | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    dim: int = 2,
+    torch_module: Any = None,
+    device: Any = None,
+    seed: int | np.random.RandomState | None = None,
+    tile_size: int = 4096,
+) -> np.ndarray:  # pragma: no cover
     """PyTorch GPU layout with tiled repulsive force computation.
 
-    Uses tiled matrix operations to compute O(N²) repulsive forces
-    without allocating full N×N tensor. Memory: O(N × tile_size).
+    Uses tiled matrix operations to compute O(N^2) repulsive forces
+    without allocating full N x N tensor. Memory: O(N x tile_size).
 
     For 1M nodes with tile_size=4096:
-    - Full N×N would need: 1M × 1M × 4 bytes = 4TB
-    - Tiled needs: 1M × 4096 × 4 bytes × 2 = ~32GB (fits in GPU)
+    - Full N x N would need: 1M x 1M x 4 bytes = 4TB
+    - Tiled needs: 1M x 4096 x 4 bytes x 2 = ~32GB (fits in GPU)
 
     Parameters
     ----------
+    A : np.ndarray | csr_matrix
+        Adjacency matrix (dense or sparse).
+    k : float | None, optional
+        Optimal distance between nodes. If None, defaults to ``sqrt(1/N)``.
+    pos : np.ndarray | None, optional
+        Initial positions as (N, dim) array. Random if None.
+    fixed : list | None, optional
+        Indices of nodes whose positions should not change.
+    iterations : int, optional
+        Maximum number of iterations.
+    threshold : float, optional
+        Convergence threshold on relative position change.
+    dim : int, optional
+        Dimension of layout.
+    torch_module : Any, optional
+        The ``torch`` module (passed to avoid top-level import).
+    device : Any, optional
+        PyTorch device (e.g. ``torch.device("cuda")``).
+    seed : int | np.random.RandomState | None, optional
+        Random state for deterministic layouts.
     tile_size : int, optional
         Number of nodes per tile. Larger = faster but more memory.
         Default 4096 (uses ~64MB per tile for 2D).
+
+    Returns
+    -------
+    np.ndarray
+        (N, dim) array of node positions.
     """
     try:
         nnodes, _ = A.shape
@@ -1468,7 +1565,7 @@ def _fruchterman_reingold_barnes_hut_numba(
 _numba_cuda_bh_kernels_cache = None
 
 
-def _get_numba_cuda_bh_kernels() -> tuple:
+def _get_numba_cuda_bh_kernels() -> tuple:  # pragma: no cover
     """Lazily compile Numba CUDA kernels for Barnes-Hut algorithm.
 
     Returns
@@ -1655,7 +1752,7 @@ def _fruchterman_reingold_barnes_hut_cuda(
     seed: int | None = None,
     theta: float = 0.8,
     singleton_mass: float = 0.5,
-) -> np.ndarray:
+) -> np.ndarray:  # pragma: no cover
     """Barnes-Hut accelerated Fruchterman-Reingold layout (GPU/Numba CUDA).
 
     O(N log N) per iteration. Quadtree is built on CPU each iteration;
@@ -2001,7 +2098,7 @@ def _fruchterman_reingold_layout_bh_gpu(
     seed: int | None = None,
     theta: float = 0.8,
     singleton_mass: float = 0.5,
-) -> dict:
+) -> dict:  # pragma: no cover
     """Barnes-Hut accelerated Fruchterman-Reingold layout (GPU).
 
     O(N log N) per iteration. Uses Numba CUDA on NVIDIA GPUs for best
@@ -2128,24 +2225,54 @@ def _fruchterman_reingold_layout_bh_gpu(
 
 
 def _fruchterman_reingold_layout_v2(
-    G,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    weight="weight",
-    scale=1,
-    center=None,
-    dim=2,
-    seed=None,
-):
+    G: nx.Graph,
+    k: float | None = None,
+    pos: dict | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    weight: str = "weight",
+    scale: float = 1,
+    center: np.ndarray | None = None,
+    dim: int = 2,
+    seed: int | np.random.RandomState | None = None,
+) -> dict:
     """Numba-accelerated Fruchterman-Reingold layout (mod_fr2).
 
-    Drop-in replacement for _fruchterman_reingold_layout with
+    Drop-in replacement for ``_fruchterman_reingold_layout`` with
     Numba JIT-compiled force computation and parallel CPU execution.
     First call incurs ~1-2s JIT compilation overhead; subsequent
     calls use the cached compiled kernel.
+
+    Parameters
+    ----------
+    G : nx.Graph
+        Input graph.
+    k : float | None, optional
+        Optimal distance between nodes. If None, defaults to ``sqrt(1/N)``.
+    pos : dict | None, optional
+        ``{node: (x, y)}`` initial positions.
+    fixed : list | None, optional
+        Nodes whose positions should not change.
+    iterations : int, optional
+        Maximum number of iterations.
+    threshold : float, optional
+        Convergence threshold on relative position change.
+    weight : str, optional
+        Edge attribute key for weights.
+    scale : float, optional
+        Scale factor for final positions.
+    center : np.ndarray | None, optional
+        Center of the layout.
+    dim : int, optional
+        Dimension of layout.
+    seed : int | np.random.RandomState | None, optional
+        Random state for deterministic layouts.
+
+    Returns
+    -------
+    dict
+        ``{node: np.ndarray}`` position mapping.
     """
     G, center = _process_params(G, center, dim)
 
@@ -2204,19 +2331,19 @@ def _fruchterman_reingold_layout_v2(
 
 
 def _fruchterman_reingold_layout_gpu(
-    G,
-    k=None,
-    pos=None,
-    fixed=None,
-    iterations=50,
-    threshold=1e-4,
-    weight="weight",
-    scale=1,
-    center=None,
-    dim=2,
-    seed=None,
-    tile_size=4096,
-):
+    G: nx.Graph,
+    k: float | None = None,
+    pos: dict | None = None,
+    fixed: list | None = None,
+    iterations: int = 50,
+    threshold: float = 1e-4,
+    weight: str = "weight",
+    scale: float = 1,
+    center: np.ndarray | None = None,
+    dim: int = 2,
+    seed: int | np.random.RandomState | None = None,
+    tile_size: int = 4096,
+) -> dict:  # pragma: no cover
     """PyTorch GPU-accelerated Fruchterman-Reingold layout (mod_fr2_gpu).
 
     Automatically selects between dense (fast) and tiled (memory-efficient)
@@ -2224,8 +2351,35 @@ def _fruchterman_reingold_layout_gpu(
 
     Parameters
     ----------
+    G : nx.Graph
+        Input graph.
+    k : float | None, optional
+        Optimal distance between nodes. If None, defaults to ``sqrt(1/N)``.
+    pos : dict | None, optional
+        ``{node: (x, y)}`` initial positions.
+    fixed : list | None, optional
+        Nodes whose positions should not change.
+    iterations : int, optional
+        Maximum number of iterations.
+    threshold : float, optional
+        Convergence threshold on relative position change.
+    weight : str, optional
+        Edge attribute key for weights.
+    scale : float, optional
+        Scale factor for final positions.
+    center : np.ndarray | None, optional
+        Center of the layout.
+    dim : int, optional
+        Dimension of layout.
+    seed : int | np.random.RandomState | None, optional
+        Random state for deterministic layouts.
     tile_size : int, optional
         Tile size for tiled mode. Default 4096.
+
+    Returns
+    -------
+    dict
+        ``{node: np.ndarray}`` position mapping.
     """
     torch, device = _detect_torch_device()
 
@@ -2313,7 +2467,7 @@ def _fruchterman_reingold_layout_gpu(
 
 
 def extract_edge_weights(
-    vdj: Dandelion | DandelionPolars, expanded_only: bool = False
+    vdj: Dandelion | DandelionPolars, expanded_only: bool = False  # noqa: F821
 ) -> list:
     """
     Retrieve edge weights from graph.
