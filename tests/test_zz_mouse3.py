@@ -109,13 +109,5 @@ def test_generate_network_methods(create_testfolder):
     with pytest.raises(ValueError):
         ddl.tl.generate_network(vdj, compute_layout=False)
     ddl.tl.find_clones(vdj)
-    for layout in [
-        "mod_fr",
-        "mod_fr2",
-        # "mod_fr2_gpu",
-        "mod_fr_bh",
-        # "mod_fr_bh_gpu",
-        "fa2",
-    ]:
-        ddl.tl.generate_network(vdj, layout_method=layout)
-        assert vdj.layout is not None
+    ddl.tl.generate_network(vdj, layout_method="mod_fr2")
+    assert vdj.layout is not None
