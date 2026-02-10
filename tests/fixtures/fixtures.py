@@ -53,7 +53,7 @@ def create_testfolder_number(tmp_path_factory):
     return fn
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def database_paths() -> Dict[str, Path]:
     """
     Fixture to get the database paths.

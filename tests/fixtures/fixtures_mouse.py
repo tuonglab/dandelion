@@ -11,7 +11,7 @@ from .fixtures import setup_anndata, DATABASE_PATH
 MBLASTDB_PATH = DATABASE_PATH / "blast" / "mouse"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def database_paths_mouse() -> Dict[str, Path]:
     """
     Fixture for database paths for tests.
@@ -590,7 +590,7 @@ def dummy_adata_mouse():
     return adata
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fasta_10x_mouse():
     """Standard cellranger fasta file to test the preprocessing."""
     seq = {
@@ -2589,7 +2589,7 @@ def fasta_10x_mouse():
     return seq
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def annotation_10x_mouse():
     """Standard cellranger annotation file to test the preprocessing."""
     annot = pd.DataFrame(
@@ -42440,7 +42440,7 @@ def annotation_10x_mouse():
     return annot
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def balbc_ighg_primers():
     """Primer sequences for mouse ighg"""
     primer_dict = {
