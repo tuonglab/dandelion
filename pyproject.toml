@@ -54,6 +54,11 @@ filterwarnings = [
 ]
 addopts = "--cov src/dandelion --cov-report=xml -rP"
 testpaths = ["tests"]
+markers = [
+  "slow: tests that call IGBlast (reannotate_genes) - very slow operations",
+  "expensive: tests that call reassign_alleles - moderately expensive operations",
+  "quick: lightweight validation tests that run quickly",
+]
 
 [tool.coverage.run]
 omit = ["containter/*", "src/dandelion/external/*", "src/dandelion/tutorial/*"]
