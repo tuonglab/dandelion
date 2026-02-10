@@ -511,7 +511,7 @@ def _sparse_fruchterman_reingold(
             displacement[:, i] += (
                 delta * (k * k / distance**2 - Ai * distance / k)
             ).sum(axis=1)
-        displacement = displacement - pos / (k * np.sqrt(nnodes))
+        displacement = displacement - pos.T / (k * np.sqrt(nnodes))
         # update positions
         length = np.sqrt((displacement**2).sum(axis=0))
         length = np.where(length < 0.01, 0.01, length)
