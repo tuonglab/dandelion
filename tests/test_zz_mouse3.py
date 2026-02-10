@@ -33,7 +33,7 @@ def test_write_fasta(create_testfolder, fasta_10x_mouse):
     assert out_fasta.exists()
     # Verify content by counting FASTA headers efficiently
     header_count = 0
-    with open(out_fasta) as f:
+    with open(out_fasta, "r") as f:
         for line in f:
             if line.startswith(">"):
                 header_count += 1
