@@ -767,6 +767,8 @@ def all_missing(x: str | None) -> bool:
 
 def all_missing2(x: str | None) -> bool:
     """Utility function to check if all x is not null or blank or the word None."""
+    if len(x) == 0:
+        return False
     return all(pd.isnull(x)) or all(x == "") or all(x == "None")
 
 
