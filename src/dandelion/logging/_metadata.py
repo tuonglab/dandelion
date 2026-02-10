@@ -3,7 +3,7 @@ from setuptools_scm import get_version
 
 try:
     __version__ = get_version().split("+")[0]
-except LookupError:  # prama: no cover
+except LookupError:  # pragma: no cover
     from importlib.metadata import version
 
     __version__ = version("sc-dandelion").split("+")[0]
