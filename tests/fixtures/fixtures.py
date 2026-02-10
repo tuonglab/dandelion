@@ -1,5 +1,6 @@
 """fixtures"""
 
+import dandelion as ddl
 import pandas as pd
 import pytest
 import scipy.sparse
@@ -7,8 +8,6 @@ import scipy.sparse
 from anndata import AnnData
 from pathlib import Path
 from typing import Dict
-
-from dandelion.base.io import read_h5ddl
 
 DATABASE_PATH = Path("container") / "database"
 HBLASTDB_PATH = DATABASE_PATH / "blast" / "human"
@@ -54,7 +53,7 @@ def create_testfolder_number(tmp_path_factory):
     return fn
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def database_paths() -> Dict[str, Path]:
     """
     Fixture to get the database paths.
@@ -73,7 +72,7 @@ def database_paths() -> Dict[str, Path]:
     return db
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def processed_files():
     """Database paths for tests."""
     fl = {
@@ -84,7 +83,7 @@ def processed_files():
     return fl
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def processed_files_tr():
     """Database paths for tests."""
     fl = {
@@ -189,7 +188,7 @@ def dummy_adata_tr():
     return adata
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fasta_10x():
     """Standard cellranger fasta file to test the preprocessing."""
     seq = {
@@ -206,7 +205,7 @@ def fasta_10x():
     return seq
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def annotation_10x():
     """Standard cellranger annotation file to test the preprocessing."""
     annot = pd.DataFrame(
@@ -417,7 +416,7 @@ def annotation_10x():
     return annot
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def annotation_10x_cr6():
     """Standard cellranger annotation file to test the preprocessing."""
     annot = pd.DataFrame(
@@ -1319,7 +1318,7 @@ def annotation_10x_cr6():
     return annot
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fasta_10x_cr6():
     """Standard cellranger fasta file to test the preprocessing."""
     seq = {
@@ -1353,7 +1352,7 @@ def fasta_10x_cr6():
     return seq
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_10x():
     """Standard cellranger airr file to test the preprocessing."""
     airr = pd.DataFrame(
@@ -1703,7 +1702,7 @@ def airr_10x():
     return airr
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_reannotated():
     """airr reannotated"""
     annotated = pd.DataFrame(
@@ -2469,7 +2468,7 @@ def airr_reannotated():
     return annotated
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_reannotated2():
     """airr reannotated 2"""
     annotated = pd.DataFrame(
@@ -3823,7 +3822,7 @@ def airr_reannotated2():
     return annotated
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fasta_10x_tr1():
     """Standard cellranger fasta file to test the preprocessing."""
     seq = {
@@ -3833,7 +3832,7 @@ def fasta_10x_tr1():
     return seq
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fasta_10x_tr2():
     """Standard cellranger fasta file to test the preprocessing."""
     seq = {
@@ -3844,7 +3843,7 @@ def fasta_10x_tr2():
     return seq
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def annotation_10x_tr1():
     """Standard cellranger annotation file to test the preprocessing."""
     annot = pd.DataFrame(
@@ -3954,7 +3953,7 @@ def annotation_10x_tr1():
     return annot
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def json_10x_cr6():
     """cr6 10x json"""
     all_json = [
@@ -6982,7 +6981,7 @@ def json_10x_cr6():
     return all_json
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def annotation_10x_tr2():
     """Standard cellranger annotation file to test the preprocessing."""
     annot = pd.DataFrame(
@@ -7073,7 +7072,7 @@ def annotation_10x_tr2():
     return annot
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_travdv():
     """travdv airr"""
     airr = pd.DataFrame(
@@ -7496,7 +7495,7 @@ def airr_travdv():
     return airr
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fasta_10x_travdv():
     """travdv 10x fasta"""
     seq = {
@@ -7538,7 +7537,7 @@ def fasta_10x_travdv():
     return seq
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def annotation_10x_travdv():
     """travdv 10x annot"""
     annot = pd.DataFrame(
@@ -8288,7 +8287,7 @@ def dummy_adata_travdv():
     return adata
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_generic():
     """generic airr"""
     airr = pd.DataFrame(
@@ -11704,7 +11703,7 @@ def airr_generic():
     return airr
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_parse():
     airr = pd.DataFrame(
         [
@@ -12207,7 +12206,7 @@ def airr_parse():
     return airr
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def airr_bd():
     airr = pd.DataFrame(
         [
@@ -13508,15 +13507,15 @@ def airr_bd():
     return airr
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def vdj_small():
     """Small dandelion object for testing."""
     data_path = Path(__file__).parent / "vdj_processed.h5ddl"
-    return read_h5ddl(data_path)
+    return ddl.read_h5ddl(data_path)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def vdj_smaller():
     """Smaller dandelion object for testing."""
     data_path = Path(__file__).parent / "vdj_processed_smaller.h5ddl"
-    return read_h5ddl(data_path)
+    return ddl.read_h5ddl(data_path)
