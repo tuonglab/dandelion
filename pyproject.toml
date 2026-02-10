@@ -59,6 +59,12 @@ testpaths = ["tests"]
 [tool.coverage.run]
 omit = ["containter/*", "src/dandelion/external/*", "src/dandelion/tutorial/*"]
 
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "@njit",
+]
+
 [build-system]
 requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0"]
 build-backend = "setuptools.build_meta"

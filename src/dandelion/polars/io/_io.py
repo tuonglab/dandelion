@@ -965,12 +965,12 @@ def read_10x_airr(
                         .fill_null("")
                         .str.strip_chars(),
                     ],
-                    sep="|",
+                    separator="|",
                 )
                 .str.split("|")
-                .arr.unique()
-                .arr.eval(pl.element().filter(pl.element() != ""))
-                .arr.join("|")
+                .list.unique()
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.join("|")
                 .alias("locus")
             ]
         )
