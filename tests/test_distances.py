@@ -137,6 +137,7 @@ class TestCallableMetric:
 
     def test_compute_fallback_to_vectorized(self):
         """Test compute() falls back to vectorized when no pairwise func."""
+
         def vec_fn(seqs):
             n = len(seqs)
             mat = np.zeros((n, n))
@@ -151,6 +152,7 @@ class TestCallableMetric:
 
     def test_compute_vectorized_with_vectorized_func(self):
         """Test compute_vectorized() delegates to vectorized func."""
+
         def vec_fn(seqs):
             n = len(seqs)
             return np.eye(n)

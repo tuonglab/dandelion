@@ -29,7 +29,9 @@ def _small_graph():
     """Create a 4-node graph with a chain of edges."""
     G = nx.Graph()
     G.add_nodes_from(["A", "B", "C", "D"])
-    G.add_weighted_edges_from([("A", "B", 1.0), ("B", "C", 1.0), ("C", "D", 1.0)])
+    G.add_weighted_edges_from(
+        [("A", "B", 1.0), ("B", "C", 1.0), ("C", "D", 1.0)]
+    )
     return G
 
 
@@ -119,7 +121,9 @@ class TestFruchtermanReingoldDense:
         A = nx.to_numpy_array(_small_graph())
         init = np.random.RandomState(0).rand(4, 2)
         fixed_pos = init[0].copy()
-        pos = _fruchterman_reingold(A, pos=init, fixed=[0], iterations=10, seed=42)
+        pos = _fruchterman_reingold(
+            A, pos=init, fixed=[0], iterations=10, seed=42
+        )
         np.testing.assert_array_equal(pos[0], fixed_pos)
 
 
@@ -172,7 +176,9 @@ class TestFRLayout:
     def test_with_initial_pos(self):
         """Test layout with user-supplied initial positions."""
         G = _small_graph()
-        init_pos = {n: (float(i), float(i + 1)) for i, n in enumerate(G.nodes())}
+        init_pos = {
+            n: (float(i), float(i + 1)) for i, n in enumerate(G.nodes())
+        }
         pos = _fruchterman_reingold_layout(
             G, pos=init_pos, iterations=10, seed=np.random.RandomState(42)
         )
@@ -208,7 +214,9 @@ class TestNumbaFR:
         A = nx.to_numpy_array(_small_graph())
         init = np.random.RandomState(0).rand(4, 2).astype(np.float32)
         fixed_pos = init[0].copy()
-        pos = _fruchterman_reingold_numba(A, pos=init, fixed=[0], iterations=10, seed=42)
+        pos = _fruchterman_reingold_numba(
+            A, pos=init, fixed=[0], iterations=10, seed=42
+        )
         np.testing.assert_array_almost_equal(pos[0], fixed_pos)
 
 
@@ -260,9 +268,7 @@ class TestBarnesHutNumba:
     def test_bh_basic(self):
         """Test basic Barnes-Hut layout computation."""
         A = nx.to_numpy_array(_small_graph())
-        pos = _fruchterman_reingold_barnes_hut_numba(
-            A, iterations=10, seed=42
-        )
+        pos = _fruchterman_reingold_barnes_hut_numba(A, iterations=10, seed=42)
         assert pos.shape == (4, 2)
 
     def test_bh_dim_not_2_raises(self):
