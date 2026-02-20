@@ -16,7 +16,7 @@ from scanpy import logging as logg
 from scipy.sparse import csr_matrix
 
 from dandelion.base.io._io import read_h5ddl as _read_h5ddl
-from dandelion.polars.core._core_polars import DandelionPolars, load_polars
+from dandelion.polars.core._core import DandelionPolars, load_polars
 from dandelion.utilities._utilities import (
     DEFAULT_PREFIX,
     CELLRANGER,

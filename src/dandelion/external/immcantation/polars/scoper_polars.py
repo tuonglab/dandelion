@@ -4,7 +4,7 @@ import polars as pl
 
 from typing import Literal
 
-from dandelion.polars.core._core_polars import (
+from dandelion.polars.core._core import (
     DandelionPolars,
     _sanitize_data_polars,
 )

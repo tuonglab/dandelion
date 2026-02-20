@@ -25,7 +25,7 @@ from scanpy.plotting import palettes
 from scanpy.plotting._tools.scatterplots import embedding
 from typing import Callable, Literal, TYPE_CHECKING
 
-from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars
 
 if TYPE_CHECKING:
     from anndata import AnnData

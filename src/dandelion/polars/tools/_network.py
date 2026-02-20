@@ -27,8 +27,8 @@ from typing import Callable, Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from anndata import AnnData
 
-from dandelion.polars.core._core_polars import DandelionPolars
-from dandelion.polars.tools._tools_polars import vdj_sample
+from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.tools._tools import vdj_sample
 
 from dandelion.utilities._layout import generate_layout
 from dandelion.utilities._distances import (
@@ -397,7 +397,7 @@ def generate_network(
             )
             if distance_mode == "clone":
                 if lazy:
-                    from dandelion.polars.tools._lazydistances_polars import (
+                    from dandelion.polars.tools._lazydistances import (
                         calculate_distance_matrix_zarr,
                     )
 
@@ -467,7 +467,7 @@ def generate_network(
                         )
             elif distance_mode == "full":
                 if lazy:
-                    from dandelion.polars.tools._lazydistances_polars import (
+                    from dandelion.polars.tools._lazydistances import (
                         calculate_distance_matrix_zarr,
                     )
 
@@ -970,7 +970,7 @@ def _create_mst_edges(
         return None
 
     if lazy:
-        from dandelion.polars.tools._lazydistances_polars import (
+        from dandelion.polars.tools._lazydistances import (
             dask_safe_slice_square,
         )
 
@@ -1036,7 +1036,7 @@ def _find_zero_dist_edges(
 
     # Slice the distance matrix
     if lazy:
-        from dandelion.polars.tools._lazydistances_polars import (
+        from dandelion.polars.tools._lazydistances import (
             dask_safe_slice_square,
         )
 

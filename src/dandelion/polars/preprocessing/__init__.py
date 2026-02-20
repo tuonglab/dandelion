@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from dandelion.polars.preprocessing._preprocessing_polars import (
+from dandelion.polars.preprocessing._preprocessing import (
     assign_isotype,
     assign_isotypes,
     check_contigs,

@@ -11,10 +11,10 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from dandelion.polars.tools._lazydistances_polars import (
+from dandelion.polars.tools._lazydistances import (
     calculate_distance_matrix_zarr,
 )
-from dandelion.polars.tools._network_polars import _merge_overlapping_clones
+from dandelion.polars.tools._network import _merge_overlapping_clones
 from dandelion.utilities._distances import LevenshteinMetric
 
 

@@ -7,8 +7,8 @@ import pytest
 import numpy as np
 
 from dandelion.base.tools import generate_network
-from dandelion.polars.core._core_polars import DandelionPolars
-from dandelion.polars.tools._network_polars import (
+from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.tools._network import (
     generate_network as generate_network_polars,
 )
 

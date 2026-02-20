@@ -12,7 +12,7 @@ from dandelion.base.tools._network import (
     calculate_distance_matrix_original_full as calc_dist_full_pandas,
     calculate_distance_matrix_long as calc_dist_long_pandas,
 )
-from dandelion.polars.tools._network_polars import (
+from dandelion.polars.tools._network import (
     _merge_overlapping_clones,
     calculate_distance_matrix_original as calc_dist_polars,
     calculate_distance_matrix_original_full as calc_dist_full_polars,

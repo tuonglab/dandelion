@@ -2,8 +2,8 @@
 import polars as pl
 import pytest
 
-from dandelion.polars.core._core_polars import DandelionPolars
-from dandelion.polars.tools._tools_polars import concat, find_clones
+from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.tools._tools import concat, find_clones
 
 
 @pytest.mark.usefixtures("airr_reannotated")

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from mudata import MuData
     from awkward import Array
 
-from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars
 from dandelion.utilities._utilities import (
     VCALL,
     TRUES_STR,

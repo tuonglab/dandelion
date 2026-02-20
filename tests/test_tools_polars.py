@@ -7,17 +7,17 @@ import scanpy as sc
 from unittest.mock import patch
 
 import dandelion as ddl
-from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars
 from dandelion.polars.io._io import read_zipddl, read_10x_vdj
-from dandelion.polars.preprocessing._preprocessing_polars import check_contigs
-from dandelion.polars.tools._tools_polars import (
+from dandelion.polars.preprocessing._preprocessing import check_contigs
+from dandelion.polars.tools._tools import (
     find_clones,
     clone_size,
     transfer,
     to_scirpy,
 )
-from dandelion.polars.tools._network_polars import generate_network
-from dandelion.polars.tools._diversity_polars import (
+from dandelion.polars.tools._network import generate_network
+from dandelion.polars.tools._diversity import (
     clone_diversity,
     clone_rarefaction,
 )

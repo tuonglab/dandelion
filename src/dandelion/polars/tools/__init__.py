@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from dandelion.polars.tools._tools_polars import (
+from dandelion.polars.tools._tools import (
     clone_overlap,
     clone_size,
     clone_view,
@@ -12,12 +12,12 @@ from dandelion.polars.tools._tools_polars import (
     vdj_sample,
     vj_usage_pca,
 )
-from dandelion.polars.tools._network_polars import (
+from dandelion.polars.tools._network import (
     clone_centrality,
     clone_degree,
     generate_network,
 )
-from dandelion.polars.tools._diversity_polars import (
+from dandelion.polars.tools._diversity import (
     clone_diversity,
     clone_rarefaction,
 )

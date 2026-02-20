@@ -7,7 +7,7 @@ from sklearn.metrics import adjusted_rand_score
 from dandelion.base.core._core import load_data
 from dandelion.base.io import read_10x_vdj
 from dandelion.base.tools import find_clones
-from dandelion.polars.core._core_polars import load_polars
+from dandelion.polars.core._core import load_polars
 from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
 from dandelion.polars.tools import find_clones as find_clones_polars
 

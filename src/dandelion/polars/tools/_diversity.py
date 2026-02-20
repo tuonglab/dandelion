@@ -28,8 +28,8 @@ from typing import Literal
 from dandelion.external.skbio._chao1 import chao1
 from dandelion.external.skbio._gini import gini_index
 from dandelion.external.skbio._shannon import shannon
-from dandelion.polars.core._core_polars import DandelionPolars
-from dandelion.polars.tools._network_polars import (
+from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.tools._network import (
     clone_centrality,
     clone_degree,
     generate_network,

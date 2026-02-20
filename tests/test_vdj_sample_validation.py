@@ -3,8 +3,8 @@
 import pandas as pd
 import polars as pl
 
-from dandelion.polars.core._core_polars import DandelionPolars
-from dandelion.polars.tools._tools_polars import vdj_sample
+from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.tools._tools import vdj_sample
 
 
 def test_vdj_sample_without_replacement():

@@ -14,7 +14,7 @@ from dandelion.base.tools import (
     pseudotime_transfer,
     project_pseudotime_to_cell,
 )
-from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars
 from dandelion.polars.preprocessing import check_contigs as check_contigs_polars
 from dandelion.polars.tools import (
     setup_vdj_pseudobulk as setup_vdj_pseudobulk_polars,

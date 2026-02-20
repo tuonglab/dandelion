@@ -25,7 +25,7 @@ from plotnine import (
     save_as_pdf_pages,
 )
 
-from dandelion.polars.core._core_polars import (
+from dandelion.polars.core._core import (
     DandelionPolars,
     load_polars,
     _sanitize_data_polars,

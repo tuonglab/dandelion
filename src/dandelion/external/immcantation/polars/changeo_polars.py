@@ -12,7 +12,7 @@ from scanpy import logging as logg
 from subprocess import run
 from typing import Literal
 
-from dandelion.polars.core._core_polars import (
+from dandelion.polars.core._core import (
     DandelionPolars,
     load_polars,
     write_airr,

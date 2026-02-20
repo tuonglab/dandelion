@@ -12,7 +12,7 @@ from dandelion.external.immcantation.polars.changeo_polars import (
     define_clones,
     create_germlines,
 )
-from dandelion.polars.core._core_polars import (
+from dandelion.polars.core._core import (
     DandelionPolars,
     load_polars,
 )

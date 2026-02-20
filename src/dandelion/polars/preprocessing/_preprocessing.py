@@ -42,7 +42,7 @@ from dandelion.external.immcantation.polars.changeo_polars import (
 )
 from dandelion.external.immcantation.tigger import tigger_genotype
 
-from dandelion.polars.core._core_polars import (
+from dandelion.polars.core._core import (
     DandelionPolars,
     load_polars,
     _check_travdv_polars,
@@ -4340,7 +4340,7 @@ def check_contigs(
 
     if adata is not None:
         # Import transfer function from tools
-        from dandelion.polars.tools._tools_polars import transfer
+        from dandelion.polars.tools._tools import transfer
 
         # Transfer metadata to adata
         transfer(adata_, out_dat)

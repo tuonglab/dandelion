@@ -4,7 +4,7 @@ import pytest
 import polars as pl
 import numpy as np
 
-from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars
 
 
 @pytest.fixture

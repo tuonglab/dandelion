@@ -17,7 +17,7 @@ from typing import Literal, TYPE_CHECKING
 if TYPE_CHECKING:
     from palantir.presults import PResults
 
-from dandelion.polars.core._core_polars import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars
 from dandelion.utilities._utilities import bh
 
 
