@@ -1132,7 +1132,7 @@ class DandelionPolars:
                 pl.Series(self._data_name_col, self._original_sequence_ids)
             )
             if isinstance(self._data, pl.LazyFrame):
-                self._data = self.self._data.collect(engine="streaming").lazy()
+                self._data = self._data.collect(engine="streaming").lazy()
         if self._metadata is not None:
             if isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
                 self._metadata = self._metadata.with_columns(
