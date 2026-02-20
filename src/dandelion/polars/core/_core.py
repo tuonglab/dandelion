@@ -136,16 +136,16 @@ class DandelionPolars:
                 else lib_type(self.library_type)
             )
             if acceptable is not None:
+                self._data = self._data.filter(
+                    pl.col("locus").is_in(acceptable)
+                )
                 if self._lazy:
-                    self._data = (
-                        self._data.filter(pl.col("locus").is_in(acceptable))
-                        .collect(engine="streaming")
-                        .lazy()
-                    )
-                else:
-                    self._data = self._data.filter(
-                        pl.col("locus").is_in(acceptable)
-                    )
+                    if isinstance(self._data, pl.LazyFrame):
+                        self._data = self._data.collect(
+                            engine="streaming"
+                        ).lazy()
+                    else:
+                        self._data = self._data.lazy()
             self._data = _check_travdv_polars(self._data, lazy=self._lazy)
             sort_cols = {"cell_id", "productive", "umi_count"}
             if isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
@@ -175,7 +175,7 @@ class DandelionPolars:
             if metadata is None:
                 if initialize is True:
                     self._ensure_sanitized_data(verbose=verbose)
-                    self.update_metadata(**kwargs)
+                    self.update_metadata(lazy=self._lazy, **kwargs)
             else:
                 if isinstance(metadata, pd.DataFrame):
                     if self._metadata_name_col not in metadata:
