@@ -11,7 +11,6 @@ from ._backend import import_backend_class, import_backend_module
 
 # Dynamically import modules/classes using backend manager
 pp = import_backend_module("preprocessing")
-utl = import_backend_module("utilities")
 tl = import_backend_module("tools")
 pl = import_backend_module("plotting")
 
