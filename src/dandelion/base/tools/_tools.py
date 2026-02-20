@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from awkward import Array
 
 from dandelion.base.core._core import Dandelion, load_data
-from dandelion.base.utilities._io import write_airr
+from dandelion.base.io._io import write_airr
 from dandelion.utilities._utilities import (
     FALSES,
     VCALL,

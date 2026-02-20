@@ -11,7 +11,7 @@ from typing import Literal
 
 from changeo.Gene import getGene
 from dandelion.base.core._core import Dandelion, load_data
-from dandelion.base.utilities._io import write_airr
+from dandelion.base.io._io import write_airr
 from dandelion.utilities._utilities import (
     set_germline_env,
     set_igblast_env,
