@@ -57,13 +57,10 @@ junit_family = "legacy"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-omit = ["containter/*", "src/dandelion/external/*", "src/dandelion/tutorial/*"]
+omit = ["container/*", "src/dandelion/external/*", "src/dandelion/tutorial/*"]
 
 [tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "@njit",
-]
+exclude_lines = ["pragma: no cover", "@njit"]
 
 [build-system]
 requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0"]

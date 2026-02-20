@@ -179,7 +179,7 @@ jobs:
           files: ./coverage.xml
           directory: ./coverage/reports/
           env_vars: ${{ format('OS={0},PYTHON={1}', matrix.config.os, matrix.config.python-version) }}
-          flags: ${{ matrix.config.backend || 'polars' }}
+          flags: ${{ matrix.config.os }}-${{ matrix.config.python-version }}-${{ matrix.config.backend || 'auto' }}
           name: codecov-umbrella
           fail_ci_if_error: false
           path_to_write_report: ./coverage/codecov_report.txt
