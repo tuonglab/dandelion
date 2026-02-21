@@ -1864,7 +1864,7 @@ def clone_overlap(
         data = vdj._metadata.copy()
     elif isinstance(vdj, AnnData):
         data = vdj.obs.copy()
-    elif isinstance(vdj, MuData):
+    elif hasattr(vdj, "mod"):
         data = vdj.mod["airr"].obs.copy()
 
     if min_clone_size is None:
