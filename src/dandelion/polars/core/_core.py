@@ -781,7 +781,7 @@ class DandelionPolars:
         """set dim index"""
         # Assumes _prep_dim_index has been run
         getattr(self, attr).index = value
-        for v in getattr(self, f"{attr}m").values():
+        for v in getattr(self, f"{attr}m", {}).values():
             if isinstance(v, pd.DataFrame):
                 v.index = value
 
@@ -1125,7 +1125,17 @@ class DandelionPolars:
             self._data[self._data_name_col] = self._original_sequence_ids
         if self._metadata is not None:
             if isinstance(self._metadata, pd.DataFrame):
-                self._metadata.index = self._original_cell_ids
+                # _original_cell_ids has n_contigs entries; deduplicate for metadata index
+                if isinstance(self._original_cell_ids, pd.Series):
+                    unique_cell_ids_pd = self._original_cell_ids.drop_duplicates()
+                else:
+                    seen_pd: set = set()
+                    unique_cell_ids_pd = [
+                        x
+                        for x in self._original_cell_ids
+                        if not (x in seen_pd or seen_pd.add(x))  # type: ignore[func-returns-value]
+                    ]
+                self._metadata.index = unique_cell_ids_pd
                 self._data[self._metadata_name_col] = self._original_cell_ids
         if isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
             self._data = self._data.with_columns(
@@ -1135,8 +1145,21 @@ class DandelionPolars:
                 self._data = self._data.collect(engine="streaming").lazy()
         if self._metadata is not None:
             if isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
+                # _original_cell_ids has one entry per contig (n_contigs, with dups);
+                # metadata has one row per unique cell, so deduplicate while preserving order.
+                if isinstance(self._original_cell_ids, pl.Series):
+                    unique_cell_ids = self._original_cell_ids.unique(
+                        maintain_order=True
+                    )
+                else:
+                    seen: set = set()
+                    unique_cell_ids = [
+                        x
+                        for x in self._original_cell_ids
+                        if not (x in seen or seen.add(x))  # type: ignore[func-returns-value]
+                    ]
                 self._metadata = self._metadata.with_columns(
-                    pl.Series(self._metadata_name_col, self._original_cell_ids)
+                    pl.Series(self._metadata_name_col, unique_cell_ids)
                 )
                 if isinstance(self._metadata, pl.LazyFrame):
                     self._metadata = self._metadata.collect(
@@ -2866,8 +2889,9 @@ class DandelionPolars:
                 # convert to Polars first
                 self.to_polars(lazy=False)
             self._data = _sanitize_data_polars(self._data)
-            # Collect and clean temp file before writing
-            self._data = self._data.collect(engine="streaming")
+            # Collect and clean temp file before writing (sanitize may return lazy)
+            if isinstance(self._data, pl.LazyFrame):
+                self._data = self._data.collect(engine="streaming")
             _write_parquet_blob(
                 tables_grp,
                 "data.parquet",
