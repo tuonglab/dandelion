@@ -1127,7 +1127,9 @@ class DandelionPolars:
             if isinstance(self._metadata, pd.DataFrame):
                 # _original_cell_ids has n_contigs entries; deduplicate for metadata index
                 if isinstance(self._original_cell_ids, pd.Series):
-                    unique_cell_ids_pd = self._original_cell_ids.drop_duplicates()
+                    unique_cell_ids_pd = (
+                        self._original_cell_ids.drop_duplicates()
+                    )
                 else:
                     seen_pd: set = set()
                     unique_cell_ids_pd = [

@@ -29,7 +29,6 @@ from dandelion.polars.preprocessing._preprocessing import check_contigs
 from dandelion.polars.tools._tools import find_clones
 from dandelion.polars.tools._network import generate_network
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -1551,19 +1550,22 @@ def test_init_library_type_eager(airr_polars):
 def test_init_pandas_data_original_ids():
     """Cover pandas data original ID storage (lines 216-218)."""
     import pandas as pd
-    df = pd.DataFrame({
-        "sequence_id": ["a_contig_1", "b_contig_1"],
-        "cell_id": ["a", "b"],
-        "locus": ["IGH", "IGH"],
-        "productive": ["T", "T"],
-        "v_call": ["IGHV1-1", "IGHV1-2"],
-        "d_call": ["IGHD1-1", "IGHD1-2"],
-        "j_call": ["IGHJ1", "IGHJ1"],
-        "c_call": ["IGHA", "IGHG"],
-        "umi_count": [1, 2],
-        "junction": ["CARG", "CARG"],
-        "junction_aa": ["CAR", "CAR"],
-    })
+
+    df = pd.DataFrame(
+        {
+            "sequence_id": ["a_contig_1", "b_contig_1"],
+            "cell_id": ["a", "b"],
+            "locus": ["IGH", "IGH"],
+            "productive": ["T", "T"],
+            "v_call": ["IGHV1-1", "IGHV1-2"],
+            "d_call": ["IGHD1-1", "IGHD1-2"],
+            "j_call": ["IGHJ1", "IGHJ1"],
+            "c_call": ["IGHA", "IGHG"],
+            "umi_count": [1, 2],
+            "junction": ["CARG", "CARG"],
+            "junction_aa": ["CAR", "CAR"],
+        }
+    )
     vdj = DandelionPolars(df, lazy=False)
     # After init, _data should still be polars (load_polars converts pandas)
     assert vdj._original_sequence_ids is not None
@@ -1633,6 +1635,7 @@ def test_prep_dim_index_warning(airr_polars):
     """Cover _prep_dim_index with non-string values warning (lines 754-777)."""
     vdj = airr_polars
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = vdj._prep_dim_index(pd.Index([1, 2, 3]), "metadata")
@@ -1676,19 +1679,21 @@ def test_init_no_c_call_triggers_noiso_path():
     T cell data with TRAC/TRBC c_calls but no isotype in metadata
     → _classify_locus_pair_noiso() is used for locus_status.
     """
-    df = pl.DataFrame({
-        "sequence_id": ["a_contig_1", "a_contig_2", "b_contig_1"],
-        "cell_id": ["a", "a", "b"],
-        "locus": ["TRA", "TRB", "TRB"],
-        "productive": ["T", "T", "T"],
-        "v_call": ["TRAV1-1", "TRBV1-2", "TRBV2-1"],
-        "d_call": [None, "TRBD1", "TRBD2"],
-        "j_call": ["TRAJ1", "TRBJ1", "TRBJ2"],
-        "c_call": ["TRAC", "TRBC1", "TRBC2"],
-        "umi_count": [1, 2, 3],
-        "junction": ["CARGYYY", "CARGYYY", "CARGGGG"],
-        "junction_aa": ["CARY", "CARY", "CARG"],
-    })
+    df = pl.DataFrame(
+        {
+            "sequence_id": ["a_contig_1", "a_contig_2", "b_contig_1"],
+            "cell_id": ["a", "a", "b"],
+            "locus": ["TRA", "TRB", "TRB"],
+            "productive": ["T", "T", "T"],
+            "v_call": ["TRAV1-1", "TRBV1-2", "TRBV2-1"],
+            "d_call": [None, "TRBD1", "TRBD2"],
+            "j_call": ["TRAJ1", "TRBJ1", "TRBJ2"],
+            "c_call": ["TRAC", "TRBC1", "TRBC2"],
+            "umi_count": [1, 2, 3],
+            "junction": ["CARGYYY", "CARGYYY", "CARGGGG"],
+            "junction_aa": ["CARY", "CARY", "CARG"],
+        }
+    )
     vdj = DandelionPolars(df)
     assert vdj._metadata is not None
     meta_cols = vdj._metadata.collect_schema().names()
@@ -1793,5 +1798,3 @@ def test_metadata_names_setter_pandas(airr_polars):
     new_names = vdj._metadata.index.tolist()
     vdj.metadata_names = new_names
     assert list(vdj._metadata.index) == new_names
-
-
