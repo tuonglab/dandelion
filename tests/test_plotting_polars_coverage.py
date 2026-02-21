@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Coverage tests for dandelion.polars.plotting._plotting"""
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -21,7 +22,6 @@ from dandelion.polars.plotting._plotting import (
     stackedbarplot,
     spectratype,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -192,7 +192,9 @@ def adata_with_clone_overlap(airr_reannotated, dummy_adata):
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_unweighted(adata_with_clone_overlap):
     """Lines 712-733: clone_overlap plotting function unweighted path."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = adata_with_clone_overlap
     try:
@@ -211,7 +213,9 @@ def test_clone_overlap_unweighted(adata_with_clone_overlap):
 def test_clone_overlap_weighted(adata_with_clone_overlap):
     """Lines 748-774: clone_overlap plotting function weighted path."""
     from dandelion.polars.tools._tools import clone_overlap as tl_clone_overlap
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = adata_with_clone_overlap
     # Recompute weighted overlap
@@ -231,7 +235,9 @@ def test_clone_overlap_weighted(adata_with_clone_overlap):
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_colorby_different(adata_with_clone_overlap):
     """Lines 863-868: groupby != colorby triggers different deduplication."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = adata_with_clone_overlap
     # Add a second groupby column
@@ -251,7 +257,9 @@ def test_clone_overlap_colorby_different(adata_with_clone_overlap):
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_as_heatmap(adata_with_clone_overlap):
     """Lines 870-874: as_heatmap=True branch."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = adata_with_clone_overlap
     try:
@@ -270,7 +278,9 @@ def test_clone_overlap_as_heatmap(adata_with_clone_overlap):
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_missing_uns(dummy_adata):
     """Line 723-724: raises KeyError when clone_overlap not in adata.uns."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = dummy_adata.copy()
     adata.obs["sample_id"] = ["S1"] * adata.n_obs
@@ -281,7 +291,9 @@ def test_clone_overlap_missing_uns(dummy_adata):
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_not_anndata():
     """Line 726-727: raises ValueError when input is not AnnData."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     with pytest.raises(ValueError):
         pl_clone_overlap("not_an_anndata", groupby="sample_id")
@@ -290,7 +302,9 @@ def test_clone_overlap_not_anndata():
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_color_mapping_dict(adata_with_clone_overlap):
     """Line 844: color_mapping as dict."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = adata_with_clone_overlap
     try:
@@ -308,7 +322,9 @@ def test_clone_overlap_color_mapping_dict(adata_with_clone_overlap):
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_overlap_color_mapping_from_uns(adata_with_clone_overlap):
     """Line 818-832: color from adata.uns."""
-    from dandelion.polars.plotting._plotting import clone_overlap as pl_clone_overlap
+    from dandelion.polars.plotting._plotting import (
+        clone_overlap as pl_clone_overlap,
+    )
 
     adata = adata_with_clone_overlap
     adata.uns["sample_id_colors"] = ["#ff0000", "#0000ff"]

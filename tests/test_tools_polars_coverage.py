@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Coverage tests for dandelion.polars.tools (tools, network, diversity)."""
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -28,7 +29,6 @@ from dandelion.polars.tools._diversity import (
     process_clone_network_stats,
     gini_indices,
 )
-
 
 # ---------------------------------------------------------------------------
 # Base fixtures
@@ -347,6 +347,7 @@ def test_to_scirpy_anndata_without_mudata(vdj_base):
     assert result is not None
     # This returns a plain AnnData (not MuData)
     import anndata as ad
+
     assert isinstance(result, ad.AnnData)
 
 
@@ -446,7 +447,9 @@ def test_concat_with_prefixes(vdj_base, airr_reannotated2, dummy_adata2):
     assert result is not None
 
 
-def test_concat_raises_both_suffix_prefix(vdj_base, airr_reannotated2, dummy_adata2):
+def test_concat_raises_both_suffix_prefix(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
     """Lines 3216-3217: raises ValueError when both suffixes and prefixes given."""
     vdj, adata = vdj_base
     vdj2 = DandelionPolars(airr_reannotated2)
@@ -488,7 +491,9 @@ def test_generate_network_use_existing_graph(vdj_base):
 def test_generate_network_sequential_chain(vdj_base):
     """Lines 450-458: sequential_chain=True."""
     vdj, adata = vdj_base
-    generate_network(vdj, layout_method="mod_fr", sequential_chain=True, n_cpus=1)
+    generate_network(
+        vdj, layout_method="mod_fr", sequential_chain=True, n_cpus=1
+    )
     assert vdj.graph is not None
 
 
@@ -588,7 +593,9 @@ def test_clone_diversity_gini_network(vdj2_with_clones, dummy_adata2):
     vdj, adata = vdj2_with_clones
     generate_network(vdj, layout_method="mod_fr")
     transfer(adata, vdj)
-    adata.obs["sample_id"] = [str(i % 3) + "_sample" for i in range(adata.n_obs)]
+    adata.obs["sample_id"] = [
+        str(i % 3) + "_sample" for i in range(adata.n_obs)
+    ]
 
     try:
         res, _ = clone_diversity(
@@ -611,7 +618,9 @@ def test_clone_diversity_gini_no_network(airr_reannotated2, dummy_adata2):
     find_clones(vdj)
     transfer(adata, vdj)
     # Use 2 samples to ensure each has enough cells
-    adata.obs["sample_id"] = [str(i % 2) + "_sample" for i in range(adata.n_obs)]
+    adata.obs["sample_id"] = [
+        str(i % 2) + "_sample" for i in range(adata.n_obs)
+    ]
     res, _ = clone_diversity(
         adata,
         groupby="sample_id",
@@ -654,11 +663,22 @@ def test_clone_rarefaction_dandelion(airr_reannotated2, dummy_adata2):
     vdj = DandelionPolars(airr_reannotated2)
     vdj, adata = check_contigs(vdj, dummy_adata2)
     find_clones(vdj)
-    vdj._metadata = vdj._metadata.with_columns(
-        (pl.col("cell_id").cast(pl.Int64) % 3).cast(pl.Utf8).alias("sample_id")
-    ) if False else vdj._metadata.with_row_index("_idx").with_columns(
-        (pl.col("_idx") % 3).cast(pl.Utf8).str.concat("_sample").alias("sample_id")
-    ).drop("_idx")
+    vdj._metadata = (
+        vdj._metadata.with_columns(
+            (pl.col("cell_id").cast(pl.Int64) % 3)
+            .cast(pl.Utf8)
+            .alias("sample_id")
+        )
+        if False
+        else vdj._metadata.with_row_index("_idx")
+        .with_columns(
+            (pl.col("_idx") % 3)
+            .cast(pl.Utf8)
+            .str.concat("_sample")
+            .alias("sample_id")
+        )
+        .drop("_idx")
+    )
     result = clone_rarefaction(vdj, groupby="sample_id")
     assert result is not None
 
@@ -666,13 +686,16 @@ def test_clone_rarefaction_dandelion(airr_reannotated2, dummy_adata2):
 def test_clone_rarefaction_with_plot(airr_reannotated2, dummy_adata2):
     """Lines 184-254: clone_rarefaction with plot=True."""
     import matplotlib
+
     matplotlib.use("Agg")
 
     vdj = DandelionPolars(airr_reannotated2)
     vdj, adata = check_contigs(vdj, dummy_adata2)
     find_clones(vdj)
     transfer(adata, vdj)
-    adata.obs["sample_id"] = [str(i % 2) + "_sample" for i in range(adata.n_obs)]
+    adata.obs["sample_id"] = [
+        str(i % 2) + "_sample" for i in range(adata.n_obs)
+    ]
     try:
         result = clone_rarefaction(adata, groupby="sample_id", plot=True)
         assert result is not None
