@@ -24,12 +24,9 @@ def import_backend_class(module: str, class_name: str):
         type: Imported class or function
     """
     if _BACKEND != "pandas":
-        try:
-            mod = importlib.import_module(f"dandelion.polars.{module}")
-            return getattr(mod, class_name)
-        except (ImportError, AttributeError):
-            pass
-    mod = importlib.import_module(f"dandelion.base.{module}")
+        mod = importlib.import_module(f"dandelion.polars.{module}")
+    else:
+        mod = importlib.import_module(f"dandelion.base.{module}")
     return getattr(mod, class_name)
 
 
@@ -42,8 +39,5 @@ def import_backend_module(module: str):
         module: Imported module
     """
     if _BACKEND != "pandas":
-        try:
-            return importlib.import_module(f"dandelion.polars.{module}")
-        except ImportError:
-            pass
+        return importlib.import_module(f"dandelion.polars.{module}")
     return importlib.import_module(f"dandelion.base.{module}")
