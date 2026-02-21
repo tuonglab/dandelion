@@ -897,8 +897,16 @@ def generate_network(
             return out, adata
     else:
         vdj._reinitialize_attributes(
-            data=vdj._data.collect() if isinstance(vdj._data, pl.LazyFrame) else vdj._data,
-            metadata=vdj._metadata.collect() if isinstance(vdj._metadata, pl.LazyFrame) else vdj._metadata,
+            data=(
+                vdj._data.collect()
+                if isinstance(vdj._data, pl.LazyFrame)
+                else vdj._data
+            ),
+            metadata=(
+                vdj._metadata.collect()
+                if isinstance(vdj._metadata, pl.LazyFrame)
+                else vdj._metadata
+            ),
             clone_key=clone_key,
             layout=layout,
             graph=graph,
