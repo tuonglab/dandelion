@@ -414,6 +414,33 @@ def test_read_standard(airr_bd):
     assert vdj2._metadata.shape[0] == 10
 
 
+@pytest.mark.usefixtures("create_testfolder", "vdj_small")
+def test_write_h5ddl_dask_distances(create_testfolder, vdj_small):
+    """Test write_h5ddl with dask array distances writes to zarr."""
+    pytest.importorskip("dask.array")
+    import dask.array as da
+    import numpy as np
+
+    out_file = create_testfolder / "test_dask_distances.h5ddl"
+    vdj_small.distances = da.from_array(np.ones((5, 5)))
+    vdj_small.write_h5ddl(out_file)
+    assert out_file.with_suffix(".zarr").exists()
+
+
+@pytest.mark.usefixtures("create_testfolder", "vdj_small")
+def test_write_h5ddl_dask_import_error(create_testfolder, vdj_small):
+    """Test write_h5ddl silently handles non-csr distances when dask is unavailable."""
+    import sys
+    import numpy as np
+    from unittest.mock import patch
+
+    out_file = create_testfolder / "test_no_dask_distances.h5ddl"
+    vdj_small.distances = np.ones((5, 5))
+    with patch.dict(sys.modules, {"dask": None, "dask.array": None}):
+        vdj_small.write_h5ddl(out_file)
+    assert out_file.exists()
+
+
 @pytest.mark.skip(reason="can't install dependencies on github actions.")
 @pytest.mark.usefixtures("create_testfolder")
 def test_legacy_write(create_testfolder):
