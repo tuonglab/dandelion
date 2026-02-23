@@ -57,7 +57,7 @@ jobs:
           - { python-version: "3.11", os: macos-latest }
           - { python-version: "3.12", os: macos-latest }
           - { python-version: "3.13", os: macos-latest }
-          - { python-version: "3.11", os: ubuntu-latest, backend: pandas }
+          - { python-version: "3.13", os: ubuntu-latest, backend: pandas }
     runs-on: ${{ matrix.config.os }}
     env:
       R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
@@ -172,7 +172,7 @@ jobs:
           coverage report
 
       - name: Upload coverage to Codecov
-        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version == '3.11' && github.repository == 'tuonglab/dandelion'
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version == '3.13' && github.repository == 'tuonglab/dandelion'
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: matrix.config.os == 'ubuntu-latest'
-          && matrix.config.python-version == '3.11'
+          && matrix.config.python-version == '3.13'
           && github.repository == 'tuonglab/dandelion'
           && !cancelled()
         uses: codecov/test-results-action@v1

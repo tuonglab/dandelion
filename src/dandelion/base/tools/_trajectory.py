@@ -10,12 +10,7 @@ import pandas as pd
 import scipy as sp
 
 from scanpy import logging as logg
-from typing import Literal, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from palantir.presults import PResults
-
-from dandelion.utilities._utilities import bh
+from typing import Literal
 
 
 def _filter_cells(

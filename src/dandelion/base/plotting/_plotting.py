@@ -28,7 +28,6 @@ from typing import Callable, Literal, TYPE_CHECKING
 from dandelion.base.core._core import Dandelion
 
 if TYPE_CHECKING:
-    from anndata import AnnData
     from mudata import MuData
 
 

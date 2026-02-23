@@ -28,7 +28,6 @@ from typing import Callable, Literal, TYPE_CHECKING
 from dandelion.polars.core._core import DandelionPolars
 
 if TYPE_CHECKING:
-    from anndata import AnnData
     from mudata import MuData
 
 

@@ -12,13 +12,9 @@ import scipy as sp
 
 from contextlib import contextmanager
 from scanpy import logging as logg
-from typing import Literal, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from palantir.presults import PResults
+from typing import Literal
 
 from dandelion.polars.core._core import DandelionPolars
-from dandelion.utilities._utilities import bh
 
 
 @contextmanager
