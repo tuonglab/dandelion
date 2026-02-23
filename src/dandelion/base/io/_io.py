@@ -68,7 +68,7 @@ def read_h5ddl(
     with h5py.File(filename, "r") as hf:
         is_legacy = isinstance(hf["data"], h5py.Group)
 
-    if is_legacy:
+    if is_legacy:  # pragma: no cover
         data = decode(load_data(_read_h5_group_legacy(filename, group="data")))
         metadata = _read_h5_group_legacy(filename, group="metadata")
 
@@ -87,7 +87,7 @@ def read_h5ddl(
             )
             distances._index_names = metadata.index
         except KeyError:
-            if distance_zarr is not None:
+            if distance_zarr is not None:  # pragma: no cover
                 import dask.array as da
 
                 distances = da.from_zarr(
@@ -977,7 +977,7 @@ def _read_h5_zip(
 )
 def read_h5ddl_legacy(
     filename: Path | str = "dandelion_data.h5ddl",
-) -> Dandelion:
+) -> Dandelion:  # pragma: no cover
     """
     Read in and returns a Dandelion class from .h5ddl format saved in legacy (version 3) format.
 
@@ -1038,7 +1038,9 @@ def read_h5ddl_legacy(
     return res
 
 
-def _read_h5_group_legacy(filename: Path | str, group: str) -> pd.DataFrame:
+def _read_h5_group_legacy(
+    filename: Path | str, group: str
+) -> pd.DataFrame:  # pragma: no cover
     """
     Read a specific group from an H5 file in legacy (PyTables) format.
 
@@ -1075,7 +1077,14 @@ def _read_h5_group_legacy(filename: Path | str, group: str) -> pd.DataFrame:
             raise KeyError(f"Unrecognized legacy format for group '{group}'")
 
 
-def _read_pytables_fixed_format(grp: h5py.Group) -> pd.DataFrame:
+@deprecated(
+    deprecated_in="1.0.0",
+    removed_in="1.1.0",
+    details="legacy .h5ddl format will no longer be supported.",
+)
+def _read_pytables_fixed_format(
+    grp: h5py.Group,
+) -> pd.DataFrame:  # pragma: no cover
     """Read PyTables fixed format (block-based) from h5py Group."""
     _decode_bytes = np.vectorize(
         lambda x: x.decode("utf-8") if isinstance(x, bytes) else x
@@ -1110,7 +1119,14 @@ def _read_pytables_fixed_format(grp: h5py.Group) -> pd.DataFrame:
     return result
 
 
-def _read_pytables_table_format(grp: h5py.Group) -> pd.DataFrame:
+@deprecated(
+    deprecated_in="1.0.0",
+    removed_in="1.1.0",
+    details="legacy .h5ddl format will no longer be supported.",
+)
+def _read_pytables_table_format(
+    grp: h5py.Group,
+) -> pd.DataFrame:  # pragma: no cover
     """Read PyTables table format (structured array) from h5py Group."""
     table_ds = grp["table"]
     table_data = table_ds[:]
@@ -1156,7 +1172,14 @@ def _read_pytables_table_format(grp: h5py.Group) -> pd.DataFrame:
     return result
 
 
-def _read_h5_zip_legacy(filename: Path | str, group: str) -> dict:
+@deprecated(
+    deprecated_in="1.0.0",
+    removed_in="1.1.0",
+    details="legacy .h5ddl format will no longer be supported.",
+)
+def _read_h5_zip_legacy(
+    filename: Path | str, group: str
+) -> dict:  # pragma: no cover
     """
     Read two groups from an H5 file and return them as a dictionary.
 
