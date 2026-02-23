@@ -1209,7 +1209,7 @@ def clone_bubbleplot(
             return result
         current, rest = levels[0], levels[1:]
         result = []
-        for grp, gdata in df.group_by(current, observed=True):
+        for grp, gdata in df.groupby(current, observed=True):
             grp_str = str(grp)
             my_info: tuple[int, str] = (depth, grp_str)
             children = _build_hierarchy(gdata, rest, depth + 1, my_info)
