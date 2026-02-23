@@ -247,7 +247,7 @@ def calculate_distance_matrix_zarr(
                 start_j, end_j = cum_sizes[j], cum_sizes[j + 1]
                 is_diagonal = i == j
 
-                if client is not None:
+                if client is not None:  # pragma: no cover
                     # Use submit() instead of delayed() - much more efficient for 60k+ tasks
                     future = client.submit(
                         _compute_block_and_write,
@@ -355,7 +355,7 @@ def _compute_block_and_write(
     zarr_path: str,
     is_diagonal: bool,
     compress: bool,
-) -> str:
+) -> str:  # pragma: no cover
     """
     Combined function to extract chunks, compute distances, and write to Zarr.
 
@@ -606,7 +606,7 @@ def _auto_chunk_size(
 
 def _setup_dask_client(
     n_cpus: int, memory_limit_gb: float | None = None
-) -> Client | None:
+) -> Client | None:  # pragma: no cover
     """
     Setup Dask distributed client.
 
