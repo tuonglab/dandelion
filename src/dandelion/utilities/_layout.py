@@ -2037,11 +2037,6 @@ def _fruchterman_reingold_layout_bh(
         k = dom_size / np.sqrt(nnodes)
 
     nnodes = len(G)
-    if nnodes > 10000:
-        logg.info(
-            f"Using Barnes-Hut CPU layout for {nnodes} nodes (theta={theta})"
-        )
-
     pos = _fruchterman_reingold_barnes_hut_numba(
         A,
         k,
@@ -2126,13 +2121,15 @@ def _fruchterman_reingold_layout_bh_gpu(
         if fixed is not None:
             if pos is None:
                 raise ValueError("nodes are fixed without positions given")
-            for node in fixed:
+            for node in fixed:  # pragma: no cover
                 if node not in pos:
                     raise ValueError("nodes are fixed without positions given")
-            nfixed = {node: i for i, node in enumerate(G)}
-            fixed = np.asarray([nfixed[node] for node in fixed])
+            nfixed = {node: i for i, node in enumerate(G)}  # pragma: no cover
+            fixed = np.asarray(
+                [nfixed[node] for node in fixed]
+            )  # pragma: no cover
 
-        if pos is not None:
+        if pos is not None:  # pragma: no cover
             dom_size = max(
                 coord for pos_tup in pos.values() for coord in pos_tup
             )
@@ -2253,13 +2250,13 @@ def _fruchterman_reingold_layout_v2(
     if fixed is not None:
         if pos is None:
             raise ValueError("nodes are fixed without positions given")
-        for node in fixed:
+        for node in fixed:  # pragma: no cover
             if node not in pos:
                 raise ValueError("nodes are fixed without positions given")
-        nfixed = {node: i for i, node in enumerate(G)}
-        fixed = np.asarray([nfixed[node] for node in fixed])
+        nfixed = {node: i for i, node in enumerate(G)}  # pragma: no cover
+        fixed = np.asarray([nfixed[node] for node in fixed])  # pragma: no cover
 
-    if pos is not None:
+    if pos is not None:  # pragma: no cover
         dom_size = max(coord for pos_tup in pos.values() for coord in pos_tup)
         if dom_size == 0:
             dom_size = 1

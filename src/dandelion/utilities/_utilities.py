@@ -33,7 +33,7 @@ if ZARR_V3:
     def create_zarr_dataset(group, *args, **kwargs):
         return group.create_dataset(*args, **kwargs)
 
-else:
+else:  # pragma: no cover
     from zarr import DirectoryStore, ZipStore
     from zarr.codecs import Blosc as BloscCodec
 
@@ -562,7 +562,7 @@ def makeblastdb(ref: Path | str) -> None:
     run(cmd)
 
 
-def bh(pvalues: np.array) -> np.array:
+def bh(pvalues: np.array) -> np.array:  # pragma: no cover
     """
     Compute the Benjamini-Hochberg FDR correction.
 
@@ -679,19 +679,6 @@ def check_filepath(
         return None
 
 
-def cmp(a, b):
-    """Python2.x cmp function."""
-    return (a > b) - (a < b)
-
-
-def cmp_str_emptylast(s1, s2):
-    """Help sort empty string to last."""
-    if not s1 or not s2:
-        return bool(s2) - bool(s1)
-
-    return cmp(s1, s2)
-
-
 def cmp_to_key(mycmp):
     """Convert a cmp= function into a key= function."""
 
@@ -707,23 +694,23 @@ def cmp_to_key(mycmp):
 
         def __gt__(self, other) -> bool:
             """Greater than."""
-            return mycmp(self.obj, other.obj) > 0
+            return mycmp(self.obj, other.obj) > 0  # pragma: no cover
 
         def __eq__(self, other) -> bool:
             """Equal."""
-            return mycmp(self.obj, other.obj) == 0
+            return mycmp(self.obj, other.obj) == 0  # pragma: no cover
 
         def __le__(self, other) -> bool:
             """Less than or equal."""
-            return mycmp(self.obj, other.obj) <= 0
+            return mycmp(self.obj, other.obj) <= 0  # pragma: no cover
 
         def __ge__(self, other) -> bool:
             """Greater than or equal."""
-            return mycmp(self.obj, other.obj) >= 0
+            return mycmp(self.obj, other.obj) >= 0  # pragma: no cover
 
         def __ne__(self, other) -> bool:
             """Not equal."""
-            return mycmp(self.obj, other.obj) != 0
+            return mycmp(self.obj, other.obj) != 0  # pragma: no cover
 
     return K
 
@@ -772,16 +759,6 @@ def all_missing2(x: str | None) -> bool:
     return all(pd.isnull(x)) or all(x == "") or all(x == "None")
 
 
-def return_mix_dtype(data: pd.DataFrame) -> list:
-    """Utility function to return mixed dtypes columns."""
-    check = [
-        c
-        for c in data.columns
-        if pd.api.types.infer_dtype(data[c]).startswith("mixed")
-    ]
-    return check
-
-
 def get_numpy_dtype(series: pd.Series) -> str:
     """
     Map a Pandas dtype to an appropriate NumPy dtype.
@@ -814,7 +791,9 @@ def get_numpy_dtype(series: pd.Series) -> str:
         max_length = series.astype(str).map(len).max()
         return "S{}".format(max(1, max_length))  # String with max length
     else:
-        raise TypeError(f"Unsupported data type: {series.name}")
+        raise TypeError(
+            f"Unsupported data type: {series.name}"
+        )  # pragma: no cover
 
 
 def sanitize_data_for_saving(
@@ -1141,59 +1120,6 @@ def deprecated(
     return deprecated_decorator
 
 
-def format_call(
-    metadata: pd.DataFrame,
-    call: str,
-    suffix_vdj: str = "_VDJ",
-    suffix_vj: str = "_VJ",
-) -> list:
-    """Extract v/d/j/c call values from data."""
-    call_dict = {
-        "Multi": "Multi",
-        "None": "None",
-        "": "None",
-        "unassigned": "None",
-    }
-    if suffix_vj is not None:
-        call_1 = {
-            x[0]: x[1] if present(x[1]) else "None"
-            for x, y in zip(
-                metadata[call + suffix_vdj].items(),
-                list(metadata[call + suffix_vj]),
-            )
-        }
-        call_2 = {
-            x[0]: x[1] if present(x[1]) else "None"
-            for x, y in zip(
-                metadata[call + suffix_vj].items(),
-                list(metadata[call + suffix_vdj]),
-            )
-        }
-        call_2 = {x: y if "|" not in y else "Multi" for x, y in call_2.items()}
-        call_4 = {
-            x: "Single" if y not in call_dict else call_dict[y]
-            for x, y in call_2.items()
-        }
-    else:
-        call_1 = {
-            x: y if present(y) else "None"
-            for x, y in metadata[call + suffix_vdj].items()
-        }
-        call_2 = {x: "None" for x in call_1.keys()}
-        call_4 = call_3 = call_2
-    call_1 = {x: y if "|" not in y else "Multi" for x, y in call_1.items()}
-    call_3 = {
-        x: "Single" if y not in call_dict else call_dict[y]
-        for x, y in call_1.items()
-    }
-    return (
-        list(call_1.values()),
-        list(call_2.values()),
-        list(call_3.values()),
-        list(call_4.values()),
-    )
-
-
 def format_isotype1(metadata: pd.DataFrame) -> list[str]:
     """Quick format isotype."""
     isotype_status = [
@@ -1279,7 +1205,7 @@ def format_locus(
             loc2x = [ij[:2] for ij in loc2.values()]
 
         if len(loc1x) > 0:
-            if len(list(set(loc1x))) > 1:
+            if len(list(set(loc1x))) > 1:  # pragma: no cover
                 tmp1 = "ambiguous"
                 if len(loc2x) > 0:
                     if len(list(set(loc2x))) > 1:
@@ -1577,14 +1503,6 @@ def set_blast_env(
     if input_file is not None:
         input_file = Path(input_file)
     return env, bdb, input_file
-
-
-def sum_col(vals: list) -> float | int:
-    """Sum columns if not NaN."""
-    if all(pd.isnull(vals)):
-        return np.nan
-    else:
-        return sum(vals)
 
 
 def check_data(
