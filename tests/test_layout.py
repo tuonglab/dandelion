@@ -335,11 +335,27 @@ class TestGenerateLayout:
             layout_method="mod_fr",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         assert isinstance(G, nx.Graph)
         assert isinstance(pos, dict)
         assert isinstance(pos_, dict)
+
+    def test_mod_fr_expanded_only(self):
+        """Test mod_fr layout with expanded_only."""
+        verts = ["A", "B", "C", "D"]
+        edges = _small_edges()
+        G, G_, pos, pos_ = generate_layout(
+            vertices=verts,
+            edges=edges,
+            layout_method="mod_fr",
+            expanded_only=True,
+            iterations=10,
+            seed=42,
+            verbose=True,
+        )
+        # When expanded_only, pos is set to pos_ and G to G_
+        assert pos is pos_
 
     def test_mod_fr2(self):
         """Test mod_fr2 layout method."""
@@ -351,9 +367,25 @@ class TestGenerateLayout:
             layout_method="mod_fr2",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         assert isinstance(pos, dict)
+
+    def test_mod_fr2_expanded_only(self):
+        """Test mod_fr2 layout with expanded_only."""
+        verts = ["A", "B", "C", "D"]
+        edges = _small_edges()
+        G, G_, pos, pos_ = generate_layout(
+            vertices=verts,
+            edges=edges,
+            layout_method="mod_fr2",
+            expanded_only=True,
+            iterations=10,
+            seed=42,
+            verbose=True,
+        )
+        # When expanded_only, pos is set to pos_ and G to G_
+        assert pos is pos_
 
     def test_fa2(self):
         """Test fa2 (ForceAtlas2) layout method."""
@@ -363,7 +395,7 @@ class TestGenerateLayout:
             vertices=verts,
             edges=edges,
             layout_method="fa2",
-            verbose=False,
+            verbose=True,
         )
         assert isinstance(pos, dict)
         assert isinstance(pos_, dict)
@@ -377,7 +409,7 @@ class TestGenerateLayout:
             edges=edges,
             layout_method="fa2",
             expanded_only=True,
-            verbose=False,
+            verbose=True,
         )
         # When expanded_only, pos is set to pos_ and G to G_
         assert pos is pos_
@@ -392,9 +424,25 @@ class TestGenerateLayout:
             layout_method="mod_fr_bh",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         assert isinstance(pos, dict)
+
+    def test_mod_fr_bh_expanded_only(self):
+        """Test mod_fr_bh layout with expanded_only."""
+        verts = ["A", "B", "C", "D"]
+        edges = _small_edges()
+        G, G_, pos, pos_ = generate_layout(
+            vertices=verts,
+            edges=edges,
+            layout_method="mod_fr_bh",
+            expanded_only=True,
+            iterations=10,
+            seed=42,
+            verbose=True,
+        )
+        # When expanded_only, pos is set to pos_ and G to G_
+        assert pos is pos_
 
     def test_no_compute_layout(self):
         """Test that compute_layout=False returns None positions."""
@@ -417,7 +465,7 @@ class TestGenerateLayout:
             expanded_only=True,
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         # When expanded_only, pos is set to pos_ and G to G_
         assert pos is pos_
@@ -433,7 +481,7 @@ class TestGenerateLayout:
             layout_method="mod_fr",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         # min_size=2 removes isolates from G_
         assert "E" not in G_.nodes()
@@ -455,7 +503,7 @@ class TestGenerateLayout:
             layout_method="mod_fr",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         # E-F component has size 2, should be removed from G_
         assert "E" not in G_.nodes()
@@ -472,7 +520,7 @@ class TestGenerateLayout:
             layout_method="mod_fr",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         assert isinstance(G, nx.Graph)
 
@@ -485,7 +533,7 @@ class TestGenerateLayout:
             layout_method="mod_fr",
             iterations=10,
             seed=42,
-            verbose=False,
+            verbose=True,
         )
         assert G_out is G
         assert G_out_ is G_

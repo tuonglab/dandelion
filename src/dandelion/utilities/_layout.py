@@ -11,10 +11,7 @@ from scipy.sparse import issparse, coo_matrix, csr_matrix
 from scanpy import logging as logg
 from typing import Any, Literal
 
-try:
-    from networkx.utils import np_random_state as random_state
-except ImportError:
-    from networkx.utils import random_state
+from networkx.utils import np_random_state as random_state
 
 
 def generate_layout(
@@ -99,8 +96,7 @@ def generate_layout(
                 if len(component) < min_size:
                     for node in component:
                         G_.remove_node(node)
-        else:
-            pass
+
     if compute_layout:
         if layout_method == "mod_fr":
             if not expanded_only:
@@ -167,7 +163,7 @@ def generate_layout(
         elif layout_method == "fa2":
             try:
                 from fa2_modified import ForceAtlas2
-            except ImportError:
+            except ImportError:  # pragma: no cover
                 logg.info(
                     "Please install ForceAtlas2 to use fa2 layout: "
                     "pip install fa2-modified"
