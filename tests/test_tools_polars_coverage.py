@@ -1321,9 +1321,7 @@ def _make_dist_csr(obs_names, rows, cols, data):
     from scipy.sparse import csr_matrix as _csr
 
     n = len(obs_names)
-    mat = _csr(
-        (np.array(data, dtype=np.float32), (rows, cols)), shape=(n, n)
-    )
+    mat = _csr((np.array(data, dtype=np.float32), (rows, cols)), shape=(n, n))
     mat._index_names = list(obs_names)
     return mat
 

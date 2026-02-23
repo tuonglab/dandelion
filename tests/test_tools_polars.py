@@ -100,9 +100,11 @@ def test_clone_size_group_by(create_testfolder):
     vdj = read_zipddl(f)
     n = vdj._metadata.collect().height
     group_vals = ["G1"] * (n // 2) + ["G2"] * (n - n // 2)
-    vdj._metadata = vdj._metadata.collect().with_columns(
-        pl.Series("test_group", group_vals)
-    ).lazy()
+    vdj._metadata = (
+        vdj._metadata.collect()
+        .with_columns(pl.Series("test_group", group_vals))
+        .lazy()
+    )
     clone_size(vdj, group_by="test_group")
     result = vdj._metadata.collect()
     assert "clone_id_size" in result.columns
