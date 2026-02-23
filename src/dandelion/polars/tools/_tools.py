@@ -1329,9 +1329,11 @@ def transfer(
     if obsp:
         message_parts += [
             f"wrote `.obsp['connectivities']` & `['distances']` from graph[{main_idx}]\n",
-            f"stashed GEX matrices in `.uns['dandelion']` ('{g_connectivities_key}', '{g_distances_key}')\n"
-            if not skip_stash
-            else "",
+            (
+                f"stashed GEX matrices in `.uns['dandelion']` ('{g_connectivities_key}', '{g_distances_key}')\n"
+                if not skip_stash
+                else ""
+            ),
             (
                 f"stashed VDJ matrices in `.uns['dandelion']` under '{v_connectivities_key}_all' / '_expanded'\n"
                 if main_idx != 2
