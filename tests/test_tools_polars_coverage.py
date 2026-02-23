@@ -841,7 +841,6 @@ def test_bootstrap_network_clone_degree(vdj2_with_clones):
         min_size=4,
         expanded_only=False,
         contracted=False,
-        layout_method="mod_fr",
         n_cpus=2,
     )
     assert isinstance(cluster_gini, float)
@@ -859,7 +858,6 @@ def test_bootstrap_network_clone_centrality(vdj2_with_clones):
         min_size=4,
         expanded_only=False,
         contracted=False,
-        layout_method="mod_fr",
         n_cpus=2,
     )
     assert isinstance(cluster_gini, float)
@@ -877,7 +875,6 @@ def test_bootstrap_network_clone_network(vdj2_with_clones):
         min_size=4,
         expanded_only=False,
         contracted=False,
-        layout_method="mod_fr",
         n_cpus=2,
     )
     assert isinstance(cluster_gini, float)

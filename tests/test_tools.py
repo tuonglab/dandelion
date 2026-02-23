@@ -528,7 +528,6 @@ def test_bootstrap_network_clone_degree(airr_reannotated2):
         min_size=4,
         expanded_only=False,
         contracted=False,
-        layout_method="mod_fr",
     )
     assert isinstance(cluster_gini, float)
     assert isinstance(vertex_gini, float)
@@ -545,7 +544,6 @@ def test_bootstrap_network_clone_centrality(airr_reannotated2):
         min_size=4,
         expanded_only=False,
         contracted=False,
-        layout_method="mod_fr",
     )
     assert isinstance(cluster_gini, float)
     assert isinstance(vertex_gini, float)
@@ -562,7 +560,6 @@ def test_bootstrap_network_clone_network(airr_reannotated2):
         min_size=4,
         expanded_only=False,
         contracted=False,
-        layout_method="mod_fr",
     )
     assert isinstance(cluster_gini, float)
     assert isinstance(vertex_gini, float)

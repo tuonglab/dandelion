@@ -730,7 +730,7 @@ def _bootstrap_network(
         cluster_gini = (
             calculate_gini_index(clonesizecounts)
             if len(clonesizecounts) > 0
-            else 0
+            else 0.0
         )
     # vertex gini
     if met == "clone_network":
@@ -741,7 +741,7 @@ def _bootstrap_network(
         ]
         graphcounts = np.array(connected.value_counts())
         vertex_gini = (
-            calculate_gini_index(graphcounts) if len(graphcounts) > 0 else 0
+            calculate_gini_index(graphcounts) if len(graphcounts) > 0 else 0.0
         )
     return cluster_gini, vertex_gini
 

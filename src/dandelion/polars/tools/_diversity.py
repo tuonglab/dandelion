@@ -772,7 +772,7 @@ def _bootstrap_network(
         cluster_gini = (
             calculate_gini_index(clonesizecounts)
             if len(clonesizecounts) > 0
-            else 0
+            else 0.0
         )
 
     # vertex gini
@@ -791,10 +791,12 @@ def _bootstrap_network(
                 .to_numpy()
             )
             vertex_gini = (
-                calculate_gini_index(graphcounts) if len(graphcounts) > 0 else 0
+                calculate_gini_index(graphcounts)
+                if len(graphcounts) > 0
+                else 0.0
             )
         else:
-            vertex_gini = 0
+            vertex_gini = 0.0
 
     return cluster_gini, vertex_gini
 
