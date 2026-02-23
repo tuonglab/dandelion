@@ -1228,7 +1228,11 @@ def productive_ratio(
     logg.info(
         " finished",
         time=start,
-        deep=("Updated AnnData: \n" "   'uns', productive_ratio"),
+        deep=(
+            f"Updated AnnData: \n"
+            f"   'obs', '{locus}_productive'\n"
+            "   'uns', 'productive_ratio'\n"
+        ),
     )
 
 
