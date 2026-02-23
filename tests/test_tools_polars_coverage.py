@@ -566,6 +566,107 @@ def test_concat_missing_meta_cols(vdj_base, airr_reannotated2, dummy_adata2):
         assert row["extra_col"][0] is None
 
 
+def test_concat_check_unique_false_raises_polars(vdj_base):
+    """check_unique=False raises ValueError when cell IDs are not unique."""
+    vdj, _ = vdj_base
+    with pytest.raises(ValueError):
+        concat([vdj, vdj], check_unique=False)
+
+
+def test_concat_remove_trailing_hyphen_polars(vdj_base):
+    """remove_trailing_hyphen_number strips -N suffix before adding prefix."""
+    vdj, _ = vdj_base
+    # collapse_cells=False keeps duplicate metadata entries so that
+    # metadata_index_order is None, which triggers the add_cell_prefix branch.
+    result = concat(
+        [vdj, vdj],
+        prefixes=["A_", "B_"],
+        remove_trailing_hyphen_number=True,
+        collapse_cells=False,
+    )
+    assert result is not None
+    assert result.n_contigs == vdj.n_contigs * 2
+    # Prefixes must have been applied
+    cell_ids = (
+        result._metadata.select("cell_id")
+        .collect(engine="streaming")
+        .to_series()
+        .to_list()
+    )
+    assert any(c.startswith("A_") for c in cell_ids)
+    assert any(c.startswith("B_") for c in cell_ids)
+
+
+def test_concat_polars_dataframe_input(vdj_base, airr_reannotated2, dummy_adata2):
+    """polars DataFrame is accepted as input and converted to DandelionPolars."""
+    vdj, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    # Pass second input as a collected polars DataFrame
+    raw_df = vdj2._data.collect() if isinstance(vdj2._data, pl.LazyFrame) else vdj2._data
+    result = concat([vdj, raw_df])
+    assert result is not None
+    assert result.n_contigs == vdj.n_contigs + vdj2.n_contigs
+
+
+def test_concat_lazyframe_input(vdj_base, airr_reannotated2, dummy_adata2):
+    """polars LazyFrame is accepted as input and converted to DandelionPolars."""
+    vdj, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    raw_lf = vdj2._data if isinstance(vdj2._data, pl.LazyFrame) else vdj2._data.lazy()
+    result = concat([vdj, raw_lf])
+    assert result is not None
+    assert result.n_contigs == vdj.n_contigs + vdj2.n_contigs
+
+
+def test_concat_pandas_dataframe_input(vdj_base, airr_reannotated2, dummy_adata2):
+    """pandas DataFrame is accepted as input and converted to DandelionPolars."""
+    vdj, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    raw_pd = (
+        vdj2._data.collect().to_pandas()
+        if isinstance(vdj2._data, pl.LazyFrame)
+        else vdj2._data.to_pandas()
+    )
+    result = concat([vdj, raw_pd])
+    assert result is not None
+    assert result.n_contigs == vdj.n_contigs + vdj2.n_contigs
+
+
+def test_concat_suffix_length_mismatch_raises_polars(vdj_base, airr_reannotated2, dummy_adata2):
+    """ValueError when suffix list length does not match array count."""
+    vdj, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    with pytest.raises(ValueError):
+        concat([vdj, vdj2], suffixes=["_only_one"])
+
+
+def test_concat_v_call_genotyped_partial_polars(vdj_base, airr_reannotated2, dummy_adata2):
+    """v_call_genotyped in only one object is filled from v_call in the other."""
+    vdj, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    vdj._data = vdj._data.with_columns(pl.col("v_call").alias("v_call_genotyped"))
+    result = concat([vdj, vdj2])
+    result_data_cols = (
+        result._data.collect_schema().names()
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data.columns
+    )
+    assert "v_call_genotyped" in result_data_cols
+
+
+def test_concat_auto_numbering_polars(vdj_base):
+    """Duplicate indices with no explicit suffix get auto-numbered (0, 1, ...)."""
+    vdj, _ = vdj_base
+    result = concat([vdj, vdj])
+    assert result is not None
+    assert result.n_contigs == vdj.n_contigs * 2
+
+
 # ---------------------------------------------------------------------------
 # Group 9 – generate_network branches
 # ---------------------------------------------------------------------------

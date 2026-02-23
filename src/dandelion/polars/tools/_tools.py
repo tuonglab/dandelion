@@ -3013,6 +3013,19 @@ def concat(
             for x in arrays
         ]
 
+    # Collect metadata column names from originals BEFORE deep-copying.
+    # Deep-copying a parquet-backed DandelionPolars can lose columns that were
+    # added to _metadata via with_columns() after construction because the
+    # lazy plan is re-materialised against the original parquet on disk.
+    # Reading the schema directly here avoids that round-trip.
+    all_meta_cols: set[str] = set()
+    for x in arrays:
+        if isinstance(x, DandelionPolars) and x._metadata is not None:
+            if isinstance(x._metadata, pl.LazyFrame):
+                all_meta_cols.update(x._metadata.collect_schema().names())
+            else:
+                all_meta_cols.update(x._metadata.columns)
+
     # Convert all inputs to DandelionPolars
     vdjs_ = []
     for x in arrays:
@@ -3177,14 +3190,6 @@ def concat(
                 "Cell/contig indices are not unique. Please set check_unique=True to append suffixes/prefixes or ensure unique indices before concatenation."
             )
 
-    # Collect all metadata column names
-    all_meta_cols = set()
-    for vdj_ in vdjs_:
-        if isinstance(vdj_._metadata, pl.LazyFrame):
-            all_meta_cols.update(vdj_._metadata.collect_schema().names())
-        else:
-            all_meta_cols.update(vdj_._metadata.columns)
-
     # Handle v_call_genotyped consistency
     genotyped_v_call = [
         True
@@ -3238,13 +3243,17 @@ def concat(
         for col in missing_meta_cols:
             meta_df = meta_df.with_columns(pl.lit(None).alias(col))
 
-        # Fill in values from original dataframes
-        for vdj_ in vdjs_:
+        # Fill in values from the original (pre-copy) inputs so that columns
+        # added to _metadata after construction (e.g. via with_columns) are
+        # not lost due to the parquet-backing limitation in deep copies.
+        for x in arrays:
+            if not isinstance(x, DandelionPolars) or x._metadata is None:
+                continue
             # Collect if lazy
-            if isinstance(vdj_._metadata, pl.LazyFrame):
-                source_meta = vdj_._metadata.collect(engine="streaming")
+            if isinstance(x._metadata, pl.LazyFrame):
+                source_meta = x._metadata.collect(engine="streaming")
             else:
-                source_meta = vdj_._metadata
+                source_meta = x._metadata
 
             for col in missing_meta_cols:
                 source_cols = source_meta.columns

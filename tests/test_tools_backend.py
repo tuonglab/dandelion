@@ -151,7 +151,141 @@ def test_concat_missing_meta_cols(airr_reannotated):
     assert "extra_col" in result._metadata.columns
 
 
-# -- find_clones options ------------------------------------------------------
+# -- concat comprehensive (base) ---------------------------------------------
+
+
+@pytest.mark.usefixtures("airr_reannotated", "airr_reannotated2")
+def test_concat_dict_base(airr_reannotated, airr_reannotated2):
+    """dict input is converted to a list and concatenated."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj1 = BaseDandelion(airr_reannotated)
+    vdj2 = BaseDandelion(airr_reannotated2)
+    result = base_concat({"s1": vdj1, "s2": vdj2})
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+
+@pytest.mark.usefixtures("airr_reannotated", "airr_reannotated2")
+def test_concat_suffixes_base(airr_reannotated, airr_reannotated2):
+    """explicit suffixes are appended to cell/contig IDs."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj1 = BaseDandelion(airr_reannotated)
+    vdj2 = BaseDandelion(airr_reannotated2)
+    result = base_concat([vdj1, vdj2], suffixes=["_A", "_B"])
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+
+@pytest.mark.usefixtures("airr_reannotated")
+def test_concat_both_suffix_and_prefix_raises_base(airr_reannotated):
+    """ValueError when both suffixes and prefixes are supplied."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj = BaseDandelion(airr_reannotated)
+    with pytest.raises(ValueError):
+        base_concat([vdj, vdj], suffixes=["_A", "_B"], prefixes=["A_", "B_"])
+
+
+@pytest.mark.usefixtures("airr_reannotated")
+def test_concat_suffix_length_mismatch_raises_base(airr_reannotated):
+    """ValueError when suffix list length does not match input count."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj = BaseDandelion(airr_reannotated)
+    with pytest.raises(ValueError):
+        base_concat([vdj, vdj], suffixes=["_only_one"])
+
+
+@pytest.mark.usefixtures("airr_reannotated")
+def test_concat_check_unique_false_raises_base(airr_reannotated):
+    """check_unique=False raises ValueError when indices are not unique."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj = BaseDandelion(airr_reannotated)
+    with pytest.raises(ValueError):
+        base_concat([vdj, vdj], check_unique=False)
+
+
+@pytest.mark.usefixtures("airr_reannotated")
+def test_concat_remove_trailing_hyphen_base(airr_reannotated):
+    """remove_trailing_hyphen_number strips trailing -N before adding prefix."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    # Create two independent objects to avoid in-place mutation of a shared ref
+    vdj_a = BaseDandelion(airr_reannotated)
+    vdj_b = BaseDandelion(airr_reannotated)
+    # collapse_cells=False keeps duplicate metadata entries so that
+    # metadata_index_order is None, which triggers the add_cell_prefix branch.
+    result = base_concat(
+        [vdj_a, vdj_b],
+        prefixes=["A_", "B_"],
+        remove_trailing_hyphen_number=True,
+        collapse_cells=False,
+    )
+    assert result is not None
+    assert result.n_contigs == vdj_a.n_contigs + vdj_b.n_contigs
+    # Both prefixes must appear in the result cell IDs
+    cell_ids = list(result._metadata.index)
+    assert any(c.startswith("A_") for c in cell_ids)
+    assert any(c.startswith("B_") for c in cell_ids)
+
+
+@pytest.mark.usefixtures("airr_reannotated")
+def test_concat_invalid_type_raises_base(airr_reannotated):
+    """ValueError when a non-Dandelion/non-DataFrame object is in the list."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj = BaseDandelion(airr_reannotated)
+    with pytest.raises(ValueError):
+        base_concat([vdj, 42])
+
+
+@pytest.mark.usefixtures("airr_reannotated", "airr_reannotated2")
+def test_concat_dataframe_input_base(airr_reannotated, airr_reannotated2):
+    """pandas DataFrames are accepted alongside Dandelion objects."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj1 = BaseDandelion(airr_reannotated)
+    # Pass raw pandas DataFrame as the second element
+    result = base_concat([vdj1, airr_reannotated2])
+    assert result is not None
+
+
+@pytest.mark.usefixtures("airr_reannotated", "airr_reannotated2")
+def test_concat_v_call_genotyped_partial_base(
+    airr_reannotated, airr_reannotated2
+):
+    """v_call_genotyped present in only one object is filled from v_call in the other."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj1 = BaseDandelion(airr_reannotated)
+    vdj2 = BaseDandelion(airr_reannotated2)
+    vdj1._data["v_call_genotyped"] = vdj1._data["v_call"]
+    result = base_concat([vdj1, vdj2])
+    assert "v_call_genotyped" in result._data.columns
+
+
+@pytest.mark.usefixtures("airr_reannotated")
+def test_concat_auto_numbering_base(airr_reannotated):
+    """Duplicate indices without explicit suffixes get auto-numbered (0, 1, ...)."""
+    from dandelion.base.core._core import Dandelion as BaseDandelion
+    from dandelion.base.tools._tools import concat as base_concat
+
+    vdj = BaseDandelion(airr_reannotated)
+    result = base_concat([vdj, vdj])
+    assert result is not None
+    assert result.n_contigs == vdj.n_contigs * 2
 
 
 @pytest.mark.usefixtures("airr_reannotated")
