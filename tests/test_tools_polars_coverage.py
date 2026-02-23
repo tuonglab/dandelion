@@ -383,6 +383,54 @@ def test_from_scirpy_anndata(vdj_base):
     assert vdj2 is not None
 
 
+def test_to_scirpy_with_gex_adata_anndata(vdj_base):
+    """_create_anndata else branch via to_scirpy with gex_adata and to_mudata=False."""
+    import anndata as ad
+
+    vdj, adata = vdj_base
+    result = to_scirpy(vdj, to_mudata=False, gex_adata=adata)
+    assert result is not None
+    assert isinstance(result, ad.AnnData)
+    assert "airr" in result.obsm
+
+
+def test_create_anndata_else_branch_direct():
+    """_create_anndata else: branch directly - merges AIRR into existing AnnData."""
+    import awkward as ak
+    import anndata as ad
+    from dandelion.polars.tools._tools import _create_anndata
+
+    cell_ids = ["cell_A", "cell_B", "cell_C"]
+    obs = pd.DataFrame(index=cell_ids)
+    airr = ak.Array([{"locus": "IGH"}, {"locus": "IGL"}, {"locus": "IGK"}])
+    existing = ad.AnnData(
+        obs=pd.DataFrame({"gex_col": [1, 2, 3]}, index=cell_ids)
+    )
+    result = _create_anndata(airr, obs, existing)
+    assert "airr" in result.obsm
+    assert "gex_col" in result.obs.columns
+    assert result.n_obs == 3
+
+
+def test_create_anndata_else_branch_partial_overlap():
+    """_create_anndata else: branch filters to common cells when adata has extra cells."""
+    import awkward as ak
+    import anndata as ad
+    from dandelion.polars.tools._tools import _create_anndata
+
+    airr_cells = ["cell_A", "cell_B"]
+    all_cells = ["cell_A", "cell_B", "cell_C"]
+    obs = pd.DataFrame(index=airr_cells)
+    airr = ak.Array([{"locus": "IGH"}, {"locus": "IGL"}])
+    existing = ad.AnnData(
+        obs=pd.DataFrame({"gex_col": [1, 2, 3]}, index=all_cells)
+    )
+    result = _create_anndata(airr, obs, existing)
+    assert result.n_obs == 2
+    assert "airr" in result.obsm
+    assert set(result.obs_names) == {"cell_A", "cell_B"}
+
+
 # ---------------------------------------------------------------------------
 # Group 7 – vdj_sample
 # ---------------------------------------------------------------------------
@@ -477,6 +525,45 @@ def test_concat_invalid_type(vdj_base):
     vdj, adata = vdj_base
     with pytest.raises(ValueError):
         concat([vdj, 42])
+
+
+def test_concat_missing_meta_cols(vdj_base, airr_reannotated2, dummy_adata2):
+    """Lines 3211-3251: missing metadata columns are filled with nulls and values from source."""
+    vdj, adata = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+
+    # Add an extra column only to vdj._metadata that vdj2 does not have
+    vdj._metadata = vdj._metadata.with_columns(
+        pl.lit("batch_A").alias("extra_col")
+    )
+
+    result = concat([vdj, vdj2])
+    assert result is not None
+
+    result_meta = (
+        result._metadata.collect(engine="streaming")
+        if isinstance(result._metadata, pl.LazyFrame)
+        else result._metadata
+    )
+    assert "extra_col" in result_meta.columns
+
+    # Cells from vdj should have "batch_A"; cells from vdj2 should be null
+    vdj_cell_ids = set(
+        vdj._metadata.collect(engine="streaming")["cell_id"].to_list()
+        if isinstance(vdj._metadata, pl.LazyFrame)
+        else vdj._metadata["cell_id"].to_list()
+    )
+    vdj2_cell_ids = set(
+        vdj2._metadata.collect(engine="streaming")["cell_id"].to_list()
+        if isinstance(vdj2._metadata, pl.LazyFrame)
+        else vdj2._metadata["cell_id"].to_list()
+    )
+    # Cells only in vdj2 (not in vdj) should have null extra_col
+    only_vdj2 = vdj2_cell_ids - vdj_cell_ids
+    for cell_id in only_vdj2:
+        row = result_meta.filter(pl.col("cell_id") == cell_id)
+        assert row["extra_col"][0] is None
 
 
 # ---------------------------------------------------------------------------
@@ -980,3 +1067,126 @@ def test_h5ddl_compression(vdj_base, tmp_path):
     vdj2 = read_h5ddl(str(out_file))
 
     assert vdj2._data.collect().shape[0] == n_data
+
+
+# ---------------------------------------------------------------------------
+# Group 15 – _reverse_transfer (polars)
+# ---------------------------------------------------------------------------
+
+
+def test_reverse_transfer_metadata_only_polars(vdj_base):
+    """_reverse_transfer with no clone_key in uns transfers obs columns to _metadata."""
+    import anndata as ad
+    from dandelion.polars.tools._tools import _reverse_transfer
+
+    vdj, _ = vdj_base
+    obs_names = (
+        vdj._metadata.select("cell_id").collect().to_series().to_list()[:2]
+    )
+    adata = ad.AnnData(
+        obs=pd.DataFrame({"extra_rt_col": ["x", "y"]}, index=obs_names)
+    )
+    _reverse_transfer(adata, vdj)
+    schema_names = vdj._metadata.collect_schema().names()
+    assert "extra_rt_col" in schema_names
+
+
+def test_reverse_transfer_builds_graph_polars(vdj_base):
+    """_reverse_transfer with clone_key in uns builds a NetworkX graph (list cell_indices)."""
+    import anndata as ad
+    from scipy.sparse import csr_matrix
+    from dandelion.polars.tools._tools import _reverse_transfer
+
+    vdj, _ = vdj_base
+    obs_names = (
+        vdj._metadata.select("cell_id").collect().to_series().to_list()[:2]
+    )
+    adata = ad.AnnData(obs=pd.DataFrame(index=obs_names))
+    dist = csr_matrix([[0, 1], [1, 0]])
+    adata.uns["clone_id"] = {
+        "distances": dist,
+        "cell_indices": {
+            "0": np.array([obs_names[0]]),
+            "1": np.array([obs_names[1]]),
+        },
+    }
+    _reverse_transfer(adata, vdj)
+    assert vdj.graph is not None
+    assert vdj.graph[0] is not None
+
+
+def test_reverse_transfer_scalar_cell_indices_polars(vdj_base):
+    """_reverse_transfer with scalar (non-array) cell_indices builds the graph."""
+    import anndata as ad
+    from scipy.sparse import csr_matrix
+    from dandelion.polars.tools._tools import _reverse_transfer
+
+    vdj, _ = vdj_base
+    obs_names = (
+        vdj._metadata.select("cell_id").collect().to_series().to_list()[:2]
+    )
+    adata = ad.AnnData(obs=pd.DataFrame(index=obs_names))
+    dist = csr_matrix([[0, 1], [1, 0]])
+    adata.uns["clone_id"] = {
+        "distances": dist,
+        "cell_indices": {
+            "0": obs_names[0],
+            "1": obs_names[1],
+        },
+    }
+    _reverse_transfer(adata, vdj)
+    assert vdj.graph is not None
+
+
+def test_reverse_transfer_mudata_input_polars(vdj_base):
+    """_reverse_transfer with MuData input extracts the 'airr' modality."""
+    import anndata as ad
+    import mudata
+    from dandelion.polars.tools._tools import _reverse_transfer
+
+    vdj, _ = vdj_base
+    obs_names = (
+        vdj._metadata.select("cell_id").collect().to_series().to_list()[:2]
+    )
+    airr_adata = ad.AnnData(
+        obs=pd.DataFrame({"mudata_rt_col": [1, 2]}, index=obs_names)
+    )
+    mdata = mudata.MuData({"airr": airr_adata})
+    _reverse_transfer(mdata, vdj)
+    schema_names = vdj._metadata.collect_schema().names()
+    assert "mudata_rt_col" in schema_names
+
+
+def test_reverse_transfer_mudata_no_airr_raises_polars(vdj_base):
+    """_reverse_transfer with MuData missing 'airr' modality raises ValueError."""
+    import anndata as ad
+    import mudata
+    from dandelion.polars.tools._tools import _reverse_transfer
+
+    vdj, _ = vdj_base
+    obs_names = (
+        vdj._metadata.select("cell_id").collect().to_series().to_list()[:2]
+    )
+    other_adata = ad.AnnData(obs=pd.DataFrame(index=obs_names))
+    mdata = mudata.MuData({"other": other_adata})
+    with pytest.raises(ValueError, match="airr"):
+        _reverse_transfer(mdata, vdj)
+
+
+def test_reverse_transfer_no_duplicate_columns_polars(vdj_base):
+    """_reverse_transfer does not add a column that already exists in _metadata."""
+    import anndata as ad
+    from dandelion.polars.tools._tools import _reverse_transfer
+
+    vdj, _ = vdj_base
+    initial_count = len(vdj._metadata.collect_schema().names())
+    obs_names = (
+        vdj._metadata.select("cell_id").collect().to_series().to_list()[:2]
+    )
+    # 'cell_id' is already present; passing it in adata.obs should not duplicate it
+    adata = ad.AnnData(
+        obs=pd.DataFrame({"cell_id": obs_names}, index=obs_names)
+    )
+    _reverse_transfer(adata, vdj)
+    new_count = len(vdj._metadata.collect_schema().names())
+    assert new_count == initial_count

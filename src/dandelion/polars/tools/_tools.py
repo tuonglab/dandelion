@@ -2633,6 +2633,8 @@ def to_scirpy(
     # we will only filter the data to match gex_adata
     if gex_adata is not None:
         data = data[data.metadata_names.isin(gex_adata.obs_names)].copy()
+        if data._backend == "polars":
+            data.to_pandas()
         tmp_gex = gex_adata.copy()
         if not to_mudata:
             tf(
@@ -2737,9 +2739,21 @@ def _reverse_transfer(
         adata = data
 
     # --- Copy metadata ---
-    for col in adata.obs:
-        if col not in dandelion._metadata.columns:
-            dandelion._metadata[col] = adata.obs[col]
+    existing_cols = (
+        dandelion._metadata.collect_schema().names()
+        if isinstance(dandelion._metadata, pl.LazyFrame)
+        else dandelion._metadata.columns
+    )
+    new_cols = [col for col in adata.obs if col not in existing_cols]
+    if new_cols:
+        obs_sub = adata.obs[new_cols].copy()
+        obs_sub.index.name = "cell_id"
+        obs_pl = pl.from_pandas(obs_sub.reset_index())
+        if isinstance(dandelion._metadata, pl.LazyFrame):
+            obs_pl = obs_pl.lazy()
+        dandelion._metadata = dandelion._metadata.join(
+            obs_pl, on="cell_id", how="left"
+        )
 
     # --- Extract clone-level connection info ---
     if clone_key in adata.uns:
@@ -2834,6 +2848,11 @@ def to_ak(
         import scirpy as ir
     except ImportError:
         raise ImportError("Please install scirpy to use this function.")
+
+    if isinstance(data, pl.LazyFrame):
+        data = data.collect().to_pandas()
+    elif isinstance(data, pl.DataFrame):
+        data = data.to_pandas()
 
     adata = ir.io.read_airr(data, **kwargs)
 

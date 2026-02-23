@@ -4749,32 +4749,3 @@ def safe_json_load(s: list | str | None) -> list:
     if not s:  # empty string or None
         return []  # fallback empty list
     return json.loads(s)
-
-
-def assert_dj_numeric_sequence_cols(
-    data: pd.DataFrame,
-) -> None:
-    """Assert that specified columns in the DataFrame are numeric.
-
-    Parameters
-    ----------
-    data : pd.DataFrame
-        The DataFrame to check.
-
-    Raises
-    ------
-    ValueError
-        If any of the specified columns contain non-numeric values.
-    """
-    for call in ["d", "j"]:
-        for col in [
-            call + "_sequence_start",
-            call + "_sequence_end",
-            call + "_support",
-            call + "_sequence_start_blastn",
-            call + "_sequence_end_blastn",
-            call + "_support_igblastn",
-        ]:
-            if col in data.columns:
-                data[col] = pd.to_numeric(data[col], errors="coerce")
-    return data
