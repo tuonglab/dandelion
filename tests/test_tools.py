@@ -485,9 +485,7 @@ def test_drop_nan_values_no_nan():
 
 def test_bootstrap_diversity_iteration_chao1():
     """_bootstrap_diversity_iteration returns a non-negative float for chao1."""
-    dat = pd.DataFrame(
-        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
-    )
+    dat = pd.DataFrame({"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]})
     result = _bootstrap_diversity_iteration(dat, "clone_id", "chao1", True, 5)
     assert isinstance(result, float)
     assert result >= 0
@@ -495,21 +493,15 @@ def test_bootstrap_diversity_iteration_chao1():
 
 def test_bootstrap_diversity_iteration_shannon_normalized():
     """_bootstrap_diversity_iteration returns a float for normalized shannon."""
-    dat = pd.DataFrame(
-        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
-    )
-    result = _bootstrap_diversity_iteration(
-        dat, "clone_id", "shannon", True, 5
-    )
+    dat = pd.DataFrame({"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]})
+    result = _bootstrap_diversity_iteration(dat, "clone_id", "shannon", True, 5)
     assert isinstance(result, float)
     assert result >= 0
 
 
 def test_bootstrap_diversity_iteration_shannon_unnormalized():
     """_bootstrap_diversity_iteration returns a float for unnormalized shannon."""
-    dat = pd.DataFrame(
-        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
-    )
+    dat = pd.DataFrame({"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]})
     result = _bootstrap_diversity_iteration(
         dat, "clone_id", "shannon", False, 5
     )
@@ -519,9 +511,7 @@ def test_bootstrap_diversity_iteration_shannon_unnormalized():
 
 def test_bootstrap_diversity_iteration_gini():
     """_bootstrap_diversity_iteration returns a non-negative float for gini."""
-    dat = pd.DataFrame(
-        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
-    )
+    dat = pd.DataFrame({"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]})
     result = _bootstrap_diversity_iteration(dat, "clone_id", "gini", True, 5)
     assert isinstance(result, float)
     assert result >= 0
