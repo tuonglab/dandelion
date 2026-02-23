@@ -86,6 +86,18 @@ def test_clone_size(create_testfolder):
 
 
 @pytest.mark.usefixtures("create_testfolder")
+def test_clone_size_group_by(create_testfolder):
+    """test clone_size with group_by"""
+    f = create_testfolder / "test.h5ddl"
+    vdj = read_h5ddl(f)
+    n = len(vdj._metadata)
+    vdj._metadata["test_group"] = ["G1"] * (n // 2) + ["G2"] * (n - n // 2)
+    clone_size(vdj, group_by="test_group")
+    assert "clone_id_size" in vdj._metadata.columns
+    assert not vdj._metadata["clone_id_size"].dropna().empty
+
+
+@pytest.mark.usefixtures("create_testfolder")
 @pytest.mark.parametrize(
     "resample,expected", [pytest.param(None, 8), pytest.param(16, 16)]
 )

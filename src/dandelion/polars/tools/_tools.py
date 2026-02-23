@@ -1417,7 +1417,7 @@ def _graph_to_matrices(
                 del rows, cols, vals, u_idx, v_idx, weights, valid_edges
 
     # CASE B: distances provided as a csr_matrix with _index_names
-    elif isinstance(distances, csr_matrix):
+    elif isinstance(distances, csr_matrix):  # pragma: no cover
         old_names = np.array(distances._index_names)
         coo = distances.tocoo()
 
@@ -1562,40 +1562,6 @@ def clone_view(
                     "metric": "precomputed",
                 },
             }
-
-
-def tabulate_clone_sizes(
-    metadata_: pd.DataFrame, clonesize_dict: dict, clonekey: str
-) -> pd.Series:
-    """Tabulate clone sizes."""
-    return pd.Series(
-        dict(
-            zip(
-                metadata_.index,
-                [
-                    str(y) if pd.notnull(y) else str(0)
-                    for y in [
-                        (
-                            sorted(
-                                list(
-                                    {clonesize_dict[c_] for c_ in c.split("|")}
-                                ),
-                                key=lambda x: (
-                                    int(x.split(">= ")[1])
-                                    if type(x) is str
-                                    else int(x)
-                                ),
-                                reverse=True,
-                            )[0]
-                            if "|" in c
-                            else clonesize_dict[c]
-                        )
-                        for c in metadata_[str(clonekey)]
-                    ]
-                ],
-            )
-        )
-    )
 
 
 def _categorize_clone_size(size: int | float, max_size: int) -> str | float:

@@ -746,40 +746,6 @@ def clone_view(
             }
 
 
-def tabulate_clone_sizes(
-    metadata_: pd.DataFrame, clonesize_dict: dict, clonekey: str
-) -> pd.Series:
-    """Tabulate clone sizes."""
-    return pd.Series(
-        dict(
-            zip(
-                metadata_.index,
-                [
-                    str(y) if pd.notnull(y) else str(0)
-                    for y in [
-                        (
-                            sorted(
-                                list(
-                                    {clonesize_dict[c_] for c_ in c.split("|")}
-                                ),
-                                key=lambda x: (
-                                    int(x.split(">= ")[1])
-                                    if type(x) is str
-                                    else int(x)
-                                ),
-                                reverse=True,
-                            )[0]
-                            if "|" in c
-                            else clonesize_dict[c]
-                        )
-                        for c in metadata_[str(clonekey)]
-                    ]
-                ],
-            )
-        )
-    )
-
-
 def clone_size(
     vdj: Dandelion | AnnData | MuData,
     group_by: str | None = None,
