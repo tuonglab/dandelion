@@ -1640,30 +1640,48 @@ class Dandelion:
                         data=G_index_array,
                         **save_args,
                     )
-        if self.distances is not None and isinstance(
-            self.distances, csr_matrix
-        ):
-            with h5py.File(filename, "a") as hf:
-                hf.create_dataset(
-                    "distances/data",
-                    data=self.distances.data,
-                    **save_args,
-                )
-                hf.create_dataset(
-                    "distances/indices",
-                    data=self.distances.indices,
-                    **save_args,
-                )
-                hf.create_dataset(
-                    "distances/indptr",
-                    data=self.distances.indptr,
-                    **save_args,
-                )
-                hf.create_dataset(
-                    "distances/shape",
-                    data=self.distances.shape,
-                    **save_args,
-                )
+        if self.distances is not None:
+            if isinstance(self.distances, csr_matrix):
+                with h5py.File(filename, "a") as hf:
+                    hf.create_dataset(
+                        "distances/data",
+                        data=self.distances.data,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        "distances/indices",
+                        data=self.distances.indices,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        "distances/indptr",
+                        data=self.distances.indptr,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        "distances/shape",
+                        data=self.distances.shape,
+                        **save_args,
+                    )
+            else:
+                try:
+                    import dask.array as da
+
+                    if isinstance(self.distances, da.Array):
+                        zarr_path = Path(filename).with_suffix(".zarr")
+                        da.to_zarr(
+                            self.distances,
+                            str(zarr_path / "distance_matrix"),
+                            overwrite=True,
+                        )
+                        logg.warning(
+                            f"Distances are a dask array and cannot be stored "
+                            f"inline in .h5ddl. Written to {zarr_path}. Pass "
+                            f"`distance_zarr='{zarr_path}'` when reading, or "
+                            f"it will be detected automatically."
+                        )
+                except ImportError:
+                    pass
         if self.layout is not None:
             for i, l in enumerate(self.layout):
                 with h5py.File(filename, "a") as hf:

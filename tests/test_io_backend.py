@@ -154,6 +154,29 @@ def test_read_standard(airr_bd):
     ddl.read_airr(airr_bd)
 
 
+@pytest.mark.usefixtures("create_testfolder", "airr_reannotated", "dummy_adata")
+def test_readwrite_h5ddl(create_testfolder, airr_reannotated, dummy_adata):
+    """Round-trip write_h5ddl / read_h5ddl via backend dispatcher."""
+    vdj = ddl.Dandelion(airr_reannotated)
+    vdj, _ = ddl.pp.check_contigs(vdj, dummy_adata)
+    ddl.tl.find_clones(vdj)
+    ddl.tl.generate_network(vdj, layout_method="mod_fr")
+
+    out_file = create_testfolder / "test_h5ddl_backend.h5ddl"
+    vdj.write_h5ddl(out_file)
+    vdj2 = ddl.read_h5ddl(out_file)
+
+    assert vdj2._data is not None
+    assert vdj2._metadata is not None
+    assert vdj2.graph is not None
+    assert vdj2.layout is not None
+
+    # gzip compression round-trip
+    vdj.write_h5ddl(out_file, compression="gzip")
+    vdj3 = ddl.read_h5ddl(out_file)
+    assert vdj3._data is not None
+
+
 # -- Dandelion constructor ----------------------------------------------------
 
 

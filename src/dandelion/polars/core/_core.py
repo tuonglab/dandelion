@@ -37,6 +37,9 @@ from dandelion.utilities._utilities import (
     VDJLENGTHS,
     SEQINFO,
     sanitize_boolean,
+    sanitize_data,
+    sanitize_data_for_saving,
+    clear_h5file,
     lib_type,
     Contig,
 )
@@ -2861,6 +2864,211 @@ class DandelionPolars:
             # convert to polars first
             self.to_polars()
         write_airr(self._data, filename, **kwargs)
+
+    def write_h5ddl(
+        self,
+        filename: str = "dandelion_data.h5ddl",
+        compression: (
+            Literal[
+                "gzip",
+                "lzf",
+                "szip",
+            ]
+            | None
+        ) = None,
+        compression_level: int | None = None,
+    ):
+        """
+        Write a Dandelion object to .h5ddl format.
+
+        Mirrors the base Dandelion.write_h5ddl interface. If distances is a
+        dask array it cannot be stored inline in HDF5; it will instead be
+        written to a Zarr store placed alongside the .h5ddl file (same stem,
+        .zarr extension) and a warning is raised. The companion .zarr is
+        detected automatically by read_h5ddl.
+
+        Parameters
+        ----------
+        filename : str, optional
+            path to `.h5ddl` file.
+        compression : Literal["gzip", "lzf", "szip"], optional
+            Specifies the compression algorithm to use.
+        compression_level : int | None, optional
+            Specifies a compression level for data. A value of 0 disables
+            compression.
+        """
+        save_args = {
+            "compression": compression,
+            "compression_opts": (
+                9 if compression_level is None else compression_level
+            ),
+        }
+        if compression is None:
+            save_args.pop("compression", None)
+            save_args.pop("compression_opts", None)
+        clear_h5file(filename)
+
+        # -- data ---------------------------------------------------------
+        data = self._data
+        if isinstance(data, pl.LazyFrame):
+            data = data.collect(engine="streaming")
+        data = data.to_pandas()
+        data = sanitize_data(data)
+        data, data_dtypes = sanitize_data_for_saving(data)
+        structured_data_array = np.array(
+            [tuple(row) for row in data.to_numpy()], dtype=data_dtypes
+        )
+        with h5py.File(filename, "w") as hf:
+            hf.create_dataset(
+                "data",
+                data=structured_data_array,
+                **save_args,
+            )
+
+        # -- metadata -----------------------------------------------------
+        if getattr(self, "_metadata", None) is not None:
+            metadata = self._metadata
+            if isinstance(metadata, pl.LazyFrame):
+                metadata = metadata.collect(engine="streaming")
+            metadata_pd = metadata.to_pandas()
+            # polars stores cell_id as a column; h5ddl expects it as the index
+            if "cell_id" in metadata_pd.columns:
+                metadata_pd = metadata_pd.set_index("cell_id")
+            metadata_pd, metadata_dtypes = sanitize_data_for_saving(metadata_pd)
+            structured_metadata_array = np.array(
+                [tuple(row) for row in metadata_pd.to_numpy()],
+                dtype=metadata_dtypes,
+            )
+            structured_metadata_names_array = np.array(
+                [s.encode("utf-8") for s in metadata_pd.index.to_numpy()]
+            )
+            with h5py.File(filename, "a") as hf:
+                hf.create_dataset(
+                    "metadata",
+                    data=structured_metadata_array,
+                    **save_args,
+                )
+                hf.create_dataset(
+                    "metadata_names",
+                    data=structured_metadata_names_array,
+                    **save_args,
+                )
+
+        # -- graph --------------------------------------------------------
+        if getattr(self, "graph", None) is not None:
+            for i, g in enumerate(self.graph):
+                G_df = nx.to_pandas_adjacency(g, nonedge=np.nan)
+                G_x = csr_matrix(G_df.to_numpy())
+                G_column_array = np.array(
+                    [s.encode("utf-8") for s in G_df.columns.to_numpy()]
+                )
+                G_index_array = np.array(
+                    [s.encode("utf-8") for s in G_df.index.to_numpy()]
+                )
+                with h5py.File(filename, "a") as hf:
+                    hf.create_dataset(
+                        f"graph/graph_{i}/data",
+                        data=G_x.data,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        f"graph/graph_{i}/indices",
+                        data=G_x.indices,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        f"graph/graph_{i}/indptr",
+                        data=G_x.indptr,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        f"graph/graph_{i}/shape",
+                        data=G_x.shape,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        f"graph/graph_{i}/column",
+                        data=G_column_array,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        f"graph/graph_{i}/index",
+                        data=G_index_array,
+                        **save_args,
+                    )
+
+        # -- distances ----------------------------------------------------
+        if getattr(self, "distances", None) is not None:
+            if isinstance(self.distances, csr_matrix):
+                with h5py.File(filename, "a") as hf:
+                    hf.create_dataset(
+                        "distances/data",
+                        data=self.distances.data,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        "distances/indices",
+                        data=self.distances.indices,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        "distances/indptr",
+                        data=self.distances.indptr,
+                        **save_args,
+                    )
+                    hf.create_dataset(
+                        "distances/shape",
+                        data=self.distances.shape,
+                        **save_args,
+                    )
+            else:
+                try:
+                    import dask.array as da
+
+                    if isinstance(self.distances, da.Array):
+                        zarr_path = Path(filename).with_suffix(".zarr")
+                        da.to_zarr(
+                            self.distances,
+                            str(zarr_path / "distance_matrix"),
+                            overwrite=True,
+                        )
+                        logg.warning(
+                            f"Distances are a dask array and cannot be stored "
+                            f"inline in .h5ddl. Written to {zarr_path}. Pass "
+                            f"`distance_zarr='{zarr_path}'` when reading, or "
+                            f"it will be detected automatically."
+                        )
+                except ImportError:
+                    pass
+
+        # -- layout -------------------------------------------------------
+        if getattr(self, "layout", None) is not None:
+            for i, l in enumerate(self.layout):
+                with h5py.File(filename, "a") as hf:
+                    layout_group = hf.create_group(f"layout/layout_{i}")
+                    for key, value in l.items():
+                        layout_group.create_dataset(
+                            key,
+                            data=value,
+                            **save_args,
+                        )
+
+        # -- germline -----------------------------------------------------
+        if (
+            getattr(self, "germline", None) is not None
+            and len(self.germline) > 0
+        ):
+            with h5py.File(filename, "a") as hf:
+                hf.create_dataset(
+                    "germline/keys",
+                    data=np.array(list(self.germline.keys()), dtype="S"),
+                    **save_args,
+                )
+                hf.create_dataset(
+                    "germline/values",
+                    data=np.array(list(self.germline.values()), dtype="S"),
+                    **save_args,
+                )
 
     def write_zipddl(
         self,

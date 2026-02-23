@@ -64,6 +64,12 @@ def read_h5ddl(
     AttributeError
         if `data` not found in `.h5ddl` file.
     """
+    # Auto-detect alongside zarr written by write_h5ddl for dask distances
+    if distance_zarr is None:
+        auto_zarr = Path(filename).with_suffix(".zarr")
+        if auto_zarr.exists():
+            distance_zarr = auto_zarr
+
     # Detect legacy (PyTables) vs new format
     with h5py.File(filename, "r") as hf:
         is_legacy = isinstance(hf["data"], h5py.Group)

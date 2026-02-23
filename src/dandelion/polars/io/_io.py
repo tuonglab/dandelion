@@ -33,7 +33,7 @@ def read_zipddl(
     verbose: bool = False,
 ) -> DandelionPolars:
     """
-    Read a Dandelion object from a .zarrddl file (hybrid Zarr v3 container).
+    Read a Dandelion object from a .zipddl file (hybrid Zarr v3 ZipStore container).
 
     Returns:
         Dandelion object
@@ -185,21 +185,26 @@ def read_h5ddl(
     """
     Read in and returns a Dandelion class from .h5ddl format.
 
-    Legacy function that wraps base read_h5ddl and converts to DandelionPolars.
+    All components (data, metadata, graph, distances, layout, germline) are
+    loaded and converted to their polars equivalents. If a companion .zarr
+    store exists alongside the .h5ddl file (same stem, .zarr extension) it is
+    picked up automatically as the distance array; this mirrors the behaviour
+    of write_h5ddl when distances are a dask array.
 
     Parameters
     ----------
     filename : Path | str, optional
         path to `.h5ddl` file
     distance_zarr : Path | str | None, optional
-        path to Zarr array for distances if computed lazily.
+        path to Zarr array for distances if computed lazily. Auto-detected
+        from a companion .zarr file when not provided.
     verbose : bool, optional
         whether or not to print messages during creation of the Dandelion object.
 
     Returns
     -------
-    Dandelion
-        Dandelion object.
+    DandelionPolars
+        DandelionPolars object.
 
     Raises
     ------
@@ -207,9 +212,29 @@ def read_h5ddl(
         if `data` not found in `.h5ddl` file.
     """
     tmp = _read_h5ddl(filename, distance_zarr, verbose)
-    tmp = DandelionPolars(tmp.data)
 
-    return tmp
+    constructor = {}
+
+    # data: pandas → polars LazyFrame
+    constructor["data"] = pl.from_pandas(tmp.data).lazy()
+
+    # metadata: pandas (index = cell_id barcodes) → polars DataFrame
+    # with cell_id as a regular column
+    if tmp.metadata is not None:
+        meta_pd = tmp.metadata.copy()
+        meta_pd.index.name = "cell_id"
+        constructor["metadata"] = pl.from_pandas(meta_pd.reset_index())
+
+    if tmp.graph is not None:
+        constructor["graph"] = tmp.graph
+    if tmp.distances is not None:
+        constructor["distances"] = tmp.distances
+    if tmp.layout is not None:
+        constructor["layout"] = tmp.layout
+    if tmp.germline is not None and len(tmp.germline) > 0:
+        constructor["germline"] = tmp.germline
+
+    return DandelionPolars(**constructor, verbose=verbose)
 
 
 def _read_h5_csr_matrix_zarr(

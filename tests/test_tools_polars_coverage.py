@@ -4,6 +4,7 @@
 import pytest
 import numpy as np
 import pandas as pd
+import polars as pl
 
 from dandelion.polars.core._core import DandelionPolars
 from dandelion.polars.preprocessing._preprocessing import check_contigs
@@ -27,7 +28,11 @@ from dandelion.polars.tools._diversity import (
     clone_diversity,
     clone_rarefaction,
     process_clone_network_stats,
-    gini_indices,
+    calculate_chao1,
+    calculate_shannon_entropy,
+    drop_nan_values,
+    _bootstrap_diversity_iteration,
+    _bootstrap_network,
 )
 
 # ---------------------------------------------------------------------------
@@ -701,3 +706,280 @@ def test_clone_rarefaction_with_plot(airr_reannotated2, dummy_adata2):
         assert result is not None
     except Exception:
         pass  # plotnine might fail in headless; just ensure lines are hit
+
+
+# ---------------------------------------------------------------------------
+# Group 13 – calculate_chao1 / calculate_shannon_entropy / drop_nan_values
+# ---------------------------------------------------------------------------
+
+
+def test_calculate_chao1_normal():
+    """calculate_chao1 returns a non-negative float for typical clone sizes."""
+    values = np.array([1, 1, 2, 5])
+    result = calculate_chao1(values)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_calculate_chao1_no_singletons():
+    """calculate_chao1 with no singletons still returns a non-negative float."""
+    values = np.array([3, 4, 5])
+    result = calculate_chao1(values)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_calculate_shannon_entropy_normalized_equal():
+    """Normalized Shannon entropy equals 1.0 for equal-sized clones."""
+    values = np.array([3, 3, 3])
+    result = calculate_shannon_entropy(values, normalize=True)
+    assert abs(result - 1.0) < 1e-9
+
+
+def test_calculate_shannon_entropy_normalized_unequal():
+    """Normalized Shannon entropy is in [0, 1] for unequal clone sizes."""
+    values = np.array([5, 2, 1])
+    result = calculate_shannon_entropy(values, normalize=True)
+    assert 0.0 <= result <= 1.0
+
+
+def test_calculate_shannon_entropy_single_value():
+    """Normalized Shannon entropy returns 0 for a single-clone repertoire."""
+    result = calculate_shannon_entropy(np.array([5]), normalize=True)
+    assert result == 0
+
+
+def test_calculate_shannon_entropy_unnormalized():
+    """Unnormalized Shannon entropy returns a non-negative float."""
+    values = np.array([3, 2, 1])
+    result = calculate_shannon_entropy(values, normalize=False)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_drop_nan_values_string_nan():
+    """drop_nan_values removes the string 'nan' key from a Series index."""
+    s = pd.Series({"clone_A": 3, "nan": 1, "clone_B": 2})
+    drop_nan_values(s)
+    assert "nan" not in s.index
+
+
+def test_drop_nan_values_float_nan():
+    """drop_nan_values removes np.nan from a Series index."""
+    s = pd.Series({np.nan: 1, "clone_A": 3})
+    drop_nan_values(s)
+    assert np.nan not in s.index
+
+
+def test_drop_nan_values_no_nan():
+    """drop_nan_values leaves a clean Series unchanged."""
+    s = pd.Series({"clone_A": 3, "clone_B": 2})
+    original_len = len(s)
+    drop_nan_values(s)
+    assert len(s) == original_len
+
+
+# ---------------------------------------------------------------------------
+# Group 14 – _bootstrap_diversity_iteration
+# ---------------------------------------------------------------------------
+
+
+def _make_clone_meta():
+    """Minimal metadata DataFrame for bootstrap diversity tests."""
+    return pd.DataFrame({"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]})
+
+
+def test_bootstrap_diversity_iteration_chao1():
+    """_bootstrap_diversity_iteration returns a non-negative float for chao1."""
+    result = _bootstrap_diversity_iteration(
+        _make_clone_meta(), "clone_id", "chao1", True, 5
+    )
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_diversity_iteration_shannon_normalized():
+    """_bootstrap_diversity_iteration returns a float for normalized shannon."""
+    result = _bootstrap_diversity_iteration(
+        _make_clone_meta(), "clone_id", "shannon", True, 5
+    )
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_diversity_iteration_shannon_unnormalized():
+    """_bootstrap_diversity_iteration returns a float for unnormalized shannon."""
+    result = _bootstrap_diversity_iteration(
+        _make_clone_meta(), "clone_id", "shannon", False, 5
+    )
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_diversity_iteration_gini():
+    """_bootstrap_diversity_iteration returns a non-negative float for gini."""
+    result = _bootstrap_diversity_iteration(
+        _make_clone_meta(), "clone_id", "gini", True, 5
+    )
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+# ---------------------------------------------------------------------------
+# Group 15 – _bootstrap_network
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_network_clone_degree(vdj2_with_clones):
+    """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
+    vdj, _ = vdj2_with_clones
+    vdj.to_pandas()
+    cluster_gini, vertex_gini = _bootstrap_network(
+        vdj,
+        "clone_id",
+        "clone_degree",
+        min_size=4,
+        expanded_only=False,
+        contracted=False,
+        layout_method="mod_fr",
+        n_cpus=2,
+    )
+    assert isinstance(cluster_gini, float)
+    assert isinstance(vertex_gini, float)
+
+
+def test_bootstrap_network_clone_centrality(vdj2_with_clones):
+    """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
+    vdj, _ = vdj2_with_clones
+    vdj.to_pandas()
+    cluster_gini, vertex_gini = _bootstrap_network(
+        vdj,
+        "clone_id",
+        "clone_centrality",
+        min_size=4,
+        expanded_only=False,
+        contracted=False,
+        layout_method="mod_fr",
+        n_cpus=2,
+    )
+    assert isinstance(cluster_gini, float)
+    assert isinstance(vertex_gini, float)
+
+
+def test_bootstrap_network_clone_network(vdj2_with_clones):
+    """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
+    vdj, _ = vdj2_with_clones
+    vdj.to_pandas()
+    cluster_gini, vertex_gini = _bootstrap_network(
+        vdj,
+        "clone_id",
+        "clone_network",
+        min_size=4,
+        expanded_only=False,
+        contracted=False,
+        layout_method="mod_fr",
+        n_cpus=2,
+    )
+    assert isinstance(cluster_gini, float)
+    assert isinstance(vertex_gini, float)
+
+
+# ---------------------------------------------------------------------------
+# h5ddl read / write tests (polars-specific)
+# ---------------------------------------------------------------------------
+
+
+def test_h5ddl_roundtrip_data_metadata(vdj_base, tmp_path):
+    """write_h5ddl / read_h5ddl preserves data shape and metadata cell_id column."""
+    from dandelion.polars.io._io import read_h5ddl
+
+    vdj, _ = vdj_base
+    n_data = vdj._data.collect().shape[0]
+    n_meta = vdj._metadata.collect().shape[0]
+
+    out_file = tmp_path / "test.h5ddl"
+    vdj.write_h5ddl(str(out_file))
+    vdj2 = read_h5ddl(str(out_file))
+
+    assert isinstance(vdj2._data, pl.LazyFrame)
+    assert vdj2._data.collect().shape[0] == n_data
+    assert vdj2._metadata is not None
+    assert vdj2._metadata.collect().shape[0] == n_meta
+    assert "cell_id" in vdj2._metadata.collect_schema()
+
+
+def test_h5ddl_roundtrip_graph_layout(vdj_with_network, tmp_path):
+    """write_h5ddl / read_h5ddl preserves graph and layout."""
+    from dandelion.polars.io._io import read_h5ddl
+
+    vdj, _ = vdj_with_network
+    out_file = tmp_path / "test_network.h5ddl"
+    vdj.write_h5ddl(str(out_file))
+    vdj2 = read_h5ddl(str(out_file))
+
+    assert vdj2.graph is not None
+    assert len(vdj2.graph) == 2
+    assert vdj2.layout is not None
+    assert len(vdj2.layout) == 2
+
+
+def test_h5ddl_roundtrip_csr_distances(airr_reannotated, dummy_adata, tmp_path):
+    """CSR distances are stored inline and read back as csr_matrix."""
+    from scipy.sparse import csr_matrix
+    from dandelion.polars.io._io import read_h5ddl
+
+    vdj = DandelionPolars(airr_reannotated)
+    vdj, _ = check_contigs(vdj, dummy_adata)
+    find_clones(vdj, store_distances=True)
+    assert isinstance(vdj.distances, csr_matrix)
+    dist_shape = vdj.distances.shape
+
+    out_file = tmp_path / "test_csr.h5ddl"
+    vdj.write_h5ddl(str(out_file))
+    vdj2 = read_h5ddl(str(out_file))
+
+    assert vdj2.distances is not None
+    assert isinstance(vdj2.distances, csr_matrix)
+    assert vdj2.distances.shape == dist_shape
+
+
+def test_h5ddl_roundtrip_dask_distances(
+    airr_reannotated, dummy_adata, tmp_path
+):
+    """Dask distances are written as a companion .zarr and auto-detected on read."""
+    import dask.array as da
+    from dandelion.polars.io._io import read_h5ddl
+
+    vdj = DandelionPolars(airr_reannotated)
+    vdj, _ = check_contigs(vdj, dummy_adata)
+    find_clones(vdj, store_distances=True)
+    dist_shape = vdj.distances.shape
+    # Simulate dask-backed distances
+    vdj.distances = da.from_array(vdj.distances.toarray())
+
+    out_file = tmp_path / "test_dask.h5ddl"
+    vdj.write_h5ddl(str(out_file))
+
+    # Companion zarr must exist alongside
+    zarr_path = out_file.with_suffix(".zarr")
+    assert zarr_path.exists()
+
+    # Auto-detected on read — no distance_zarr arg needed
+    vdj2 = read_h5ddl(str(out_file))
+    assert vdj2.distances is not None
+    assert isinstance(vdj2.distances, da.Array)
+    assert vdj2.distances.shape == dist_shape
+
+
+def test_h5ddl_compression(vdj_base, tmp_path):
+    """write_h5ddl with gzip compression round-trips correctly."""
+    from dandelion.polars.io._io import read_h5ddl
+
+    vdj, _ = vdj_base
+    n_data = vdj._data.collect().shape[0]
+
+    out_file = tmp_path / "test_compressed.h5ddl"
+    vdj.write_h5ddl(str(out_file), compression="gzip")
+    vdj2 = read_h5ddl(str(out_file))
+
+    assert vdj2._data.collect().shape[0] == n_data

@@ -1,6 +1,7 @@
 import pytest
 import json
 
+import numpy as np
 import pandas as pd
 import scanpy as sc
 
@@ -18,6 +19,13 @@ from dandelion.base.tools import (
     transfer,
     clone_diversity,
     clone_rarefaction,
+)
+from dandelion.base.tools._diversity import (
+    calculate_chao1,
+    calculate_shannon_entropy,
+    drop_nan_values,
+    _bootstrap_diversity_iteration,
+    _bootstrap_network,
 )
 
 
@@ -402,3 +410,169 @@ def test_diversity_anndata2(create_testfolder, method):
         adata, groupby="sample_id", method=method, n_boot=5
     )
     assert res
+
+
+# ---------------------------------------------------------------------------
+# Helper function unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_calculate_chao1_normal():
+    """calculate_chao1 returns a non-negative float for typical clone sizes."""
+    values = np.array([1, 1, 2, 5])
+    result = calculate_chao1(values)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_calculate_chao1_no_singletons():
+    """calculate_chao1 with no singletons still returns a non-negative float."""
+    values = np.array([3, 4, 5])
+    result = calculate_chao1(values)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_calculate_shannon_entropy_normalized_equal():
+    """Normalized Shannon entropy equals 1.0 for equal-sized clones."""
+    values = np.array([3, 3, 3])
+    result = calculate_shannon_entropy(values, normalize=True)
+    assert abs(result - 1.0) < 1e-9
+
+
+def test_calculate_shannon_entropy_normalized_unequal():
+    """Normalized Shannon entropy is in [0, 1] for unequal clone sizes."""
+    values = np.array([5, 2, 1])
+    result = calculate_shannon_entropy(values, normalize=True)
+    assert 0.0 <= result <= 1.0
+
+
+def test_calculate_shannon_entropy_single_value():
+    """Normalized Shannon entropy returns 0 for a single-clone repertoire."""
+    result = calculate_shannon_entropy(np.array([5]), normalize=True)
+    assert result == 0
+
+
+def test_calculate_shannon_entropy_unnormalized():
+    """Unnormalized Shannon entropy returns a non-negative float."""
+    values = np.array([3, 2, 1])
+    result = calculate_shannon_entropy(values, normalize=False)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_drop_nan_values_string_nan():
+    """drop_nan_values removes the string 'nan' key from a Series index."""
+    s = pd.Series({"clone_A": 3, "nan": 1, "clone_B": 2})
+    drop_nan_values(s)
+    assert "nan" not in s.index
+
+
+def test_drop_nan_values_float_nan():
+    """drop_nan_values removes np.nan from a Series index."""
+    s = pd.Series({np.nan: 1, "clone_A": 3})
+    drop_nan_values(s)
+    assert np.nan not in s.index
+
+
+def test_drop_nan_values_no_nan():
+    """drop_nan_values leaves a clean Series unchanged."""
+    s = pd.Series({"clone_A": 3, "clone_B": 2})
+    original_len = len(s)
+    drop_nan_values(s)
+    assert len(s) == original_len
+
+
+def test_bootstrap_diversity_iteration_chao1():
+    """_bootstrap_diversity_iteration returns a non-negative float for chao1."""
+    dat = pd.DataFrame(
+        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
+    )
+    result = _bootstrap_diversity_iteration(dat, "clone_id", "chao1", True, 5)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_diversity_iteration_shannon_normalized():
+    """_bootstrap_diversity_iteration returns a float for normalized shannon."""
+    dat = pd.DataFrame(
+        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
+    )
+    result = _bootstrap_diversity_iteration(
+        dat, "clone_id", "shannon", True, 5
+    )
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_diversity_iteration_shannon_unnormalized():
+    """_bootstrap_diversity_iteration returns a float for unnormalized shannon."""
+    dat = pd.DataFrame(
+        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
+    )
+    result = _bootstrap_diversity_iteration(
+        dat, "clone_id", "shannon", False, 5
+    )
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_diversity_iteration_gini():
+    """_bootstrap_diversity_iteration returns a non-negative float for gini."""
+    dat = pd.DataFrame(
+        {"clone_id": ["A", "A", "A", "B", "B", "C", "D", "E"]}
+    )
+    result = _bootstrap_diversity_iteration(dat, "clone_id", "gini", True, 5)
+    assert isinstance(result, float)
+    assert result >= 0
+
+
+def test_bootstrap_network_clone_degree(airr_reannotated2):
+    """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
+    vdj = check_contigs(airr_reannotated2)
+    find_clones(vdj)
+    cluster_gini, vertex_gini = _bootstrap_network(
+        vdj,
+        "clone_id",
+        "clone_degree",
+        min_size=4,
+        expanded_only=False,
+        contracted=False,
+        layout_method="mod_fr",
+    )
+    assert isinstance(cluster_gini, float)
+    assert isinstance(vertex_gini, float)
+
+
+def test_bootstrap_network_clone_centrality(airr_reannotated2):
+    """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
+    vdj = check_contigs(airr_reannotated2)
+    find_clones(vdj)
+    cluster_gini, vertex_gini = _bootstrap_network(
+        vdj,
+        "clone_id",
+        "clone_centrality",
+        min_size=4,
+        expanded_only=False,
+        contracted=False,
+        layout_method="mod_fr",
+    )
+    assert isinstance(cluster_gini, float)
+    assert isinstance(vertex_gini, float)
+
+
+def test_bootstrap_network_clone_network(airr_reannotated2):
+    """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
+    vdj = check_contigs(airr_reannotated2)
+    find_clones(vdj)
+    cluster_gini, vertex_gini = _bootstrap_network(
+        vdj,
+        "clone_id",
+        "clone_network",
+        min_size=4,
+        expanded_only=False,
+        contracted=False,
+        layout_method="mod_fr",
+    )
+    assert isinstance(cluster_gini, float)
+    assert isinstance(vertex_gini, float)
