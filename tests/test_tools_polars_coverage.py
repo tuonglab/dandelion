@@ -172,7 +172,7 @@ def test_transfer_main_view_expanded(vdj_with_network, dummy_adata):
     """Lines 1176-1199: main_view='expanded'."""
     vdj, adata = vdj_with_network
     transfer(adata, vdj, main_view="expanded")
-    assert "vdj_connectivities_expanded" in adata.obsp
+    assert "vdj_connectivities_expanded" in adata.uns["dandelion"]
 
 
 def test_transfer_main_view_all(vdj_with_network, dummy_adata):
@@ -204,7 +204,7 @@ def test_clone_view_expanded(vdj_with_network):
     try:
         clone_view(adata, mode="expanded")
     except KeyError:
-        pass  # X_vdj_expanded may not exist if no expanded clones
+        pass  # X_vdj_expanded may not exist in adata.uns['dandelion'] if no expanded clones
 
 
 def test_clone_view_full(vdj_with_network):

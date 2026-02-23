@@ -1069,8 +1069,8 @@ def transfer(
     """
     Transfer data in Dandelion slots to AnnData, updating `.obs`, `.uns`, `.obsm`, and `.obsp`.
     Transfers both graphs:
-      - graph[0] -> adata.obsm['X_vdj_all']
-      - graph[1] -> adata.obsm['X_vdj_expanded']
+      - graph[0] -> adata.uns['dandelion']['X_vdj_all']
+      - graph[1] -> adata.uns['dandelion']['X_vdj_expanded']
     The `main_view` flag controls which graph becomes the *main* adjacency written to
     adata.obsp['connectivities'] / ['distances'] (but both graphs are stored).
 
@@ -1162,11 +1162,11 @@ def transfer(
 
         # Stash RNA connectivities/distances before we overwrite connectivities/distances
         if not skip_stash:
-            # preferred stash from obsp if exist
-            recipient.obsp[g_connectivities_key] = recipient.obsp[
-                "connectivities"
-            ]
-            recipient.obsp[g_distances_key] = recipient.obsp["distances"]
+            # stash in uns["dandelion"] instead of obsp
+            recipient.uns.setdefault("dandelion", {})[g_connectivities_key] = (
+                recipient.obsp["connectivities"]
+            )
+            recipient.uns["dandelion"][g_distances_key] = recipient.obsp["distances"]
             g_neighbors_key = f"{gex_key}_{neighbors_key}"
             recipient.uns[g_neighbors_key] = recipient.uns[neighbors_key]
 
@@ -1199,30 +1199,24 @@ def transfer(
             main_idx = next(iter(graph_connectivities.keys()))
 
     if obsp:
-        # --- 4) Update recipient.obsp ---
+        # --- 4) Update recipient.obsp (active view only) ---
         recipient.obsp["connectivities"] = graph_connectivities[main_idx]
         recipient.obsp["distances"] = graph_distances[main_idx]
 
+        # store non-active views in uns["dandelion"] to keep .obsp clean
+        _ddl = recipient.uns.setdefault("dandelion", {})
         if main_idx != 2:
             # store the all (graph[0]) and expanded graph (graph[1]) if available
             if 0 in graph_connectivities:
-                recipient.obsp[f"{v_connectivities_key}_all"] = (
-                    graph_connectivities[0]
-                )
-                recipient.obsp[f"{v_distances_key}_all"] = graph_distances[0]
+                _ddl[f"{v_connectivities_key}_all"] = graph_connectivities[0]
+                _ddl[f"{v_distances_key}_all"] = graph_distances[0]
             if 1 in graph_connectivities:
-                recipient.obsp[f"{v_connectivities_key}_expanded"] = (
-                    graph_connectivities[1]
-                )
-                recipient.obsp[f"{v_distances_key}_expanded"] = graph_distances[
-                    1
-                ]
+                _ddl[f"{v_connectivities_key}_expanded"] = graph_connectivities[1]
+                _ddl[f"{v_distances_key}_expanded"] = graph_distances[1]
         else:
             if 2 in graph_connectivities:
-                recipient.obsp[f"{v_connectivities_key}_full"] = (
-                    graph_connectivities[2]
-                )
-                recipient.obsp[f"{v_distances_key}_full"] = graph_distances[2]
+                _ddl[f"{v_connectivities_key}_full"] = graph_connectivities[2]
+                _ddl[f"{v_distances_key}_full"] = graph_distances[2]
         recipient.uns[neighbors_key] = {
             "connectivities_key": "connectivities",
             "distances_key": "distances",
@@ -1310,13 +1304,15 @@ def transfer(
                     col1 = np.zeros_like(col0)
                     embedding = np.hstack([col0, col1])
 
-                recipient.obsm[obsm_name] = embedding
+                _ddl = recipient.uns.setdefault("dandelion", {})
+                _ddl[obsm_name] = embedding
                 stored_embeddings[idx] = obsm_name
 
             # Set the "active" embedding safely
             active_obsm = stored_embeddings.get(main_idx)
             if active_obsm is not None:
-                recipient.obsm["X_vdj"] = recipient.obsm[active_obsm]
+                _ddl = recipient.uns.setdefault("dandelion", {})
+                recipient.obsm["X_vdj"] = _ddl[active_obsm]
 
     # break up the message depending on which parts were executed
     message_parts = []
@@ -1324,7 +1320,7 @@ def transfer(
         message_parts += ["updated `.obs` with `.metadata`\n"]
     if obsm:
         message_parts += [
-            "wrote `.obsm['X_vdj']` and `.obsm['X_vdj_expanded']`\n"
+            "wrote `.obsm['X_vdj']` and `.uns['dandelion']['X_vdj_expanded']`\n"
         ]
     if obsp:
         message_parts += [
@@ -1504,15 +1500,20 @@ def clone_view(
     """
     if mode is None:
         # use the other key directly
-        if connectivities_key in adata.obsp:
-            adata.obsp["connectivities"] = adata.obsp[connectivities_key]
+        _ddl = adata.uns.get("dandelion", {})
+        if connectivities_key in _ddl:
+            adata.obsp["connectivities"] = _ddl[connectivities_key]
         else:
-            raise KeyError(f"{connectivities_key} not found in adata.obsp")
+            raise KeyError(
+                f"{connectivities_key} not found in adata.uns['dandelion']"
+            )
 
-        if distances_key in adata.obsp:
-            adata.obsp["distances"] = adata.obsp[distances_key]
+        if distances_key in _ddl:
+            adata.obsp["distances"] = _ddl[distances_key]
         else:
-            raise KeyError(f"{distances_key} not found in adata.obsp")
+            raise KeyError(
+                f"{distances_key} not found in adata.uns['dandelion']"
+            )
 
         if embedding_key is not None:
             if embedding_key in adata.obsm:
@@ -1530,10 +1531,17 @@ def clone_view(
             dist_key = f"vdj_distances_{mode}"
             neighbors_key = None
             emb_key = f"X_vdj_{mode}" if mode != "full" else None
-        adata.obsp["connectivities"] = adata.obsp[conn_key]
-        adata.obsp["distances"] = adata.obsp[dist_key]
+        _ddl = adata.uns.get("dandelion", {})
+        if conn_key not in _ddl:
+            raise KeyError(f"{conn_key} not found in adata.uns['dandelion']")
+        if dist_key not in _ddl:
+            raise KeyError(f"{dist_key} not found in adata.uns['dandelion']")
+        adata.obsp["connectivities"] = _ddl[conn_key]
+        adata.obsp["distances"] = _ddl[dist_key]
         if emb_key is not None:
-            adata.obsm["X_vdj"] = adata.obsm[emb_key]
+            if emb_key not in _ddl:
+                raise KeyError(f"{emb_key} not found in adata.uns['dandelion']")
+            adata.obsm["X_vdj"] = _ddl[emb_key]
         if neighbors_key is not None:
             adata.uns["neighbors"] = adata.uns[neighbors_key]
         else:
