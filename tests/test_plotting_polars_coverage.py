@@ -83,7 +83,7 @@ def test_stackedbarplot_sort_descending_none(vdj_simple):
     fig, ax = stackedbarplot(
         vdj,
         color="v_call_VDJ",
-        groupby="isotype",
+        group_by="isotype",
         sort_descending=None,
     )
     assert ax is not None
@@ -97,7 +97,7 @@ def test_stackedbarplot_legend_options_none(vdj_simple):
     fig, ax = stackedbarplot(
         vdj,
         color="v_call_VDJ",
-        groupby="isotype",
+        group_by="isotype",
         legend_options=None,
     )
     assert ax is not None
@@ -111,7 +111,7 @@ def test_stackedbarplot_with_labels(vdj_simple):
     fig, ax = stackedbarplot(
         vdj,
         color="v_call_VDJ",
-        groupby="isotype",
+        group_by="isotype",
         legend_options=None,
         labels=["group_A"],
     )
@@ -126,7 +126,7 @@ def test_stackedbarplot_xtick_fontsize(vdj_simple):
     fig, ax = stackedbarplot(
         vdj,
         color="v_call_VDJ",
-        groupby="isotype",
+        group_by="isotype",
         xtick_fontsize=10,
     )
     assert ax is not None
@@ -145,7 +145,7 @@ def test_spectratype_legend_options_none(vdj_simple):
     fig, ax = spectratype(
         vdj,
         color="junction_length",
-        groupby="c_call",
+        group_by="c_call",
         locus="IGH",
         legend_options=None,
     )
@@ -160,7 +160,7 @@ def test_spectratype_xtick_fontsize(vdj_simple):
     fig, ax = spectratype(
         vdj,
         color="junction_length",
-        groupby="c_call",
+        group_by="c_call",
         locus="IGH",
         xtick_fontsize=8,
     )
@@ -182,10 +182,10 @@ def adata_with_clone_overlap(airr_reannotated, dummy_adata):
     vdj, adata = check_contigs(vdj, dummy_adata)
     find_clones(vdj)
     transfer(adata, vdj)
-    # Add a groupby column (sample_id) to adata.obs for overlap computation
+    # Add a group_by column (sample_id) to adata.obs for overlap computation
     adata.obs["sample_id"] = ["S1", "S1", "S2", "S2", "S2"]
     # Compute clone_overlap -> populates adata.uns["clone_overlap"]
-    tl_clone_overlap(adata, groupby="sample_id")
+    tl_clone_overlap(adata, group_by="sample_id")
     return adata
 
 
@@ -200,7 +200,7 @@ def test_clone_overlap_unweighted(adata_with_clone_overlap):
     try:
         G = pl_clone_overlap(
             adata,
-            groupby="sample_id",
+            group_by="sample_id",
             return_graph=True,
         )
     except Exception:
@@ -219,11 +219,11 @@ def test_clone_overlap_weighted(adata_with_clone_overlap):
 
     adata = adata_with_clone_overlap
     # Recompute weighted overlap
-    tl_clone_overlap(adata, groupby="sample_id", weighted_overlap=True)
+    tl_clone_overlap(adata, group_by="sample_id", weighted_overlap=True)
     try:
         G = pl_clone_overlap(
             adata,
-            groupby="sample_id",
+            group_by="sample_id",
             weighted_overlap=True,
             return_graph=True,
         )
@@ -233,20 +233,20 @@ def test_clone_overlap_weighted(adata_with_clone_overlap):
 
 
 @pytest.mark.usefixtures("create_testfolder")
-def test_clone_overlap_colorby_different(adata_with_clone_overlap):
-    """Lines 863-868: groupby != colorby triggers different deduplication."""
+def test_clone_overlap_color_by_different(adata_with_clone_overlap):
+    """Lines 863-868: group_by != color_by triggers different deduplication."""
     from dandelion.polars.plotting._plotting import (
         clone_overlap as pl_clone_overlap,
     )
 
     adata = adata_with_clone_overlap
-    # Add a second groupby column
+    # Add a second group_by column
     adata.obs["tissue"] = ["T1", "T1", "T2", "T2", "T2"]
     try:
         pl_clone_overlap(
             adata,
-            groupby="sample_id",
-            colorby="tissue",
+            group_by="sample_id",
+            color_by="tissue",
             return_graph=True,
         )
     except Exception:
@@ -265,7 +265,7 @@ def test_clone_overlap_as_heatmap(adata_with_clone_overlap):
     try:
         result = pl_clone_overlap(
             adata,
-            groupby="sample_id",
+            group_by="sample_id",
             as_heatmap=True,
             return_heatmap_data=True,
         )
@@ -285,7 +285,7 @@ def test_clone_overlap_missing_uns(dummy_adata):
     adata = dummy_adata.copy()
     adata.obs["sample_id"] = ["S1"] * adata.n_obs
     with pytest.raises(KeyError):
-        pl_clone_overlap(adata, groupby="sample_id")
+        pl_clone_overlap(adata, group_by="sample_id")
 
 
 @pytest.mark.usefixtures("create_testfolder")
@@ -296,7 +296,7 @@ def test_clone_overlap_not_anndata():
     )
 
     with pytest.raises(ValueError):
-        pl_clone_overlap("not_an_anndata", groupby="sample_id")
+        pl_clone_overlap("not_an_anndata", group_by="sample_id")
 
 
 @pytest.mark.usefixtures("create_testfolder")
@@ -310,7 +310,7 @@ def test_clone_overlap_color_mapping_dict(adata_with_clone_overlap):
     try:
         pl_clone_overlap(
             adata,
-            groupby="sample_id",
+            group_by="sample_id",
             color_mapping={"S1": "#ff0000", "S2": "#0000ff"},
             return_graph=True,
         )
@@ -331,7 +331,7 @@ def test_clone_overlap_color_mapping_from_uns(adata_with_clone_overlap):
     try:
         pl_clone_overlap(
             adata,
-            groupby="sample_id",
+            group_by="sample_id",
             return_graph=True,
         )
     except Exception:

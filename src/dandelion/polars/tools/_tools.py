@@ -1608,7 +1608,7 @@ def _categorize_clone_size(size: int | float, max_size: int) -> str | float:
 
 def clone_size(
     vdj: DandelionPolars | AnnData | MuData,
-    groupby: str | None = None,
+    group_by: str | None = None,
     max_size: int | None = None,
     clone_key: str | None = None,
     key_added: str | None = None,
@@ -1616,7 +1616,7 @@ def clone_size(
     """
     Quantify clone sizes, globally or per group.
 
-    If `groupby` is specified, clone sizes and proportions are calculated
+    If `group_by` is specified, clone sizes and proportions are calculated
     within each group separately. Each cell is then annotated with the size,
     proportion, and frequency category based on sizes similar to scRepertoire.
     If a cell belongs to multiple clones (e.g., multiple chains assigned
@@ -1626,7 +1626,7 @@ def clone_size(
     ----------
     vdj : Dandelion | AnnData | MuData
         VDJ data.
-    groupby : str | None, optional
+    group_by : str | None, optional
         Column in metadata to group by before calculating clone sizes.
         If None, calculates global clone sizes.
     max_size : int | None, optional
@@ -1663,11 +1663,11 @@ def clone_size(
     tmp.columns = ["cell_id", "tmp", clone_key]
 
     # --- Compute clone sizes (global or per group)
-    if groupby is None:
+    if group_by is None:
         clonesize = tmp[clone_key].value_counts()
         prop = clonesize / metadata_.shape[0]
     else:
-        # Merge with groupby column using cell_id as key
+        # Merge with group_by column using cell_id as key
         # Reset index to make cell_id a regular column for merging
         metadata_with_index = metadata_.reset_index()
         metadata_with_index = metadata_with_index.rename(
@@ -1675,10 +1675,10 @@ def clone_size(
         )
 
         tmp = tmp.merge(
-            metadata_with_index[["cell_id", groupby]], on="cell_id", how="left"
+            metadata_with_index[["cell_id", group_by]], on="cell_id", how="left"
         )
-        clonesize = tmp.groupby([groupby, clone_key]).size()
-        group_sizes = metadata_[groupby].value_counts()
+        clonesize = tmp.groupby([group_by, clone_key]).size()
+        group_sizes = metadata_[group_by].value_counts()
 
         # Calculate proportion correctly for each group
         prop_dict = {}
@@ -1691,7 +1691,7 @@ def clone_size(
         # Create Series with MultiIndex
         prop = pd.Series(prop_dict)
         prop.index = pd.MultiIndex.from_tuples(
-            prop.index, names=[groupby, clone_key]
+            prop.index, names=[group_by, clone_key]
         )
 
     # --- Create max_size categories if specified
@@ -1707,7 +1707,7 @@ def clone_size(
     # --- Define clone frequency bins
     bins = [0, 0.0001, 0.001, 0.01, 0.1, 1]
     labels = ["Rare", "Small", "Medium", "Large", "Hyperexpanded"]
-    if groupby is None:
+    if group_by is None:
         prop_bins = pd.cut(prop, bins=bins, labels=labels, include_lowest=True)
     else:
         # Apply pd.cut to the entire Series at once, preserving the MultiIndex
@@ -1742,7 +1742,7 @@ def clone_size(
 
         clones = clone_ids.split("|")
 
-        if groupby is None:
+        if group_by is None:
             # look up sizes directly
             sizes = [size_map.get(c, np.nan) for c in clones]
             props = [prop_map.get(c, np.nan) for c in clones]
@@ -1750,7 +1750,7 @@ def clone_size(
             if max_size is not None:
                 size_cats = [clonesize_cat_map.get(c, np.nan) for c in clones]
         else:
-            grp = row[groupby]
+            grp = row[group_by]
             # Use tuple keys for grouped lookups
             sizes = [size_map.get((grp, c), np.nan) for c in clones]
             props = [prop_map.get((grp, c), np.nan) for c in clones]
@@ -1825,7 +1825,7 @@ def clone_size(
 
 def clone_overlap(
     vdj: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     min_clone_size: int | None = None,
     weighted_overlap: bool = False,
     clone_key: str | None = None,
@@ -1837,8 +1837,8 @@ def clone_overlap(
     ----------
     vdj : DandelionPolars | AnnData
         DandelionPolars or AnnData object.
-    groupby : str
-        column name in obs/metadata for collapsing to columns in the clone_id x groupby data frame.
+    group_by : str
+        column name in obs/metadata for collapsing to columns in the clone_id x group_by data frame.
     min_clone_size : int | None, optional
         minimum size of clone for plotting connections. Defaults to 2 if left as None.
     weighted_overlap : bool, optional
@@ -1850,7 +1850,7 @@ def clone_overlap(
     Returns
     -------
     pd.DataFrame
-        clone_id x groupby overlap :class:`pandas.core.frame.DataFrame'.
+        clone_id x group_by overlap :class:`pandas.core.frame.DataFrame'.
 
     Raises
     ------
@@ -1878,7 +1878,7 @@ def clone_overlap(
         clone_ = clone_key
 
     # get rid of problematic rows that appear because of category conversion?
-    allgroups = list(data[groupby].unique())
+    allgroups = list(data[group_by].unique())
     data = data[
         ~(
             data[clone_].isin(
@@ -1909,10 +1909,10 @@ def clone_overlap(
             )
         )
     ]
-    dictg_ = dict(data[groupby])
-    datc_[groupby] = [dictg_[cell] for cell in datc_["cell_id"]]
+    dictg_ = dict(data[group_by])
+    datc_[group_by] = [dictg_[cell] for cell in datc_["cell_id"]]
 
-    overlap = pd.crosstab(datc_[clone_], datc_[groupby])
+    overlap = pd.crosstab(datc_[clone_], datc_[group_by])
     for x in allgroups:
         if x not in overlap:
             overlap[x] = 0
@@ -2073,7 +2073,7 @@ def _vj_usage_context(
 def vj_usage_pca(
     adata: AnnData,
     vdj: DandelionPolars,
-    groupby: str,
+    group_by: str,
     min_size: int = 20,
     mode: Literal["B", "abT", "gdT"] = "abT",
     use_vdj_v: bool = True,
@@ -2101,8 +2101,8 @@ def vj_usage_pca(
         AnnData object holding the cell level metadata.
     vdj : DandelionPolars
         Dandelion VDJ object to extract V/J usage from.
-    groupby : str
-        Column name in `adata.obs` to groupby as observations for PCA.
+    group_by : str
+        Column name in `adata.obs` to group_by as observations for PCA.
     min_size : int, optional
         Minimum cell size numbers to keep for computing the final matrix. Defaults to 20.
     mode : Literal["B", "abT", "gdT"], optional
@@ -2145,7 +2145,7 @@ def vj_usage_pca(
             ].copy()
 
         if groups is not None:
-            adata_ = adata_[adata_.obs[groupby].isin(groups)].copy()
+            adata_ = adata_[adata_.obs[group_by].isin(groups)].copy()
 
         # build config - now using the temporarily added columns
         gene_config = {
@@ -2174,7 +2174,7 @@ def vj_usage_pca(
             raise ValueError("At least one of the use_vj/vdj_v/j must be True.")
 
         # Determine which groups to keep
-        cell_counts = adata_.obs[groupby].value_counts()
+        cell_counts = adata_.obs[group_by].value_counts()
         keep_groups = cell_counts[cell_counts >= min_size].index
 
         # collect gene lists
@@ -2203,7 +2203,7 @@ def vj_usage_pca(
             desc="Tabulating V/J gene usage",
             disable=not verbose,
         ):
-            group_mask = adata_.obs[groupby] == group
+            group_mask = adata_.obs[group_by] == group
             obs_group = adata_.obs.loc[group_mask]
 
             for key, cfg in gene_config.items():
@@ -2247,9 +2247,9 @@ def vj_usage_pca(
     # Transfer old obs columns to new AnnData
     if transfer_mapping is not None:
         # Need to get the original adata for this
-        collapsed = adata.obs.drop_duplicates(subset=groupby)
+        collapsed = adata.obs.drop_duplicates(subset=group_by)
         for to in transfer_mapping:
-            mapping = dict(zip(collapsed[groupby], collapsed[to]))
+            mapping = dict(zip(collapsed[group_by], collapsed[to]))
             vdj_adata.obs[to] = vdj_adata.obs.index.map(mapping)
 
     logg.info(
@@ -3526,7 +3526,7 @@ def concat(
 def productive_ratio(
     adata: AnnData,
     vdj: DandelionPolars,
-    groupby: str,
+    group_by: str,
     groups: list[str] | None = None,
     locus: Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"] = "TRB",
 ):
@@ -3544,7 +3544,7 @@ def productive_ratio(
         AnnData object holding the cell level metadata (`.obs`).
     vdj : DandelionPolars
         DandelionPolars object holding the repertoire data (`.data`).
-    groupby : str
+    group_by : str
         Name of column in `AnnData.obs` to return the row tabulations.
     groups : list[str] | None, optional
         Optional list of categories to return.
@@ -3578,10 +3578,10 @@ def productive_ratio(
 
     # Determine groups if not provided
     if groups is None:
-        if is_categorical(adata.obs[groupby]):
-            groups = list(adata.obs[groupby].cat.categories)
+        if is_categorical(adata.obs[group_by]):
+            groups = list(adata.obs[group_by].cat.categories)
         else:
-            groups = list(set(adata.obs[groupby]))
+            groups = list(set(adata.obs[group_by]))
 
     # Initialize results DataFrame
     res = pd.DataFrame(
@@ -3595,12 +3595,12 @@ def productive_ratio(
     # Calculate ratios per group
     for i in range(res.shape[0]):
         cell = res.index[i]
-        res.loc[cell, "total"] = sum(adata.obs[groupby] == cell)
+        res.loc[cell, "total"] = sum(adata.obs[group_by] == cell)
         if res.loc[cell, "total"] > 0:
             res.loc[cell, "productive"] = (
                 sum(
                     adata.obs.loc[
-                        adata.obs[groupby] == cell, locus + "_productive"
+                        adata.obs[group_by] == cell, locus + "_productive"
                     ].isin(["T"])
                 )
                 / res.loc[cell, "total"]
@@ -3609,16 +3609,16 @@ def productive_ratio(
             res.loc[cell, "non-productive"] = (
                 sum(
                     adata.obs.loc[
-                        adata.obs[groupby] == cell, locus + "_productive"
+                        adata.obs[group_by] == cell, locus + "_productive"
                     ].isin(["F"])
                 )
                 / res.loc[cell, "total"]
                 * 100
             )
 
-    res[groupby] = res.index
+    res[group_by] = res.index
     res["productive+non-productive"] = res["productive"] + res["non-productive"]
-    out = {"results": res, "locus": locus, "groupby": groupby}
+    out = {"results": res, "locus": locus, "group_by": group_by}
     adata.uns["productive_ratio"] = out
     logg.info(
         " finished",

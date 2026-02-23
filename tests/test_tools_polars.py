@@ -168,7 +168,7 @@ def test_diversity_anndata(create_testfolder, method):
     adata = sc.read_h5ad(f)
     res, _ = clone_diversity(
         adata,
-        groupby="sample_id",
+        group_by="sample_id",
         method=method,
         n_boot=5,
     )
@@ -195,7 +195,7 @@ def test_diversity_shannon(create_testfolder, normalize):
     vdj.update_data()
     res, _ = clone_diversity(
         vdj,
-        groupby="sample_id",
+        group_by="sample_id",
         method="shannon",
         normalize=normalize,
         n_boot=5,
@@ -225,7 +225,7 @@ def test_diversity_min_size_too_small(create_testfolder, method):
     with pytest.raises(ValueError):
         clone_diversity(
             vdj,
-            groupby="sample_id",
+            group_by="sample_id",
             method=method,
             min_size=6,
             n_boot=5,
@@ -252,7 +252,7 @@ def test_diversity_min_size_ok(create_testfolder, method):
     vdj.update_data()
     res, _ = clone_diversity(
         vdj,
-        groupby="sample_id",
+        group_by="sample_id",
         method=method,
         min_size=3,
         n_boot=5,
@@ -286,8 +286,8 @@ def test_diversity_rarefaction_ad(mock_show, create_testfolder):
     """test rarefaction"""
     f = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f)
-    clone_rarefaction(adata, groupby="sample_id")
-    clone_rarefaction(adata, groupby="sample_id", plot=True)
+    clone_rarefaction(adata, group_by="sample_id")
+    clone_rarefaction(adata, group_by="sample_id", plot=True)
 
 
 @patch("matplotlib.pyplot.show")
@@ -302,8 +302,8 @@ def test_diversity_rarefaction_ddl(mock_show, create_testfolder):
         split=False,
         unique=True,
     )
-    clone_rarefaction(vdj, groupby="sample_id")
-    clone_rarefaction(vdj, groupby="sample_id", plot=True)
+    clone_rarefaction(vdj, group_by="sample_id")
+    clone_rarefaction(vdj, group_by="sample_id", plot=True)
 
 
 @pytest.mark.usefixtures("create_testfolder")
@@ -320,7 +320,7 @@ def test_diversity_gini2(create_testfolder, use_network):
     )
     res, _ = clone_diversity(
         vdj,
-        groupby="sample_id",
+        group_by="sample_id",
         min_size=6,
         key="sequence",
         n_boot=5,
@@ -346,7 +346,7 @@ def test_diversity_gini3(create_testfolder, metric):
     )
     res, _ = clone_diversity(
         vdj,
-        groupby="sample_id",
+        group_by="sample_id",
         min_size=6,
         key="sequence",
         n_boot=5,
@@ -368,7 +368,7 @@ def test_diversity2a(create_testfolder):
     )
     res, _ = clone_diversity(
         vdj,
-        groupby="sample_id",
+        group_by="sample_id",
         reconstruct_network=False,
         key="sequence",
         n_boot=5,
@@ -388,7 +388,7 @@ def test_diversity2b(create_testfolder):
         unique=True,
     )
     res, _ = clone_diversity(
-        vdj, groupby="sample_id", use_contracted=True, key="sequence", n_boot=5
+        vdj, group_by="sample_id", use_contracted=True, key="sequence", n_boot=5
     )
     assert res
 
@@ -405,7 +405,7 @@ def test_diversity2c(create_testfolder):
         unique=True,
     )
     res, _ = clone_diversity(
-        vdj, groupby="sample_id", key="sequence", return_table=True, n_boot=5
+        vdj, group_by="sample_id", key="sequence", return_table=True, n_boot=5
     )
     assert res
 
@@ -434,7 +434,7 @@ def test_diversity_anndata2(create_testfolder, method):
     f = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f)
     res, _ = clone_diversity(
-        adata, groupby="sample_id", method=method, n_boot=5
+        adata, group_by="sample_id", method=method, n_boot=5
     )
     assert res
 

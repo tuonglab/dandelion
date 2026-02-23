@@ -92,7 +92,7 @@ def test_plot_stackedbar(create_testfolder, norm):
     f = create_testfolder / "test.h5ddl"
     vdj = read_h5ddl(f)
     ax = stackedbarplot(
-        vdj, color="v_call_VDJ", groupby="isotype", normalize=norm
+        vdj, color="v_call_VDJ", group_by="isotype", normalize=norm
     )
     assert ax is not None
 
@@ -108,7 +108,7 @@ def test_plot_stackedbar2(create_testfolder, norm):
     ax = stackedbarplot(
         vdj,
         color="v_call_VDJ",
-        groupby="isotype",
+        group_by="isotype",
         min_clone_size=2,
         clone_key="clone_id",
         title="test",
@@ -119,7 +119,7 @@ def test_plot_stackedbar2(create_testfolder, norm):
     ax = stackedbarplot(
         adata,
         color="v_call_VDJ",
-        groupby="isotype",
+        group_by="isotype",
         normalize=norm,
     )
     assert ax is not None
@@ -131,13 +131,13 @@ def test_plot_spectratype(create_testfolder):
     f = create_testfolder / "test.h5ddl"
     vdj = read_h5ddl(f)
     ax = spectratype(
-        vdj, color="junction_length", groupby="c_call", locus="IGH"
+        vdj, color="junction_length", group_by="c_call", locus="IGH"
     )
     assert ax is not None
     ax = spectratype(
         vdj,
         color="junction_length",
-        groupby="c_call",
+        group_by="c_call",
         locus="IGH",
         hide_legend=False,
         width=1,
@@ -155,14 +155,14 @@ def test_plot_clone_bubbleplot(create_testfolder):
     vdj = read_h5ddl(f)
     f2 = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f2)
-    ax = clone_bubbleplot(vdj, groupby="isotype")
+    ax = clone_bubbleplot(vdj, group_by="isotype")
     assert ax is not None
-    ax = clone_bubbleplot(adata, groupby="isotype")
+    ax = clone_bubbleplot(adata, group_by="isotype")
     assert ax is not None
     # palette as a complete nested dict
     ax = clone_bubbleplot(
         adata,
-        groupby="isotype",
+        group_by="isotype",
         palette={
             "isotype": {"IgM": "#ff7f0e", "IgK": "#1f77b4", "IgL": "#2ca02c"}
         },
@@ -171,21 +171,21 @@ def test_plot_clone_bubbleplot(create_testfolder):
     # palette as a partial nested dict (missing keys get auto-assigned)
     ax = clone_bubbleplot(
         adata,
-        groupby="isotype",
+        group_by="isotype",
         palette={"isotype": {"IgM": "#ff0000"}},
     )
     assert ax is not None
     # palette as a list per level
     ax = clone_bubbleplot(
         adata,
-        groupby="isotype",
+        group_by="isotype",
         palette={"isotype": ["#ff7f0e", "#1f77b4", "#2ca02c"]},
     )
     assert ax is not None
     # list palette for both levels of nested hierarchy
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         palette={
             "group2": ["red", "blue"],
             "group3": ["green", "orange", "purple"],
@@ -195,14 +195,14 @@ def test_plot_clone_bubbleplot(create_testfolder):
     # nested hierarchy with palette only for outer level
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         palette={"group2": {"a": "#ff7f0e", "b": "#1f77b4"}},
     )
     assert ax is not None
     # nested hierarchy with palette for both levels
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         palette={
             "group2": {"a": "#ff7f0e", "b": "#1f77b4"},
             "group3": {"a": "#2ca02c", "b": "#e377c2", "c": "#bcbd22"},
@@ -212,20 +212,20 @@ def test_plot_clone_bubbleplot(create_testfolder):
     # AnnData with nested hierarchy, palette for outer level only
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         palette={"group2": {"a": "#ff7f0e", "b": "#1f77b4"}},
     )
     assert ax is not None
     # AnnData with palette dict for single level
     ax = clone_bubbleplot(
         adata,
-        groupby="isotype",
+        group_by="isotype",
         palette={"isotype": {"IgM": "#ff7f0e", "IgK": "#1f77b4"}},
     )
     assert ax is not None
     ax = clone_bubbleplot(
         vdj,
-        groupby="isotype",
+        group_by="isotype",
         min_clone_size=2,
         clone_key="clone_id",
         title="test",
@@ -238,30 +238,30 @@ def test_plot_clone_bubbleplot(create_testfolder):
     assert ax is not None
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         legend_kwargs={"loc": "upper right"},
     )
     assert ax is not None
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         show_legend=["group2"],
     )
     assert ax is not None
     ax = clone_bubbleplot(
         adata,
-        groupby=["group2", "group3"],
+        group_by=["group2", "group3"],
         show_legend="group2",
     )
     assert ax is not None
-    ax = clone_bubbleplot(vdj, groupby="isotype", show_count_labels=True)
+    ax = clone_bubbleplot(vdj, group_by="isotype", show_count_labels=True)
     assert ax is not None
     ax = clone_bubbleplot(
         vdj,
-        groupby="isotype",
+        group_by="isotype",
         show_clone_labels=True,
         show_count_labels=True,
     )
     assert ax is not None
     with pytest.raises(ValueError):
-        clone_bubbleplot(vdj, groupby="isotype", min_clone_size=999)
+        clone_bubbleplot(vdj, group_by="isotype", min_clone_size=999)

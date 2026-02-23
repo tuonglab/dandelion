@@ -44,22 +44,22 @@ def test_clone_overlap(
     with pytest.raises(KeyError):
         clone_overlap_plot(
             dummy_adata_mouse,
-            groupby="sample_idx",
+            group_by="sample_idx",
         )
-    clone_overlap(dummy_adata_mouse, groupby="sample_idx")
+    clone_overlap(dummy_adata_mouse, group_by="sample_idx")
     assert "clone_overlap" in dummy_adata_mouse.uns
     clone_overlap_plot(
         dummy_adata_mouse,
-        groupby="sample_idx",
+        group_by="sample_idx",
     )
     with pytest.raises(ValueError):
         clone_overlap_plot(
             vdj,
-            groupby="sample_idx",
+            group_by="sample_idx",
         )
     G = clone_overlap_plot(
         dummy_adata_mouse,
-        groupby="sample_idx",
+        group_by="sample_idx",
         weighted_overlap=False,
         save=create_testfolder / "test.png",
         return_graph=True,
@@ -68,7 +68,7 @@ def test_clone_overlap(
 
     G = clone_overlap_plot(
         dummy_adata_mouse,
-        groupby="sample_idx",
+        group_by="sample_idx",
         weighted_overlap=True,
         scale_edge_lambda=lambda x: x * 10,
         return_graph=True,
@@ -77,13 +77,13 @@ def test_clone_overlap(
 
     clone_overlap_plot(
         dummy_adata_mouse,
-        groupby="sample_idx",
+        group_by="sample_idx",
         as_heatmap=True,
     )
 
     out = clone_overlap_plot(
         dummy_adata_mouse,
-        groupby="sample_idx",
+        group_by="sample_idx",
         as_heatmap=True,
         return_heatmap_data=True,
     )

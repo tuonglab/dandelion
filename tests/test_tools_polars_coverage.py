@@ -251,11 +251,11 @@ def test_clone_size_with_anndata_max_size(vdj_with_network):
     assert "clone_id_size" in adata.obs.columns
 
 
-def test_clone_size_with_groupby(vdj_with_network):
-    """clone_size with groupby parameter."""
+def test_clone_size_with_group_by(vdj_with_network):
+    """clone_size with group_by parameter."""
     vdj, adata = vdj_with_network
     adata.obs["sample_id"] = ["S1", "S1", "S2", "S2", "S2"]
-    clone_size(adata, groupby="sample_id")
+    clone_size(adata, group_by="sample_id")
     assert "clone_id_size" in adata.obs.columns
 
 
@@ -284,7 +284,7 @@ def test_clone_overlap_dandelion(vdj_base, dummy_adata):
     vdj, adata = vdj_base
     adata.obs["sample_id"] = ["S1", "S1", "S2", "S2", "S2"]
     transfer(adata, vdj)
-    clone_overlap(adata, groupby="sample_id")
+    clone_overlap(adata, group_by="sample_id")
     assert "clone_overlap" in adata.uns
 
 
@@ -293,7 +293,7 @@ def test_clone_overlap_dandelion_direct(vdj_base):
     vdj, adata = vdj_base
     adata.obs["sample_id"] = ["S1", "S1", "S2", "S2", "S2"]
     transfer(adata, vdj)
-    result = clone_overlap(vdj, groupby="sample_id")
+    result = clone_overlap(vdj, group_by="sample_id")
     assert result is not None
 
 
@@ -302,7 +302,7 @@ def test_clone_overlap_weighted(vdj_base, dummy_adata):
     vdj, adata = vdj_base
     adata.obs["sample_id"] = ["S1", "S1", "S2", "S2", "S2"]
     transfer(adata, vdj)
-    result = clone_overlap(vdj, groupby="sample_id", weighted_overlap=True)
+    result = clone_overlap(vdj, group_by="sample_id", weighted_overlap=True)
     assert result is not None
 
 
@@ -317,7 +317,7 @@ def test_clone_overlap_mudata(vdj_base):
         transfer(adata, vdj)
         mdata = MuData({"airr": adata, "gex": adata.copy()})
         # clone_overlap with MuData uses hasattr(vdj, "mod") path
-        result = clone_overlap(mdata, groupby="sample_id")
+        result = clone_overlap(mdata, group_by="sample_id")
         # Returns a DataFrame for non-AnnData inputs
         assert result is not None
     except ImportError:
@@ -330,7 +330,7 @@ def test_clone_overlap_min_size_zero_raises(vdj_base, dummy_adata):
     adata.obs["sample_id"] = ["S1", "S1", "S2", "S2", "S2"]
     transfer(adata, vdj)
     with pytest.raises(ValueError):
-        clone_overlap(adata, groupby="sample_id", min_clone_size=0)
+        clone_overlap(adata, group_by="sample_id", min_clone_size=0)
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +605,7 @@ def test_clone_diversity_gini_network(vdj2_with_clones, dummy_adata2):
     try:
         res, _ = clone_diversity(
             adata,
-            groupby="sample_id",
+            group_by="sample_id",
             method="gini",
             use_network=True,
             network_metric="clone_network",
@@ -628,7 +628,7 @@ def test_clone_diversity_gini_no_network(airr_reannotated2, dummy_adata2):
     ]
     res, _ = clone_diversity(
         adata,
-        groupby="sample_id",
+        group_by="sample_id",
         method="gini",
         use_network=False,
         n_boot=3,
@@ -657,7 +657,7 @@ def test_clone_rarefaction_anndata(airr_reannotated2, dummy_adata2):
         index=[f"cell_{i}" for i in range(n)],
     )
     adata = ad.AnnData(obs=obs)
-    result = clone_rarefaction(adata, groupby="sample_id")
+    result = clone_rarefaction(adata, group_by="sample_id")
     assert result is not None
 
 
@@ -684,7 +684,7 @@ def test_clone_rarefaction_dandelion(airr_reannotated2, dummy_adata2):
         )
         .drop("_idx")
     )
-    result = clone_rarefaction(vdj, groupby="sample_id")
+    result = clone_rarefaction(vdj, group_by="sample_id")
     assert result is not None
 
 
@@ -702,7 +702,7 @@ def test_clone_rarefaction_with_plot(airr_reannotated2, dummy_adata2):
         str(i % 2) + "_sample" for i in range(adata.n_obs)
     ]
     try:
-        result = clone_rarefaction(adata, groupby="sample_id", plot=True)
+        result = clone_rarefaction(adata, group_by="sample_id", plot=True)
         assert result is not None
     except Exception:
         pass  # plotnine might fail in headless; just ensure lines are hit

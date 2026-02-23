@@ -171,7 +171,7 @@ def barplot(
 def stackedbarplot(
     data: AnnData | Dandelion,
     color: str,
-    groupby: str | None,
+    group_by: str | None,
     figsize: tuple[float, float] = (8, 3),
     normalize: bool = False,
     title: str | None = None,
@@ -198,14 +198,12 @@ def stackedbarplot(
         Dandelion or AnnData object.
     color : str
         column name in metadata for plotting in bar plot.
-    groupby : str | None
+    group_by : str | None
         column name in metadata to split by during plotting.
     figsize : tuple[float, float], optional
         figure size.
     normalize : bool, optional
         if True, will return as proportion out of 1, otherwise False will return counts.
-    title : str | None, optional
-        title of plot.
     sort_descending : bool, optional
         whether or not to sort the order of the plot.
     xtick_fontsize : int | None, optional
@@ -235,7 +233,7 @@ def stackedbarplot(
     elif isinstance(data, AnnData):
         data = data.obs.copy()
     # quick fix to prevent dropping of nan
-    data[groupby] = [str(l) for l in data[groupby]]
+    data[group_by] = [str(l) for l in data[group_by]]
 
     min_size = min_clone_size
 
@@ -249,7 +247,7 @@ def stackedbarplot(
     data_ = data[data[clone_].isin(keep)]
 
     dat_ = pd.DataFrame(
-        data_.groupby(color)[groupby]
+        data_.groupby(color)[group_by]
         .value_counts(normalize=normalize)
         .unstack(fill_value=0)
         .stack(),
@@ -257,7 +255,7 @@ def stackedbarplot(
     )
     dat_.reset_index(drop=False, inplace=True)
     dat_order = pd.DataFrame(data[color].value_counts(normalize=normalize))
-    dat_ = dat_.pivot(index=color, columns=groupby, values="value")
+    dat_ = dat_.pivot(index=color, columns=group_by, values="value")
     if sort_descending is True:
         dat_ = dat_.reindex(dat_order.index)
     elif sort_descending is False:
@@ -407,7 +405,7 @@ def stackedbarplot(
 def spectratype(
     vdj: Dandelion,
     color: str,
-    groupby: str,
+    group_by: str,
     locus: str,
     figsize: tuple[float, float] = (5, 3),
     width: int | float | None = None,
@@ -432,7 +430,7 @@ def spectratype(
         Dandelion object.
     color : str
         column name in metadata for plotting in bar plot.
-    groupby : str
+    group_by : str
         column name in metadata to split by during plotting.
     locus : str
         either IGH or IGL.
@@ -469,9 +467,9 @@ def spectratype(
     if type(locus) is not list:
         locus = [locus]
     data = data[data["locus"].isin(locus)].copy()
-    data[groupby] = [str(l) for l in data[groupby]]
+    data[group_by] = [str(l) for l in data[group_by]]
     dat_ = pd.DataFrame(
-        data.groupby(color)[groupby]
+        data.groupby(color)[group_by]
         .value_counts(normalize=False)
         .unstack(fill_value=0)
         .stack(),
@@ -480,7 +478,7 @@ def spectratype(
     dat_.reset_index(drop=False, inplace=True)
     dat_[color] = pd.to_numeric(dat_[color], errors="coerce")
     dat_.sort_values(by=color)
-    dat_2 = dat_.pivot(index=color, columns=groupby, values="value")
+    dat_2 = dat_.pivot(index=color, columns=group_by, values="value")
     new_index = range(0, int(dat_[color].max()) + 1)
     dat_2 = dat_2.reindex(new_index, fill_value=0)
 
@@ -628,8 +626,8 @@ def spectratype(
 
 def clone_overlap(
     adata: AnnData,
-    groupby: str,
-    colorby: str | None = None,
+    group_by: str,
+    color_by: str | None = None,
     weighted_overlap: bool = False,
     clone_key: str | None = None,
     color_mapping: list | dict | None = None,
@@ -657,10 +655,10 @@ def clone_overlap(
     ----------
     adata : AnnData
         AnnData object.
-    groupby : str
+    group_by : str
         column name in obs for collapsing to nodes in circos plot.
-    colorby : str | None, optional
-        column name in obs for grouping and color of nodes in plot. Must be a same or subcategory of the `groupby` categories e.g. `groupby="group_tissue", colorby="tissue"`.
+    color_by : str | None, optional
+        column name in obs for grouping and color of nodes in plot. Must be a same or subcategory of the `group_by` categories e.g. `group_by="group_tissue", color_by="tissue"`.
     weighted_overlap : bool, optional
         if True, instead of collapsing to overlap to binary, edge thickness will reflect the number of
         cells found in the overlap. In the future, there will be the option to use something like a jaccard
@@ -790,12 +788,15 @@ def clone_overlap(
                     )
                 ]
 
-    colorby = groupby if colorby is None else colorby
+    color_by = group_by if color_by is None else color_by
     # create graph
     G = nx.Graph()
     # add in the nodes
     G.add_nodes_from(
-        [(p, {str(colorby): d}) for p, d in zip(data[groupby], data[colorby])]
+        [
+            (p, {str(color_by): d})
+            for p, d in zip(data[group_by], data[color_by])
+        ]
     )
 
     # unpack the edgelist and add to the graph
@@ -808,55 +809,55 @@ def clone_overlap(
         weighted_attr = "weight"
 
     if color_mapping is None:
-        if str(colorby) + "_colors" in adata.uns:
-            if pd.api.types.is_categorical_dtype(adata.obs[groupby]):
-                colorby_dict = dict(
+        if str(color_by) + "_colors" in adata.uns:
+            if pd.api.types.is_categorical_dtype(adata.obs[group_by]):
+                color_by_dict = dict(
                     zip(
-                        list(adata.obs[str(colorby)].cat.categories),
-                        adata.uns[str(colorby) + "_colors"],
+                        list(adata.obs[str(color_by)].cat.categories),
+                        adata.uns[str(color_by) + "_colors"],
                     )
                 )
             else:
-                colorby_dict = dict(
+                color_by_dict = dict(
                     zip(
-                        list(adata.obs[str(colorby)].unique()),
-                        adata.uns[str(colorby) + "_colors"],
+                        list(adata.obs[str(color_by)].unique()),
+                        adata.uns[str(color_by) + "_colors"],
                     )
                 )
         else:
-            if len(adata.obs[str(colorby)].unique()) <= 20:
+            if len(adata.obs[str(color_by)].unique()) <= 20:
                 pal = cycle(palettes.default_20)
-            elif len(adata.obs[str(colorby)].unique()) <= 28:
+            elif len(adata.obs[str(color_by)].unique()) <= 28:
                 pal = cycle(palettes.default_28)
             else:
                 pal = cycle(palettes.default_102)
-            colorby_dict = dict(
-                zip(list(adata.obs[str(colorby)].unique()), pal)
+            color_by_dict = dict(
+                zip(list(adata.obs[str(color_by)].unique()), pal)
             )
     else:
         if type(color_mapping) is dict:
-            colorby_dict = color_mapping
+            color_by_dict = color_mapping
         else:
-            if pd.api.types.is_categorical_dtype(data[groupby]):
-                colorby_dict = dict(
-                    zip(list(data[str(colorby)].cat.categories), color_mapping)
+            if pd.api.types.is_categorical_dtype(data[group_by]):
+                color_by_dict = dict(
+                    zip(list(data[str(color_by)].cat.categories), color_mapping)
                 )
             else:
-                colorby_dict = dict(
-                    zip(sorted(list(set(data[str(colorby)]))), color_mapping)
+                color_by_dict = dict(
+                    zip(sorted(list(set(data[str(color_by)]))), color_mapping)
                 )
-    df = data[[groupby, colorby]]
-    if groupby == colorby:
-        df = data[[groupby]]
+    df = data[[group_by, color_by]]
+    if group_by == color_by:
+        df = data[[group_by]]
         df = (
-            df.sort_values(groupby)
-            .drop_duplicates(subset=groupby, keep="first")
+            df.sort_values(group_by)
+            .drop_duplicates(subset=group_by, keep="first")
             .reset_index(drop=True)
         )
     else:
         df = (
-            df.sort_values(colorby)
-            .drop_duplicates(subset=groupby, keep="first")
+            df.sort_values(color_by)
+            .drop_duplicates(subset=group_by, keep="first")
             .reset_index(drop=True)
         )
 
@@ -870,22 +871,22 @@ def clone_overlap(
         G.remove_edges_from(nx.selfloop_edges(G))
         ax = nxv.circos(
             G,
-            group_by=colorby,
-            node_color_by=colorby,
+            group_by=color_by,
+            node_color_by=color_by,
             edge_lw_by=weighted_attr,
-            node_palette=colorby_dict,
+            node_palette=color_by_dict,
         )  # group_by
         if node_labels:
             annotate.circos_group(
                 G,
-                group_by=colorby,
+                group_by=color_by,
                 midpoint=False,
                 fontdict={"size": node_label_size},
             )
         annotate.node_colormapping(
             G,
-            color_by=colorby,
-            palette=colorby_dict,
+            color_by=color_by,
+            palette=color_by_dict,
             legend_kwargs=legend_kwargs,
         )
     if save is not None:
@@ -926,14 +927,14 @@ def productive_ratio(
     """
     res = adata.uns["productive_ratio"]["results"]
     locus = adata.uns["productive_ratio"]["locus"]
-    groupby = adata.uns["productive_ratio"]["groupby"]
+    group_by = adata.uns["productive_ratio"]["group_by"]
 
     plt.figure(figsize=figsize)
     ax = sns.barplot(
-        x=groupby, y="productive+non-productive", data=res, color=palette[0]
+        x=group_by, y="productive+non-productive", data=res, color=palette[0]
     )
     ax = sns.barplot(
-        x=groupby, y="productive", data=res, color=palette[1], ax=ax
+        x=group_by, y="productive", data=res, color=palette[1], ax=ax
     )
     legend = [
         mpatches.Patch(
@@ -953,7 +954,7 @@ def productive_ratio(
 
 def clone_bubbleplot(
     data: AnnData | Dandelion,
-    groupby: str | list[str],
+    group_by: str | list[str],
     palette: str | dict | None = None,
     figsize: tuple[float, float] = (8, 8),
     title: str | None = None,
@@ -977,7 +978,7 @@ def clone_bubbleplot(
     with clones within that group shown as packed inner circles sized
     proportionally to clone size.
 
-    When `groupby` is a list the hierarchy follows the list order: the first
+    When `group_by` is a list the hierarchy follows the list order: the first
     element is the outermost ring, subsequent elements are nested rings, and
     clone circles sit at the innermost level. Each level is coloured
     independently using its own colour map.
@@ -986,7 +987,7 @@ def clone_bubbleplot(
     ----------
     data : AnnData | Dandelion
         Dandelion or AnnData object.
-    groupby : str | list[str]
+    group_by : str | list[str]
         Column name(s) in metadata to group clones by. A single string gives
         one level of nesting; a list gives multi-level nesting in list order
         (e.g. ``['sample_id', 'leiden', 'isotype']``).
@@ -999,11 +1000,11 @@ def clone_bubbleplot(
           palette cycle when the key is absent.
         * ``str``: a seaborn palette name applied uniformly to every level.
         * ``dict``: a nested mapping where each key is a column name from
-          ``groupby`` and each value is either a ``{category: colour}`` dict or
+          ``group_by`` and each value is either a ``{category: colour}`` dict or
           a list of colours assigned in category order (respecting
           ``.cat.categories`` for categoricals, numeric sort order, or
           alphabetical otherwise).  Missing columns or values are
-          auto-assigned.  Examples for ``groupby=["A", "B"]``::
+          auto-assigned.  Examples for ``group_by=["A", "B"]``::
 
               palette={"A": {"x": "red", "y": "blue"}, "B": {"x": "green"}}
               palette={"A": ["red", "blue"], "B": ["green", "orange"]}
@@ -1024,7 +1025,7 @@ def clone_bubbleplot(
     alpha : float, optional
         Transparency of clone circles.
     show_legend : str | list[str] | None, optional
-        Controls which groupby levels appear in the legend.
+        Controls which group_by levels appear in the legend.
 
         * ``None`` (default): show all levels.
         * ``str``: show only that level (e.g. ``"isotype"``).
@@ -1077,10 +1078,10 @@ def clone_bubbleplot(
             f"No clones remaining after filtering with min_clone_size={min_clone_size}."
         )
 
-    groupby_cols = [groupby] if isinstance(groupby, str) else list(groupby)
+    group_by_cols = [group_by] if isinstance(group_by, str) else list(group_by)
 
-    # Remove rows where any groupby column contains no-data sentinel values
-    for col in groupby_cols:
+    # Remove rows where any group_by column contains no-data sentinel values
+    for col in group_by_cols:
         data_ = data_[~data_[col].astype(str).isin(_no_clone)].copy()
 
     def _auto_colors(col: str, vals: list[str]) -> dict[str, tuple]:
@@ -1138,10 +1139,10 @@ def clone_bubbleplot(
             return [str(v) for v in sorted(raw_vals, key=float)]
         return sorted(str(v) for v in raw_vals)
 
-    # Build one colour map per groupby level
+    # Build one colour map per group_by level
     level_color_maps: list[dict[str, tuple]] = []
     level_ordered_vals: list[list[str]] = []
-    for col in groupby_cols:
+    for col in group_by_cols:
         unique_vals = _ordered_vals(col)
         level_ordered_vals.append(unique_vals)
         if isinstance(palette, str):
@@ -1185,7 +1186,7 @@ def clone_bubbleplot(
         can retrieve the correct per-level colour without polluting the dicts.
         """
         if not levels:
-            # Leaves inherit the deepest groupby level's colour.
+            # Leaves inherit the deepest group_by level's colour.
             clone_sizes = df[clone_].value_counts()
             leaf_info: tuple[int, str] = (
                 parent_info if parent_info is not None else (0, "")
@@ -1211,7 +1212,7 @@ def clone_bubbleplot(
             result.append(node)
         return result
 
-    hierarchy = _build_hierarchy(data_, groupby_cols, 0, None)
+    hierarchy = _build_hierarchy(data_, group_by_cols, 0, None)
 
     circles = circlify.circlify(
         hierarchy,
@@ -1322,7 +1323,7 @@ def clone_bubbleplot(
         handles = []
         first_added = True
         for col, cmap, ordered_vals in zip(
-            groupby_cols, level_color_maps, level_ordered_vals
+            group_by_cols, level_color_maps, level_ordered_vals
         ):
             if _legend_levels is not None and col not in _legend_levels:
                 continue

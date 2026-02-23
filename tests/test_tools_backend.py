@@ -100,21 +100,21 @@ def test_extract_edge_weights(create_testfolder):
 def test_diversity_anndata(create_testfolder, method):
     f = create_testfolder / "test_backend.h5ad"
     adata = sc.read_h5ad(f)
-    ddl.tl.clone_diversity(adata, groupby="sample_id", method=method, n_boot=5)
+    ddl.tl.clone_diversity(adata, group_by="sample_id", method=method, n_boot=5)
 
 
 @pytest.mark.usefixtures("create_testfolder")
 def test_diversity_ddl(create_testfolder):
     f = create_testfolder / "test_backend.ddl"
     vdj = ddl.read(f)
-    ddl.tl.clone_diversity(vdj, groupby="sample_id", key="sequence", n_boot=5)
+    ddl.tl.clone_diversity(vdj, group_by="sample_id", key="sequence", n_boot=5)
 
 
 @pytest.mark.usefixtures("create_testfolder")
 def test_clone_rarefaction(create_testfolder):
     f = create_testfolder / "test_backend.ddl"
     vdj = ddl.read(f)
-    ddl.tl.clone_rarefaction(vdj, groupby="sample_id")
+    ddl.tl.clone_rarefaction(vdj, group_by="sample_id")
 
 
 # -- scirpy / concat ----------------------------------------------------------

@@ -30,12 +30,12 @@ def test_productive_ratio(
     group = cycle(["A", "B", "C", "D", "E", "F", "G", "H", "I"])
     groups = [next(group) for i in dummy_adata_mouse.obs_names]
     dummy_adata_mouse.obs["group"] = groups
-    productive_ratio(dummy_adata_mouse, vdj, groupby="group", locus="IGH")
+    productive_ratio(dummy_adata_mouse, vdj, group_by="group", locus="IGH")
     assert "productive_ratio" in dummy_adata_mouse.uns
     productive_ratio(
         dummy_adata_mouse,
         vdj,
-        groupby="group",
+        group_by="group",
         locus="IGH",
         groups=["A", "B", "C"],
     )
@@ -55,7 +55,7 @@ def test_vj_usage_pca(create_testfolder, dummy_adata_mouse):
     adata.obs["group2"] = groups2
     new_adata = vj_usage_pca(
         adata,
-        groupby="group",
+        group_by="group",
         mode="B",
         n_comps=5,
         transfer_mapping=["group2"],
@@ -64,7 +64,7 @@ def test_vj_usage_pca(create_testfolder, dummy_adata_mouse):
     adata2 = adata.copy()
     new_adata2 = vj_usage_pca(
         adata2,
-        groupby="group",
+        group_by="group",
         mode="B",
         n_comps=5,
         transfer_mapping=["group2"],
@@ -87,13 +87,13 @@ def test_productive_ratio_polars(
     groups = [next(group) for i in dummy_adata_mouse.obs_names]
     dummy_adata_mouse.obs["group"] = groups
     productive_ratio_polars(
-        dummy_adata_mouse, vdj, groupby="group", locus="IGH"
+        dummy_adata_mouse, vdj, group_by="group", locus="IGH"
     )
     assert "productive_ratio" in dummy_adata_mouse.uns
     productive_ratio_polars(
         dummy_adata_mouse,
         vdj,
-        groupby="group",
+        group_by="group",
         locus="IGH",
         groups=["A", "B", "C"],
     )
@@ -114,7 +114,7 @@ def test_vj_usage_pca_polars(create_testfolder, dummy_adata_mouse):
     new_adata = vj_usage_pca_polars(
         adata,
         vdj,
-        groupby="group",
+        group_by="group",
         mode="B",
         n_comps=5,
         transfer_mapping=["group2"],
@@ -124,7 +124,7 @@ def test_vj_usage_pca_polars(create_testfolder, dummy_adata_mouse):
     new_adata2 = vj_usage_pca_polars(
         adata2,
         vdj,
-        groupby="group",
+        group_by="group",
         mode="B",
         n_comps=5,
         transfer_mapping=["group2"],

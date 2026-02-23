@@ -39,7 +39,7 @@ from dandelion.utilities._utilities import flatten
 
 def clone_rarefaction(
     data: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     clone_key: str | None = None,
     palette: list[str] | None = None,
     figsize: tuple[float, float] = (5, 3),
@@ -71,7 +71,7 @@ def clone_rarefaction(
     data : AnnData or DandelionPolars
         Object containing V(D)J metadata. Clone IDs must be stored in
         `.obs` (AnnData) or `.metadata` (DandelionPolars).
-    groupby : str
+    group_by : str
         Column in metadata specifying the grouping variable (e.g., sample,
         donor, condition).
     clone_key : str, optional
@@ -79,7 +79,7 @@ def clone_rarefaction(
         not provided.
     palette : list of str, optional
         List of colors to use for plotting. If `None`, the function tries
-        to use `data.uns[f"{groupby}_colors"]` when available.
+        to use `data.uns[f"{group_by}_colors"]` when available.
     figsize : tuple of float, optional
         Width and height of the plot (in inches). Defaults to `(5, 3)`.
     chain_status_include : list of str, optional
@@ -135,7 +135,7 @@ def clone_rarefaction(
 
     clonekey = "clone_id" if clone_key is None else clone_key
 
-    groups = list(set(metadata[groupby]))
+    groups = list(set(metadata[group_by]))
     if "chain_status" in metadata:
         metadata = metadata[metadata["chain_status"].isin(chain_status_include)]
 
@@ -145,7 +145,7 @@ def clone_rarefaction(
     # Count clone sizes per group
     res = {}
     for g in groups:
-        _metadata = metadata[metadata[groupby] == g]
+        _metadata = metadata[metadata[group_by] == g]
         res[g] = _metadata[clonekey].value_counts()
     res_ = pd.DataFrame.from_dict(res, orient="index")
 
@@ -232,8 +232,11 @@ def clone_rarefaction(
     options.figure_size = figsize
 
     if palette is None:
-        if isinstance(data, AnnData) and (str(groupby) + "_colors") in data.uns:
-            palette = data.uns[str(groupby) + "_colors"]
+        if (
+            isinstance(data, AnnData)
+            and (str(group_by) + "_colors") in data.uns
+        ):
+            palette = data.uns[str(group_by) + "_colors"]
 
     p = (
         ggplot(pred, aes(x="cells", y="yhat", color="group", linetype="type"))
@@ -241,7 +244,7 @@ def clone_rarefaction(
         + xlab("number of cells")
         + ylab("number of clones")
         + ggtitle("rarefaction curve with plateau extrapolation")
-        + labs(color=groupby, linetype="data type")
+        + labs(color=group_by, linetype="data type")
         + geom_line()
         + scale_linetype_manual(
             values={"observed": "solid", "extrapolated": "dashed"}
@@ -256,7 +259,7 @@ def clone_rarefaction(
 
 def clone_diversity(
     data: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     method: Literal["gini", "chao1", "shannon"] = "gini",
     use_network: bool = True,
     network_metric: Literal[
@@ -279,7 +282,7 @@ def clone_diversity(
     ----------
     data : DandelionPolars | AnnData
         DandelionPolars or AnnData object.
-    groupby : str
+    group_by : str
         Column name to calculate the gini indices on, for e.g. sample id, patient etc.
     method : Literal["gini", "chao1", "shannon"], optional
         Method for diversity estimation. Either one of ['gini', 'chao1', 'shannon'].
@@ -321,7 +324,7 @@ def clone_diversity(
     if (method == "gini") and use_network:
         return diversity_gini(
             data,
-            groupby=groupby,
+            group_by=group_by,
             metric=network_metric,
             clone_key=clone_key,
             min_size=min_size,
@@ -336,7 +339,7 @@ def clone_diversity(
         return diversity_estimates(
             data,
             method=method,
-            groupby=groupby,
+            group_by=group_by,
             clone_key=clone_key,
             normalize=normalize,
             min_size=min_size,
@@ -348,7 +351,7 @@ def clone_diversity(
 
 def diversity_gini(
     data: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     metric: str | None = None,
     clone_key: str | None = None,
     min_size: int | None = None,
@@ -366,7 +369,7 @@ def diversity_gini(
     ----------
     data : DandelionPolars | AnnData
         DandelionPolars or AnnData object.
-    groupby : str
+    group_by : str
         Column name to calculate the Gini indices on, for e.g. sample id, patient etc.
     metric : str | None, optional
         Metric to use for calculating Gini indices of clones.
@@ -401,7 +404,7 @@ def diversity_gini(
 
     cluster_size, vertex_size, cluster_raw, vertex_raw = gini_indices(
         data,
-        groupby=groupby,
+        group_by=group_by,
         clone_key=clone_key,
         metric=metric,
         min_size=min_size,
@@ -424,7 +427,7 @@ def diversity_gini(
 
 def diversity_estimates(
     data: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     method: Literal["chao1", "shannon", "gini"] = "chao1",
     clone_key: str | None = None,
     normalize: bool = True,
@@ -440,7 +443,7 @@ def diversity_estimates(
     ----------
     data : DandelionPolars | AnnData
         DandelionPolars or AnnData object.
-    groupby : str
+    group_by : str
         Column name to calculate the Chao1 estimates on, for e.g. sample id, patient etc.
     method : Literal["chao1", "shannon", "gini"], optional
         Diversity metric to compute.
@@ -465,7 +468,7 @@ def diversity_estimates(
     """
     res, res_raw = estimate_diversity(
         data,
-        groupby=groupby,
+        group_by=group_by,
         clone_key=clone_key,
         metric=method,
         normalize=normalize,
@@ -480,7 +483,7 @@ def diversity_estimates(
 
 def gini_indices(
     data: DandelionPolars,
-    groupby: str,
+    group_by: str,
     metric: str | None = None,
     clone_key: str | None = None,
     min_size: int | None = None,
@@ -498,7 +501,7 @@ def gini_indices(
 
     # --- Prepare data and filter groups
     data, _, groups, min_size = _prepare_diversity_groups(
-        data, groupby, min_size
+        data, group_by, min_size
     )
     # filter the vdj object as well
     if isinstance(data, DandelionPolars):
@@ -507,12 +510,12 @@ def gini_indices(
         original_lazy = data._lazy
         if original_backend == "polars":
             data.to_pandas()
-        data = data[data._metadata[groupby].isin(groups)]
+        data = data[data._metadata[group_by].isin(groups)]
 
     res1, res2, cluster_raw, vertex_raw = {}, {}, {}, {}
     for g in groups:
         # clone size distribution
-        ddl_dat = data[data._metadata[groupby] == g].copy()
+        ddl_dat = data[data._metadata[group_by] == g].copy()
 
         # --- parallel bootstrap
         iterator = tqdm(
@@ -546,8 +549,8 @@ def gini_indices(
     res_df2 = pd.DataFrame.from_dict(res2).T
     res_df1.reset_index(inplace=True)
     res_df2.reset_index(inplace=True)
-    res_df1.rename(columns={"index": groupby}, inplace=True)
-    res_df2.rename(columns={"index": groupby}, inplace=True)
+    res_df1.rename(columns={"index": group_by}, inplace=True)
+    res_df2.rename(columns={"index": group_by}, inplace=True)
     # convert back to original backend
     if isinstance(data, DandelionPolars):
         if original_backend == "polars":
@@ -557,7 +560,7 @@ def gini_indices(
 
 def estimate_diversity(
     data: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     clone_key: str | None = None,
     metric: Literal["chao1", "shannon", "gini"] = "chao1",
     normalize: bool = True,  # used only if metric == "shannon"
@@ -573,7 +576,7 @@ def estimate_diversity(
     ----------
     data : Dandelion | AnnData
         Input repertoire or annotated single-cell data.
-    groupby : str
+    group_by : str
         Column name used to group cells/samples for diversity estimation.
     clone_key : str, optional
         Column containing clone identifiers. Defaults to "clone_id".
@@ -600,7 +603,7 @@ def estimate_diversity(
 
     # --- Prepare data and filter groups
     data, _metadata, groups, min_size = _prepare_diversity_groups(
-        data, groupby, min_size
+        data, group_by, min_size
     )
 
     # --- Subset the actual data
@@ -610,15 +613,15 @@ def estimate_diversity(
         original_lazy = data._lazy
         if original_backend == "polars":
             data.to_pandas()
-        data = data[data._metadata[groupby].isin(groups)]
+        data = data[data._metadata[group_by].isin(groups)]
 
     elif isinstance(data, AnnData):
-        data = data[data.obs[groupby].isin(groups)].copy()
+        data = data[data.obs[group_by].isin(groups)].copy()
 
     # --- Compute diversity estimates via bootstrapping
     res, res_raw = {}, {}
     for g in groups:
-        _dat = _metadata[_metadata[groupby] == g]
+        _dat = _metadata[_metadata[group_by] == g]
 
         iterator = tqdm(
             range(n_boot),
@@ -644,7 +647,7 @@ def estimate_diversity(
     # --- Format result
     res_df = pd.DataFrame.from_dict(res).T
     res_df.reset_index(inplace=True)
-    res_df.rename(columns={"index": groupby}, inplace=True)
+    res_df.rename(columns={"index": group_by}, inplace=True)
     # convert back to original backend
     if isinstance(data, DandelionPolars):
         if original_backend == "polars":
@@ -654,7 +657,7 @@ def estimate_diversity(
 
 def _prepare_diversity_groups(
     data: DandelionPolars | AnnData,
-    groupby: str,
+    group_by: str,
     min_size: int | None = None,
 ):
     """Shared logic for preparing metadata and filtering valid groups."""
@@ -665,13 +668,13 @@ def _prepare_diversity_groups(
     else:
         raise TypeError("data must be an AnnData or Dandelion object")
 
-    _metadata[groupby] = _metadata[groupby].astype("category")
-    _metadata[groupby] = _metadata[groupby].cat.remove_unused_categories()
-    groups = list(set(_metadata[groupby]))
+    _metadata[group_by] = _metadata[group_by].astype("category")
+    _metadata[group_by] = _metadata[group_by].cat.remove_unused_categories()
+    groups = list(set(_metadata[group_by]))
 
     if min_size is None:
-        min_size = min_sample_size(df=_metadata, col=groupby)
-    group_counts = _metadata[groupby].value_counts()
+        min_size = min_sample_size(df=_metadata, col=group_by)
+    group_counts = _metadata[group_by].value_counts()
     valid_groups = group_counts[group_counts >= min_size].index.tolist()
     if len(valid_groups) < 1:
         raise ValueError(
@@ -684,7 +687,7 @@ def _prepare_diversity_groups(
             + ", ".join(set(groups) - set(valid_groups))
         )
     groups = valid_groups
-    _metadata = _metadata[_metadata[groupby].isin(groups)].copy()
+    _metadata = _metadata[_metadata[group_by].isin(groups)].copy()
 
     return data, _metadata, groups, min_size
 
