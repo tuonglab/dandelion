@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from dandelion.polars.plotting._plotting import (
     barplot,
+    clone_bubbleplot,
     clone_network,
     clone_overlap,
     productive_ratio,
@@ -10,6 +11,7 @@ from dandelion.polars.plotting._plotting import (
 
 __all__ = [
     "barplot",
+    "clone_bubbleplot",
     "clone_network",
     "clone_overlap",
     "productive_ratio",

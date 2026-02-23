@@ -957,6 +957,405 @@ def productive_ratio(
     plt.legend(handles=legend, **legend_kwargs)
 
 
+def clone_bubbleplot(
+    data: AnnData | DandelionPolars,
+    groupby: str | list[str],
+    palette: str | dict | None = None,
+    figsize: tuple[float, float] = (8, 8),
+    title: str | None = None,
+    min_clone_size: int = 1,
+    clone_key: str | None = None,
+    show_group_labels: bool = True,
+    show_clone_labels: bool = False,
+    show_count_labels: bool = False,
+    alpha: float = 0.6,
+    show_legend: str | list[str] | None = None,
+    legend_kwargs: dict = {
+        "bbox_to_anchor": (1, 0.5),
+        "loc": "center left",
+        "frameon": False,
+    },
+) -> tuple[Figure, Axes]:
+    """
+    A bubble plot to visualise clone sizes within groups using circle packing.
+
+    Each group (e.g. sample, celltype) is represented as an enclosing circle,
+    with clones within that group shown as packed inner circles sized
+    proportionally to clone size.
+
+    When `groupby` is a list the hierarchy follows the list order: the first
+    element is the outermost ring, subsequent elements are nested rings, and
+    clone circles sit at the innermost level. Each level is coloured
+    independently using its own colour map.
+
+    Parameters
+    ----------
+    data : AnnData | DandelionPolars
+        DandelionPolars or AnnData object.
+    groupby : str | list[str]
+        Column name(s) in metadata to group clones by. A single string gives
+        one level of nesting; a list gives multi-level nesting in list order
+        (e.g. ``['sample_id', 'celltype']``).
+    palette : str | dict | None, optional
+        Colour specification.
+
+        * ``None`` (default): for DandelionPolars objects, uses ``"Set2"`` for
+          every level; for AnnData objects, each column is looked up in
+          ``adata.uns`` (e.g. ``uns["leiden_colors"]``) and falls back to
+          scanpy's default palette cycle when the key is absent.
+        * ``str``: a seaborn palette name applied uniformly to every level.
+        * ``dict``: a nested mapping where each key is a column name from
+          ``groupby`` and each value is either a ``{category: colour}`` dict or
+          a list of colours assigned in category order (respecting
+          ``.cat.categories`` for categoricals, numeric sort order, or
+          alphabetical otherwise).  Missing columns or values are
+          auto-assigned.  Examples for ``groupby=["A", "B"]``::
+
+              palette={"A": {"x": "red", "y": "blue"}, "B": {"x": "green"}}
+              palette={"A": ["red", "blue"], "B": ["green", "orange"]}
+    figsize : tuple[float, float], optional
+        Figure size.
+    title : str | None, optional
+        Title of plot.
+    min_clone_size : int, optional
+        Minimum clone size to include. Set to 2 to exclude singletons.
+    clone_key : str | None, optional
+        Column name for clones. None defaults to 'clone_id'.
+    show_group_labels : bool, optional
+        Whether to annotate each group enclosure with its label.
+    show_clone_labels : bool, optional
+        Whether to annotate each clone circle with its clone ID.
+    show_count_labels : bool, optional
+        Whether to annotate each circle with its cell count.
+    alpha : float, optional
+        Transparency of clone circles.
+    show_legend : str | list[str] | None, optional
+        Controls which groupby levels appear in the legend.
+
+        * ``None`` (default): show all levels.
+        * ``str``: show only that level (e.g. ``"isotype"``).
+        * ``list[str]``: show only those levels.
+        * ``False``: hide the legend entirely.
+    legend_kwargs : dict, optional
+        Keyword arguments forwarded to ``ax.legend``.
+
+    Returns
+    -------
+    tuple[Figure, Axes]
+        Circle-packing bubble plot.
+
+    Raises
+    ------
+    ImportError
+        If `circlify` is not installed.
+    ValueError
+        If no clones remain after filtering by `min_clone_size`.
+    """
+    try:
+        import circlify
+    except ImportError:
+        raise ImportError(
+            "circlify is required for clone_bubbleplot. "
+            "Install it with: pip install circlify"
+        )
+
+    _is_adata = isinstance(data, AnnData)
+    _adata_uns = data.uns if _is_adata else {}
+
+    if isinstance(data, DandelionPolars):
+        if data._backend == "polars":
+            data.to_pandas()
+        data = data._metadata.copy()
+    elif isinstance(data, AnnData):
+        data = data.obs.copy()
+
+    clone_ = clone_key if clone_key is not None else "clone_id"
+
+    # Remove cells with no assigned clone (No_contig, NaN, etc.)
+    _no_clone = {"No_contig", "nan", "None", "NA", ""}
+    data = data[data[clone_].notna()].copy()
+    data = data[~data[clone_].astype(str).isin(_no_clone)].copy()
+
+    size = data[clone_].value_counts()
+    keep = list(size[size >= min_clone_size].index)
+    data_ = data[data[clone_].isin(keep)]
+
+    if data_.empty:
+        raise ValueError(
+            f"No clones remaining after filtering with min_clone_size={min_clone_size}."
+        )
+
+    groupby_cols = [groupby] if isinstance(groupby, str) else list(groupby)
+
+    # Remove rows where any groupby column contains no-data sentinel values
+    for col in groupby_cols:
+        data_ = data_[~data_[col].astype(str).isin(_no_clone)].copy()
+
+    def _auto_colors(col: str, vals: list[str]) -> dict[str, tuple]:
+        """Return a {value: colour} map for *vals* in *col*.
+
+        For AnnData inputs the column's ``.uns`` entry is consulted first.
+        DandelionPolars inputs always use Set2.
+        """
+        if _is_adata:
+            uns_key = f"{col}_colors"
+            if uns_key in _adata_uns:
+                obs_col = data[col] if col in data.columns else None
+                if obs_col is not None and pd.api.types.is_categorical_dtype(
+                    obs_col
+                ):
+                    cats = list(obs_col.cat.categories)
+                else:
+                    cats = (
+                        sorted(data[col].dropna().unique().tolist())
+                        if col in data.columns
+                        else []
+                    )
+                color_dict = {
+                    str(c): clr for c, clr in zip(cats, _adata_uns[uns_key])
+                }
+                return {v: color_dict.get(v, "gray") for v in vals}
+            # Fallback: scanpy default palette cycle
+            n = len(vals)
+            if n <= 20:
+                pal = list(palettes.default_20)
+            elif n <= 28:
+                pal = list(palettes.default_28)
+            else:
+                pal = list(palettes.default_102)
+            return dict(zip(vals, cycle(pal)))
+        # DandelionPolars / non-AnnData: use Set2
+        return dict(zip(vals, sns.color_palette("Set2", len(vals))))
+
+    def _ordered_vals(col: str) -> list[str]:
+        """Return unique string values for col in the correct display order.
+
+        Categorical columns respect their ``.cat.categories`` order (matching
+        scanpy). Purely numeric columns sort numerically (1, 2, 10 not 1, 10,
+        2). Everything else sorts alphabetically.
+        """
+        col_data = data_[col]
+        if pd.api.types.is_categorical_dtype(col_data):
+            present = set(col_data.dropna().astype(str))
+            return [
+                str(c) for c in col_data.cat.categories if str(c) in present
+            ]
+        raw_vals = col_data.dropna().unique()
+        as_numeric = pd.to_numeric(pd.Series(raw_vals), errors="coerce")
+        if as_numeric.notna().all():
+            return [str(v) for v in sorted(raw_vals, key=float)]
+        return sorted(str(v) for v in raw_vals)
+
+    # Build one colour map per groupby level
+    level_color_maps: list[dict[str, tuple]] = []
+    level_ordered_vals: list[list[str]] = []
+    for col in groupby_cols:
+        unique_vals = _ordered_vals(col)
+        level_ordered_vals.append(unique_vals)
+        if isinstance(palette, str):
+            cmap: dict[str, tuple] = dict(
+                zip(unique_vals, sns.color_palette(palette, len(unique_vals)))
+            )
+        elif isinstance(palette, dict):
+            col_palette = palette.get(col, {})
+            if isinstance(col_palette, list):
+                cmap = dict(zip(unique_vals, col_palette))
+                missing = [v for v in unique_vals if v not in cmap]
+                if missing:
+                    cmap.update(_auto_colors(col, missing))
+            else:
+                cmap = {}
+                missing = []
+                for v in unique_vals:
+                    if v in col_palette:
+                        cmap[v] = col_palette[v]
+                    else:
+                        missing.append(v)
+                if missing:
+                    cmap.update(_auto_colors(col, missing))
+        else:
+            cmap = _auto_colors(col, unique_vals)
+        level_color_maps.append(cmap)
+
+    # Side-lookup: id(node) → (level_index, group_value)
+    # Avoids embedding extra keys in the dicts that circlify would warn about.
+    color_group_lookup: dict[int, tuple[int, str]] = {}
+
+    def _build_hierarchy(
+        df: pd.DataFrame,
+        levels: list[str],
+        depth: int,
+        parent_info: tuple[int, str] | None,
+    ) -> list[dict]:
+        """Recursively build a circlify-compatible hierarchy.
+
+        Each node dict is registered by its object identity so the renderer
+        can retrieve the correct per-level colour without polluting the dicts.
+        """
+        if not levels:
+            # Leaves inherit the deepest groupby level's colour.
+            clone_sizes = df[clone_].value_counts()
+            leaf_info: tuple[int, str] = (
+                parent_info if parent_info is not None else (0, "")
+            )
+            result = []
+            for cid, cnt in clone_sizes.items():
+                node: dict = {"id": str(cid), "datum": int(cnt)}
+                color_group_lookup[id(node)] = leaf_info
+                result.append(node)
+            return result
+        current, rest = levels[0], levels[1:]
+        result = []
+        for grp, gdata in df.groupby(current, observed=True):
+            grp_str = str(grp)
+            my_info: tuple[int, str] = (depth, grp_str)
+            children = _build_hierarchy(gdata, rest, depth + 1, my_info)
+            node = {
+                "id": grp_str,
+                "datum": sum(c["datum"] for c in children),
+                "children": children,
+            }
+            color_group_lookup[id(node)] = my_info
+            result.append(node)
+        return result
+
+    hierarchy = _build_hierarchy(data_, groupby_cols, 0, None)
+
+    circles = circlify.circlify(
+        hierarchy,
+        show_enclosure=False,
+        target_enclosure=circlify.Circle(0, 0, 1),
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_aspect("equal")
+
+    for circle in circles:
+        if circle.ex is None:
+            continue
+
+        x, y, r = circle.x, circle.y, circle.r
+        label = circle.ex.get("id", "")
+        level_idx, group_val = color_group_lookup.get(id(circle.ex), (0, label))
+        level_idx = min(level_idx, len(level_color_maps) - 1)
+        color = level_color_maps[level_idx].get(group_val, "gray")
+        is_group = "children" in circle.ex
+
+        if is_group:
+            ax.add_patch(
+                mpatches.Circle(
+                    (x, y), r, fill=False, edgecolor=color, linewidth=2
+                )
+            )
+            if show_group_labels:
+                ax.text(
+                    x,
+                    y + r,
+                    label,
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                    fontweight="bold",
+                    color=color,
+                )
+            if show_count_labels:
+                ax.text(
+                    x,
+                    y,
+                    str(circle.ex["datum"]),
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color=color,
+                )
+        else:
+            ax.add_patch(
+                mpatches.Circle(
+                    (x, y),
+                    r,
+                    alpha=alpha,
+                    facecolor=color,
+                    edgecolor="white",
+                    linewidth=0.5,
+                )
+            )
+            if show_clone_labels and show_count_labels:
+                ax.text(
+                    x, y + r * 0.25, label, ha="center", va="center", fontsize=7
+                )
+                ax.text(
+                    x,
+                    y - r * 0.25,
+                    str(circle.ex["datum"]),
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                )
+            elif show_clone_labels:
+                ax.text(x, y, label, ha="center", va="center", fontsize=7)
+            elif show_count_labels:
+                ax.text(
+                    x,
+                    y,
+                    str(circle.ex["datum"]),
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                )
+
+    xs = [c.x for c in circles if c.ex is not None]
+    ys = [c.y for c in circles if c.ex is not None]
+    rs = [c.r for c in circles if c.ex is not None]
+    if xs:
+        margin = 0.05
+        ax.set_xlim(
+            min(cx - cr for cx, cr in zip(xs, rs)) - margin,
+            max(cx + cr for cx, cr in zip(xs, rs)) + margin,
+        )
+        ax.set_ylim(
+            min(cy - cr for cy, cr in zip(ys, rs)) - margin,
+            max(cy + cr for cy, cr in zip(ys, rs)) + margin,
+        )
+    else:
+        ax.set_xlim(-1.1, 1.1)
+        ax.set_ylim(-1.1, 1.1)
+
+    if show_legend is not False:
+        if show_legend is None or show_legend is True:
+            _legend_levels = None
+        elif isinstance(show_legend, str):
+            _legend_levels = {show_legend}
+        else:
+            _legend_levels = set(show_legend)
+        handles = []
+        first_added = True
+        for col, cmap, ordered_vals in zip(
+            groupby_cols, level_color_maps, level_ordered_vals
+        ):
+            if _legend_levels is not None and col not in _legend_levels:
+                continue
+            if not first_added:
+                handles.append(
+                    mpatches.Patch(
+                        facecolor="none", edgecolor="none", label=" "
+                    )
+                )
+            first_added = False
+            handles.append(
+                mpatches.Patch(facecolor="none", edgecolor="none", label=col)
+            )
+            handles += [
+                mpatches.Patch(color=cmap[v], label=v) for v in ordered_vals
+            ]
+        ax.legend(handles=handles, **legend_kwargs)
+
+    if title is not None:
+        ax.set_title(title)
+    plt.axis("off")
+
+    return fig, ax
+
+
 @contextmanager
 def _temporary_obs_columns(adata: AnnData, mudata: MuData | None, **kwargs):
     """Temporarily add columns from submodalities or shared obs to adata.obs."""
