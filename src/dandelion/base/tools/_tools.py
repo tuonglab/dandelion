@@ -542,13 +542,15 @@ def transfer(
         message_parts += [f"updated `.obs` with `.metadata`\n"]
     if obsm:
         message_parts += [
-            f"wrote `.obsm['X_vdj']` and `.uns['dandelion']['X_vdj_expanded']`\n"
+            "wrote active layout to `.obsm['X_vdj']`; stashed all views in `.uns['dandelion']` ('X_vdj_all', 'X_vdj_expanded')\n"
         ]
     if obsp:
         message_parts += [
-            f"wrote adata.obsp['connectivities'] & ['distances'] from graph[{main_idx}]\n",
-            "stored RNA matrices under rna_* keys (stashed)\n",
-            f"stored vdj matrices under '{v_connectivities_key}' (+ '_expanded' and + '_full' if available)\n",
+            f"wrote `.obsp['connectivities']` & `['distances']` from graph[{main_idx}]\n",
+            f"stashed GEX matrices in `.uns['dandelion']` ('{g_connectivities_key}', '{g_distances_key}')\n"
+            if not skip_stash
+            else "",
+            f"stashed VDJ matrices in `.uns['dandelion']` under '{v_connectivities_key}_*' keys\n",
         ]
     if uns:
         message_parts += [f"added `.uns['{clone_key}']` clone-level mapping"]

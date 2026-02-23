@@ -1324,16 +1324,18 @@ def transfer(
         message_parts += ["updated `.obs` with `.metadata`\n"]
     if obsm:
         message_parts += [
-            "wrote `.obsm['X_vdj']` and `.uns['dandelion']['X_vdj_expanded']`\n"
+            "wrote active layout to `.obsm['X_vdj']`; stashed all views in `.uns['dandelion']` ('X_vdj_all', 'X_vdj_expanded')\n"
         ]
     if obsp:
         message_parts += [
-            f"wrote adata.obsp['connectivities'] & ['distances'] from graph[{main_idx}]\n",
-            "stored RNA matrices under rna_* keys (stashed)\n",
+            f"wrote `.obsp['connectivities']` & `['distances']` from graph[{main_idx}]\n",
+            f"stashed GEX matrices in `.uns['dandelion']` ('{g_connectivities_key}', '{g_distances_key}')\n"
+            if not skip_stash
+            else "",
             (
-                f"stored vdj matrices under '{v_connectivities_key}' (+ '_expanded')\n"
+                f"stashed VDJ matrices in `.uns['dandelion']` under '{v_connectivities_key}_all' / '_expanded'\n"
                 if main_idx != 2
-                else f"stored vdj matrices under '{v_connectivities_key}_full'\n"
+                else f"stashed VDJ matrices in `.uns['dandelion']` under '{v_connectivities_key}_full'\n"
             ),
         ]
     if uns:
