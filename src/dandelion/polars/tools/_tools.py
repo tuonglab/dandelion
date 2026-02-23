@@ -1166,7 +1166,9 @@ def transfer(
             recipient.uns.setdefault("dandelion", {})[g_connectivities_key] = (
                 recipient.obsp["connectivities"]
             )
-            recipient.uns["dandelion"][g_distances_key] = recipient.obsp["distances"]
+            recipient.uns["dandelion"][g_distances_key] = recipient.obsp[
+                "distances"
+            ]
             g_neighbors_key = f"{gex_key}_{neighbors_key}"
             recipient.uns[g_neighbors_key] = recipient.uns[neighbors_key]
 
@@ -1211,7 +1213,9 @@ def transfer(
                 _ddl[f"{v_connectivities_key}_all"] = graph_connectivities[0]
                 _ddl[f"{v_distances_key}_all"] = graph_distances[0]
             if 1 in graph_connectivities:
-                _ddl[f"{v_connectivities_key}_expanded"] = graph_connectivities[1]
+                _ddl[f"{v_connectivities_key}_expanded"] = graph_connectivities[
+                    1
+                ]
                 _ddl[f"{v_distances_key}_expanded"] = graph_distances[1]
         else:
             if 2 in graph_connectivities:

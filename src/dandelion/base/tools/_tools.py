@@ -428,10 +428,14 @@ def transfer(
             _ddl[f"{v_connectivities_key}_all"] = graph_connectivities[0].copy()
             _ddl[f"{v_distances_key}_all"] = graph_distances[0].copy()
         if 1 in graph_connectivities:
-            _ddl[f"{v_connectivities_key}_expanded"] = graph_connectivities[1].copy()
+            _ddl[f"{v_connectivities_key}_expanded"] = graph_connectivities[
+                1
+            ].copy()
             _ddl[f"{v_distances_key}_expanded"] = graph_distances[1].copy()
         if 2 in graph_connectivities:
-            _ddl[f"{v_connectivities_key}_full"] = graph_connectivities[2].copy()
+            _ddl[f"{v_connectivities_key}_full"] = graph_connectivities[
+                2
+            ].copy()
             _ddl[f"{v_distances_key}_full"] = graph_distances[2].copy()
         recipient.uns[neighbors_key] = {
             "connectivities_key": "connectivities",
