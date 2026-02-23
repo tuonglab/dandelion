@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import circlify
 import warnings
 
 import matplotlib.patches as mpatches
@@ -1041,19 +1042,9 @@ def clone_bubbleplot(
 
     Raises
     ------
-    ImportError
-        If `circlify` is not installed.
     ValueError
         If no clones remain after filtering by `min_clone_size`.
     """
-    try:
-        import circlify
-    except ImportError:
-        raise ImportError(
-            "circlify is required for clone_bubbleplot. "
-            "Install it with: pip install circlify"
-        )
-
     _is_adata = isinstance(data, AnnData)
     _adata_uns = data.uns if _is_adata else {}
 
