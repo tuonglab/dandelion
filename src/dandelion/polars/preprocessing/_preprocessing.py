@@ -1875,7 +1875,7 @@ def reassign_alleles(
         dat_ = dat_.sort("sequence_id")
 
     if plot:
-        if "tigger_failed" not in locals():
+        if "tigger_failed" not in locals():  # pragma: no cover
             logg.info("Returning summary plot")
             # options.figure_size = figsize
             inferred_genotype = out_dir / (

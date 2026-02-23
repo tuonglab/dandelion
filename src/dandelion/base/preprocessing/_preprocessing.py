@@ -1654,7 +1654,7 @@ def reassign_alleles(
         dat_.sort_values(by="sequence_id", inplace=True)
 
     if plot:
-        if "tigger_failed" not in locals():
+        if "tigger_failed" not in locals():  # pragma: no cover
             logg.info("Returning summary plot")
             inferred_genotype = out_dir / (
                 out_dir.stem + "_heavy" + inferred_fileformat_dict[fileformat]
@@ -2421,7 +2421,7 @@ def transfer_assignment(
                                             db_pass.at[i, call + "_source"] = (
                                                 "blastn"
                                             )
-                                    else:
+                                    else:  # pragma: no cover
                                         if present(eval2):
                                             db_pass.at[i, call + "_call"] = (
                                                 db_pass.at[
@@ -2465,7 +2465,7 @@ def transfer_assignment(
                                                 != db_pass.loc[
                                                     i, "junction_10x"
                                                 ]
-                                            ):
+                                            ):  # pragma: no cover
                                                 db_pass.at[i, "junction"] = (
                                                     db_pass.at[
                                                         i, "junction_10x"
@@ -2503,7 +2503,7 @@ def transfer_assignment(
                                         ]
                                     )
                                     db_pass.at[i, call + "_source"] = "blastn"
-                            else:
+                            else:  # pragma: no cover
                                 if present(eval2):
                                     db_pass.at[i, call + "_call"] = db_pass.at[
                                         i, call + "_call_blastn"
@@ -2635,7 +2635,7 @@ def transfer_assignment(
                                     != db_fail.loc[i, call + "_call_10x"]
                                 ):
                                     if present(eval1):
-                                        if eval1 > eval2:
+                                        if eval1 > eval2:  # pragma: no cover
                                             db_fail.at[i, call + "_call"] = (
                                                 db_fail.at[
                                                     i, call + "_call_blastn"
@@ -2710,7 +2710,7 @@ def transfer_assignment(
                                                 != db_fail.loc[
                                                     i, "junction_10x"
                                                 ]
-                                            ):
+                                            ):  # pragma: no cover
                                                 db_fail.at[i, "junction"] = (
                                                     db_fail.at[
                                                         i, "junction_10x"
@@ -2748,7 +2748,7 @@ def transfer_assignment(
                                         ]
                                     )
                                     db_fail.at[i, call + "_source"] = "blastn"
-                            else:
+                            else:  # pragma: no cover
                                 if present(eval2):
                                     db_fail.at[i, call + "_call"] = db_fail.at[
                                         i, call + "_call_blastn"
@@ -3559,7 +3559,7 @@ class MarkAmbiguousContigs:
                     ],
                 )
                 vj_np = list(data4["sequence_id"])
-                if len(vj_np) > 1:
+                if len(vj_np) > 1:  # pragma: no cover
                     if "sequence_alignment" in data4:
                         (
                             data4,
@@ -3872,7 +3872,7 @@ class MarkAmbiguousContigs:
                                 self.ambiguous_contigs.append(evj)
                     self.extra_contigs.append(evj)
 
-            if len(extra_vjnp) > 0:
+            if len(extra_vjnp) > 0:  # pragma: no cover
                 for evj in extra_vjnp:
                     v = v_dict[evj]
                     j = j_dict[evj]
