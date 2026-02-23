@@ -597,13 +597,19 @@ def test_concat_remove_trailing_hyphen_polars(vdj_base):
     assert any(c.startswith("B_") for c in cell_ids)
 
 
-def test_concat_polars_dataframe_input(vdj_base, airr_reannotated2, dummy_adata2):
+def test_concat_polars_dataframe_input(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
     """polars DataFrame is accepted as input and converted to DandelionPolars."""
     vdj, _ = vdj_base
     vdj2 = DandelionPolars(airr_reannotated2)
     vdj2, _ = check_contigs(vdj2, dummy_adata2)
     # Pass second input as a collected polars DataFrame
-    raw_df = vdj2._data.collect() if isinstance(vdj2._data, pl.LazyFrame) else vdj2._data
+    raw_df = (
+        vdj2._data.collect()
+        if isinstance(vdj2._data, pl.LazyFrame)
+        else vdj2._data
+    )
     result = concat([vdj, raw_df])
     assert result is not None
     assert result.n_contigs == vdj.n_contigs + vdj2.n_contigs
@@ -614,13 +620,19 @@ def test_concat_lazyframe_input(vdj_base, airr_reannotated2, dummy_adata2):
     vdj, _ = vdj_base
     vdj2 = DandelionPolars(airr_reannotated2)
     vdj2, _ = check_contigs(vdj2, dummy_adata2)
-    raw_lf = vdj2._data if isinstance(vdj2._data, pl.LazyFrame) else vdj2._data.lazy()
+    raw_lf = (
+        vdj2._data
+        if isinstance(vdj2._data, pl.LazyFrame)
+        else vdj2._data.lazy()
+    )
     result = concat([vdj, raw_lf])
     assert result is not None
     assert result.n_contigs == vdj.n_contigs + vdj2.n_contigs
 
 
-def test_concat_pandas_dataframe_input(vdj_base, airr_reannotated2, dummy_adata2):
+def test_concat_pandas_dataframe_input(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
     """pandas DataFrame is accepted as input and converted to DandelionPolars."""
     vdj, _ = vdj_base
     vdj2 = DandelionPolars(airr_reannotated2)
@@ -635,7 +647,9 @@ def test_concat_pandas_dataframe_input(vdj_base, airr_reannotated2, dummy_adata2
     assert result.n_contigs == vdj.n_contigs + vdj2.n_contigs
 
 
-def test_concat_suffix_length_mismatch_raises_polars(vdj_base, airr_reannotated2, dummy_adata2):
+def test_concat_suffix_length_mismatch_raises_polars(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
     """ValueError when suffix list length does not match array count."""
     vdj, _ = vdj_base
     vdj2 = DandelionPolars(airr_reannotated2)
@@ -644,12 +658,16 @@ def test_concat_suffix_length_mismatch_raises_polars(vdj_base, airr_reannotated2
         concat([vdj, vdj2], suffixes=["_only_one"])
 
 
-def test_concat_v_call_genotyped_partial_polars(vdj_base, airr_reannotated2, dummy_adata2):
+def test_concat_v_call_genotyped_partial_polars(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
     """v_call_genotyped in only one object is filled from v_call in the other."""
     vdj, _ = vdj_base
     vdj2 = DandelionPolars(airr_reannotated2)
     vdj2, _ = check_contigs(vdj2, dummy_adata2)
-    vdj._data = vdj._data.with_columns(pl.col("v_call").alias("v_call_genotyped"))
+    vdj._data = vdj._data.with_columns(
+        pl.col("v_call").alias("v_call_genotyped")
+    )
     result = concat([vdj, vdj2])
     result_data_cols = (
         result._data.collect_schema().names()
