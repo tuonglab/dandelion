@@ -94,6 +94,22 @@ def test_clone_size(create_testfolder):
 
 
 @pytest.mark.usefixtures("create_testfolder")
+def test_clone_size_group_by(create_testfolder):
+    """test clone_size with group_by"""
+    f = create_testfolder / "test.zipddl"
+    vdj = read_zipddl(f)
+    n = vdj._metadata.collect().height
+    group_vals = ["G1"] * (n // 2) + ["G2"] * (n - n // 2)
+    vdj._metadata = vdj._metadata.collect().with_columns(
+        pl.Series("test_group", group_vals)
+    ).lazy()
+    clone_size(vdj, group_by="test_group")
+    result = vdj._metadata.collect()
+    assert "clone_id_size" in result.columns
+    assert result["clone_id_size"].drop_nulls().len() > 0
+
+
+@pytest.mark.usefixtures("create_testfolder")
 @pytest.mark.parametrize(
     "resample,expected", [pytest.param(None, 8), pytest.param(16, 16)]
 )

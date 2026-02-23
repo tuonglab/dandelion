@@ -1309,3 +1309,91 @@ def test_reverse_transfer_no_duplicate_columns_polars(vdj_base):
     _reverse_transfer(adata, vdj)
     new_count = len(vdj._metadata.collect_schema().names())
     assert new_count == initial_count
+
+
+# ---------------------------------------------------------------------------
+# Group 16 – _graph_to_matrices CASE B (csr_matrix with _index_names)
+# ---------------------------------------------------------------------------
+
+
+def _make_dist_csr(obs_names, rows, cols, data):
+    """Build a csr_matrix with ._index_names set, as generate_network does."""
+    from scipy.sparse import csr_matrix as _csr
+
+    n = len(obs_names)
+    mat = _csr(
+        (np.array(data, dtype=np.float32), (rows, cols)), shape=(n, n)
+    )
+    mat._index_names = list(obs_names)
+    return mat
+
+
+def test_case_b_all_names_match():
+    """CASE B: all old names exist in adata – edges are remapped correctly."""
+    import anndata as ad
+    from dandelion.polars.tools._tools import _graph_to_matrices
+
+    obs_names = ["A", "B", "C"]
+    adata = ad.AnnData(obs=pd.DataFrame(index=obs_names))
+    # A→B weight 1.0, B→C weight 2.0
+    mat = _make_dist_csr(obs_names, [0, 1], [1, 2], [1.0, 2.0])
+    conn, dist = _graph_to_matrices(None, adata, mat)
+
+    assert conn.shape == (3, 3)
+    assert dist.shape == (3, 3)
+    assert conn.nnz > 0
+    # dist[0,1] should be the original weight (1.0); dist[1,2] → 2.0
+    assert abs(dist[0, 1] - 1.0) < 1e-5
+    assert abs(dist[1, 2] - 2.0) < 1e-5
+
+
+def test_case_b_connectivities_are_exp_neg_distance():
+    """CASE B: connectivities = exp(-(d + 1)) per internal offset convention."""
+    import anndata as ad
+    from dandelion.polars.tools._tools import _graph_to_matrices
+
+    obs_names = ["A", "B"]
+    adata = ad.AnnData(obs=pd.DataFrame(index=obs_names))
+    d_val = 3.0
+    mat = _make_dist_csr(obs_names, [0], [1], [d_val])
+    conn, dist = _graph_to_matrices(None, adata, mat)
+
+    # CASE B adds +1 before computing conn, then subtracts it back for dist
+    expected_conn = np.exp(-(d_val + 1.0))
+    assert abs(conn[0, 1] - expected_conn) < 1e-6
+    assert abs(dist[0, 1] - d_val) < 1e-5
+
+
+def test_case_b_partial_overlap_filters_missing_nodes():
+    """CASE B: edges involving names absent from adata are dropped."""
+    import anndata as ad
+    from dandelion.polars.tools._tools import _graph_to_matrices
+
+    # old matrix has 4 cells; adata only has 3
+    old_names = ["A", "B", "C", "D"]
+    adata = ad.AnnData(obs=pd.DataFrame(index=["A", "B", "C"]))
+    # A→B kept; A→D and D→B dropped because D not in adata
+    mat = _make_dist_csr(old_names, [0, 0, 3], [1, 3, 1], [1.0, 1.0, 1.0])
+    conn, dist = _graph_to_matrices(None, adata, mat)
+
+    assert conn.shape == (3, 3)
+    # Only A→B should survive
+    assert abs(dist[0, 1] - 1.0) < 1e-5
+    # A→D and D→B were filtered; those positions should be zero
+    assert dist[0, 2] == 0.0
+
+
+def test_case_b_no_valid_names_returns_minimal_matrix():
+    """CASE B else-branch: no old name exists in adata → empty fallback matrix."""
+    import anndata as ad
+    from dandelion.polars.tools._tools import _graph_to_matrices
+
+    old_names = ["X", "Y"]
+    adata = ad.AnnData(obs=pd.DataFrame(index=["A", "B", "C"]))
+    mat = _make_dist_csr(old_names, [0], [1], [1.0])
+    conn, dist = _graph_to_matrices(None, adata, mat)
+
+    assert conn.shape == (3, 3)
+    # The empty-matrix fallback inserts a tiny self-edge at [0, 0]
+    assert conn[0, 0] == pytest.approx(1e-10)
+    assert dist[0, 0] == pytest.approx(0.0)

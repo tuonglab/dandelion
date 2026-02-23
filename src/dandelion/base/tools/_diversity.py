@@ -752,7 +752,7 @@ def _bootstrap_diversity_iteration(
     metric: str,
     normalize: bool,
     min_size: int,
-):
+) -> float:
     """
     One bootstrap iteration for diversity:
     Returns a single diversity value.
@@ -766,7 +766,7 @@ def _bootstrap_diversity_iteration(
     clone_sizes = clone_sizes[clone_sizes > 0]
 
     if len(clone_sizes) == 0:
-        return 0
+        return 0.0
 
     metric = metric.lower()
     if metric == "chao1":
@@ -796,7 +796,7 @@ def calculate_gini_index(
         The calculated Gini index, or 0 if the index is negative or NaN.
     """
     gini = gini_index(values, method=method)
-    return 0 if gini < 0 or np.isnan(gini) else gini
+    return 0.0 if gini < 0 or np.isnan(gini) else gini
 
 
 def calculate_chao1(values: np.ndarray) -> float:
@@ -814,7 +814,7 @@ def calculate_chao1(values: np.ndarray) -> float:
         The calculated Chao1 estimates, or 0 if the index is negative or NaN.
     """
     chao1e = chao1(values)
-    return 0 if chao1e < 0 or np.isnan(chao1e) else chao1e
+    return 0.0 if chao1e < 0 or np.isnan(chao1e) else chao1e
 
 
 def calculate_shannon_entropy(values: np.ndarray, normalize: bool) -> float:
@@ -834,7 +834,7 @@ def calculate_shannon_entropy(values: np.ndarray, normalize: bool) -> float:
     """
     if normalize:
         if len(values) == 1:
-            return 0
+            return 0.0
         else:
             values_freqs = values / np.sum(values)
             return -np.sum(
