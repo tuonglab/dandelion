@@ -8,7 +8,6 @@ import anndata as ad
 
 from dandelion.polars.tools._tools import clone_size
 
-
 # ---------------------------------------------------------------------------
 # Synthetic AnnData helper
 # ---------------------------------------------------------------------------

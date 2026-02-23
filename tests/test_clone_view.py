@@ -9,7 +9,6 @@ import anndata as ad
 
 from dandelion.polars.tools._tools import clone_view
 
-
 # ---------------------------------------------------------------------------
 # Synthetic AnnData helper
 # ---------------------------------------------------------------------------
