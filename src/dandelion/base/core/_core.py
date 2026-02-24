@@ -1059,9 +1059,12 @@ class Dandelion:
         self._data["rearrangement_status"] = contig_status
 
     def compute(self):
-        """Convert self.distances from a lazy array to a concrete numpy array."""
-        if not isinstance(self.distances, np.ndarray):
-            self.distances = csr_matrix(self.distances.compute())
+        """Convert self.distances to a concrete csr matrix."""
+        if not isinstance(self.distances, csr_matrix):
+            try:
+                self.distances = csr_matrix(self.distances.compute())
+            except Exception:
+                self.distances = csr_matrix(self.distances)
             self.distances._index_names = self.metadata_names
 
     def copy(self) -> Dandelion:

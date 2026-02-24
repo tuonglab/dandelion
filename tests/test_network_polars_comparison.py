@@ -209,7 +209,7 @@ def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
     vdj_lazy = DandelionPolars(vdj_smaller.data)
     vdj_eager = DandelionPolars(vdj_smaller.data, lazy=False)
 
-    # Run lazy mode
+    # Run eager mode
     generate_network_polars(
         vdj_eager,
         key="junction",
@@ -238,11 +238,9 @@ def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
         verbose=False,
     )
 
-    # Compute lazy distances if needed
-    if hasattr(vdj_lazy.distances, "compute"):
-        lazy_distances = vdj_lazy.distances.compute()
-    else:
-        lazy_distances = vdj_lazy.distances.toarray()
+    # Compute lazy distances using DandelionPolars.compute()
+    vdj_lazy.compute()
+    lazy_distances = vdj_lazy.distances.toarray()
 
     eager_distances = vdj_eager.distances.toarray()
     np.fill_diagonal(eager_distances, 0.0)
