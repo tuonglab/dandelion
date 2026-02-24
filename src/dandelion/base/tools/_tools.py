@@ -761,11 +761,45 @@ def clone_size(
     """
     Quantify clone sizes, globally or per group.
 
-    If `group_by` is specified, clone sizes and proportions are calculated
-    within each group separately. Each cell is then annotated with the size,
-    proportion, and frequency category based on sizes similar to scRepertoire.
-    If a cell belongs to multiple clones (e.g., multiple chains assigned
-    to different clones), the largest clone is used for annotation.
+    For each clone, the **proportion** is defined as the number of cells
+    belonging to that clone divided by the denominator:
+
+    - **Global** (``group_by=None``): denominator is the total number of
+      cells in the metadata.
+    - **Per group** (``group_by`` specified): denominator is the total number
+      of cells within that group. Proportions are therefore independent
+      across groups.
+
+    Each clone proportion is then mapped to a **frequency category** using
+    the following bins (matching scRepertoire conventions):
+
+    +------------------+-------------------------+
+    | Category         | Proportion range        |
+    +==================+=========================+
+    | Rare             | 0 – 0.0001              |
+    +------------------+-------------------------+
+    | Small            | 0.0001 – 0.001          |
+    +------------------+-------------------------+
+    | Medium           | 0.001 – 0.01            |
+    +------------------+-------------------------+
+    | Large            | 0.01 – 0.1              |
+    +------------------+-------------------------+
+    | Hyperexpanded    | 0.1 – 1                 |
+    +------------------+-------------------------+
+
+    If a cell is assigned to multiple clones (e.g. multiple chains mapped to
+    different clone IDs, separated by ``|``), the clone with the largest size
+    is used for all annotation columns.
+
+    The following columns are added to the metadata:
+
+    - ``{key_added}_size`` : number of cells in the clone.
+    - ``{key_added}_size_prop`` : clone proportion (see above).
+    - ``{key_added}_size_category`` : frequency category label
+      (Rare / Small / Medium / Large / Hyperexpanded).
+    - ``{key_added}_size_max_{max_size}`` : *(only when* ``max_size`` *is
+      set)* clone size as a string, with any size ≥ ``max_size`` collapsed
+      to the label ``">= {max_size}"``.
 
     Parameters
     ----------
@@ -773,14 +807,17 @@ def clone_size(
         VDJ data.
     group_by : str | None, optional
         Column in metadata to group by before calculating clone sizes.
-        If None, calculates global clone sizes.
+        If None, calculates global clone sizes across all cells.
     max_size : int | None, optional
-        Clip clone size values at this maximum.
+        When provided, adds an extra column where clone sizes are represented
+        as string labels; sizes strictly below ``max_size`` are kept as their
+        integer value, while sizes ≥ ``max_size`` are labelled
+        ``">= {max_size}"``.
     clone_key : str | None, optional
-        Column specifying clone identifiers. Defaults to 'clone_id'.
+        Column specifying clone identifiers. Defaults to ``'clone_id'``.
     key_added : str | None, optional
-        Base name used as a prefix for the new metadata column names
-        (e.g. ``{key_added}_clone_size``, ``{key_added}_clone_proportion``).
+        Prefix for the new metadata column names
+        (e.g. ``{key_added}_size``, ``{key_added}_size_prop``).
         Defaults to the value of ``clone_key``.
 
     Raises
