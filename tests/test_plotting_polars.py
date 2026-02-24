@@ -7,7 +7,7 @@ from dandelion.polars.core import Dandelion
 from dandelion.polars.tools import generate_network, transfer
 from dandelion.polars.io import read_ddl
 from dandelion.polars.plotting import (
-    clone_bubbleplot,
+    clone_circlepackplot,
     clone_network,
     barplot,
     stackedbarplot,
@@ -145,18 +145,18 @@ def test_plot_spectratype(create_testfolder):
 
 
 @pytest.mark.usefixtures("create_testfolder")
-def test_plot_clone_bubbleplot(create_testfolder):
-    """test_plot_clone_bubbleplot"""
+def test_plot_clone_circlepackplot(create_testfolder):
+    """test_plot_clone_circlepackplot"""
     f = create_testfolder / "test.ddl"
     vdj = read_ddl(f)
     f2 = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f2)
-    ax = clone_bubbleplot(vdj, group_by="isotype")
+    ax = clone_circlepackplot(vdj, group_by="isotype")
     assert ax is not None
-    ax = clone_bubbleplot(adata, group_by="isotype")
+    ax = clone_circlepackplot(adata, group_by="isotype")
     assert ax is not None
     # palette as a complete nested dict
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by="isotype",
         palette={
@@ -165,21 +165,21 @@ def test_plot_clone_bubbleplot(create_testfolder):
     )
     assert ax is not None
     # palette as a partial nested dict (missing keys get auto-assigned)
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by="isotype",
         palette={"isotype": {"IgM": "#ff0000"}},
     )
     assert ax is not None
     # palette as a list per level
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by="isotype",
         palette={"isotype": ["#ff7f0e", "#1f77b4", "#2ca02c"]},
     )
     assert ax is not None
     # list palette for both levels of nested hierarchy
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         palette={
@@ -189,14 +189,14 @@ def test_plot_clone_bubbleplot(create_testfolder):
     )
     assert ax is not None
     # nested hierarchy with palette only for outer level
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         palette={"group2": {"a": "#ff7f0e", "b": "#1f77b4"}},
     )
     assert ax is not None
     # nested hierarchy with palette for both levels
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         palette={
@@ -206,20 +206,20 @@ def test_plot_clone_bubbleplot(create_testfolder):
     )
     assert ax is not None
     # AnnData with nested hierarchy, palette for outer level only
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         palette={"group2": {"a": "#ff7f0e", "b": "#1f77b4"}},
     )
     assert ax is not None
     # AnnData with palette dict for single level
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by="isotype",
         palette={"isotype": {"IgM": "#ff7f0e", "IgK": "#1f77b4"}},
     )
     assert ax is not None
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         vdj,
         group_by="isotype",
         min_clone_size=2,
@@ -232,27 +232,27 @@ def test_plot_clone_bubbleplot(create_testfolder):
         show_legend=False,
     )
     assert ax is not None
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         legend_kwargs={"loc": "upper right"},
     )
     assert ax is not None
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         show_legend=["group2"],
     )
     assert ax is not None
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         show_legend="group2",
     )
     assert ax is not None
-    ax = clone_bubbleplot(vdj, group_by="isotype", show_count_labels=True)
+    ax = clone_circlepackplot(vdj, group_by="isotype", show_count_labels=True)
     assert ax is not None
-    ax = clone_bubbleplot(
+    ax = clone_circlepackplot(
         vdj,
         group_by="isotype",
         show_clone_labels=True,
@@ -260,11 +260,11 @@ def test_plot_clone_bubbleplot(create_testfolder):
     )
     assert ax is not None
     with pytest.raises(ValueError):
-        clone_bubbleplot(vdj, group_by="isotype", min_clone_size=999)
+        clone_circlepackplot(vdj, group_by="isotype", min_clone_size=999)
 
 
 @pytest.mark.usefixtures("create_testfolder")
-def test_plot_clone_bubbleplot_new_features(create_testfolder):
+def test_plot_clone_circlepackplot_new_features(create_testfolder):
     """Tests for as_subplots, scale_*, outer_ring_color, and new count-label behaviour."""
     import matplotlib.colors as mcolors
     import matplotlib.patches as mpatches
@@ -279,12 +279,12 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     # --- Return-type contracts -----------------------------------------------
 
     # Single-panel returns (Figure, Axes)
-    fig, ax = clone_bubbleplot(adata, group_by=["group2", "group3"])
+    fig, ax = clone_circlepackplot(adata, group_by=["group2", "group3"])
     assert isinstance(fig, Figure)
     assert isinstance(ax, Axes)
 
     # as_subplots returns (Figure, list[Axes])
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata, group_by=["group2", "group3"], as_subplots=True
     )
     assert isinstance(fig, Figure)
@@ -294,12 +294,14 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     assert len(axes) == 2
 
     # --- as_subplots with single-level group_by --------------------------------
-    fig, axes = clone_bubbleplot(adata, group_by="isotype", as_subplots=True)
+    fig, axes = clone_circlepackplot(
+        adata, group_by="isotype", as_subplots=True
+    )
     assert isinstance(axes, list)
     assert len(axes) >= 1
 
     # --- n_col / n_row grid layout --------------------------------------------
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -310,7 +312,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     # 1-col × 2-row grid → 2 total axes
     assert len(fig.get_axes()) == 2
 
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -321,7 +323,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     assert len(fig.get_axes()) == 3  # full grid including the off padding cell
 
     # --- scale_subplots=False -------------------------------------------------
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -330,12 +332,12 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     assert len(axes) == 2
 
     # --- scale_factor (single-panel and subplot) ------------------------------
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata, group_by=["group2", "group3"], scale_factor=1.5
     )
     assert isinstance(ax, Axes)
 
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -343,7 +345,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     )
     assert len(axes) == 2
 
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -353,7 +355,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     assert len(axes) == 2
 
     # --- outer_ring_color in single-panel mode --------------------------------
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata, group_by=["group2", "group3"], outer_ring_color="blue"
     )
     blue_rgba = tuple(mcolors.to_rgba("blue"))
@@ -372,7 +374,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     assert len(blue_patches) >= 1
 
     # --- outer_ring_color in subplot mode ------------------------------------
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -393,7 +395,9 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
         assert tuple(outer_at_origin[0].get_edgecolor()) == black_rgba
 
     # --- outer_ring_color with vdj (DandelionPolars / non-AnnData) -----------
-    fig, ax = clone_bubbleplot(vdj, group_by="isotype", outer_ring_color="red")
+    fig, ax = clone_circlepackplot(
+        vdj, group_by="isotype", outer_ring_color="red"
+    )
     red_rgba = tuple(mcolors.to_rgba("red"))
     ring_patches = [
         p
@@ -407,13 +411,13 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
 
     # --- show_count_labels: group totals outside ring, individual inside ------
     # Single-panel: texts should be present for both groups and leaves
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata, group_by=["group2", "group3"], show_count_labels=True
     )
     assert len(ax.texts) > 0
 
     # show_clone_labels + show_count_labels together
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         show_clone_labels=True,
@@ -423,7 +427,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
 
     # Group count labels are placed BELOW the ring (at y - r, va="top"),
     # so their y-coordinate should be strictly below the group circle centre.
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         show_count_labels=True,
@@ -450,7 +454,7 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
         )
 
     # --- show_count_labels in subplot mode: outer ring gets total label ------
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -460,8 +464,43 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
         # At least the outer-ring total text should be present
         assert len(ax.texts) > 0
 
+    # --- show_enclosure_label=False: outer ring text suppressed --------------
+    # Single-panel: no text should appear below the unfilled group rings
+    fig, ax = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        show_count_labels=True,
+        show_enclosure_label=False,
+        show_group_labels=False,
+    )
+    group_unfilled = [
+        p
+        for p in ax.patches
+        if isinstance(p, mpatches.Circle) and not p.get_fill()
+    ]
+    for patch in group_unfilled:
+        cx, cy, cr = patch.center[0], patch.center[1], patch.get_radius()
+        below = [
+            t
+            for t in ax.texts
+            if abs(t.get_position()[0] - cx) < 1e-6
+            and abs(t.get_position()[1] - (cy - cr - 0.05)) < 1e-6
+        ]
+        assert len(below) == 0
+
+    # Subplot mode: no text outside outer ring when show_enclosure_label=False
+    fig, axes = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        show_count_labels=True,
+        show_enclosure_label=False,
+    )
+    for ax in axes:
+        assert len(ax.texts) == 0
+
     # --- title as suptitle in subplot mode, as ax.title in single-panel ------
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -469,14 +508,14 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     )
     assert any("Subplot Title" in t.get_text() for t in fig.texts)
 
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata, group_by=["group2", "group3"], title="Single Title"
     )
     assert ax.get_title() == "Single Title"
 
     # --- legend control -------------------------------------------------------
     # show_legend=False: no legend on any axis
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
@@ -486,14 +525,14 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
         assert ax.get_legend() is None
 
     # Default (show_legend=None): legend goes on the last active subplot
-    fig, axes = clone_bubbleplot(
+    fig, axes = clone_circlepackplot(
         adata, group_by=["group2", "group3"], as_subplots=True
     )
     assert axes[-1].get_legend() is not None
 
     # --- palette offset: level-0 and level-1 auto-colours are distinct --------
     # With palette=None and two group levels, run to completion without errors.
-    fig, ax = clone_bubbleplot(adata, group_by=["group2", "group3"])
+    fig, ax = clone_circlepackplot(adata, group_by=["group2", "group3"])
     # Collect edgecolors of all unfilled group-ring patches
     all_ring_colors = [
         tuple(p.get_edgecolor())
@@ -505,13 +544,13 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
     assert len(set(all_ring_colors)) > 1
 
     # --- named string palette with offset ------------------------------------
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata, group_by=["group2", "group3"], palette="tab10"
     )
     assert ax is not None
 
     # --- palette dict with auto-fill for missing values ----------------------
-    fig, ax = clone_bubbleplot(
+    fig, ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         palette={"group2": {"a": "red"}, "group3": {"a": "green"}},
@@ -520,6 +559,6 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
 
     # --- ValueError when no clones remain ------------------------------------
     with pytest.raises(ValueError):
-        clone_bubbleplot(
+        clone_circlepackplot(
             adata, group_by="isotype", as_subplots=True, min_clone_size=999
         )

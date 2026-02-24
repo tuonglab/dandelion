@@ -961,7 +961,7 @@ def productive_ratio(
     plt.legend(handles=legend, **legend_kwargs)
 
 
-def clone_bubbleplot(
+def clone_circlepackplot(
     data: AnnData | DandelionPolars,
     group_by: str | list[str],
     palette: str | dict | None = None,
@@ -985,6 +985,7 @@ def clone_bubbleplot(
     scale_subplots: bool = True,
     scale_factor: float | None = None,
     outer_ring_color: str | None = None,
+    show_enclosure_label: bool = True,
 ) -> tuple[Figure, Axes] | tuple[Figure, list[Axes]]:
     """
     A bubble plot to visualise clone sizes within groups using circle packing.
@@ -1088,6 +1089,10 @@ def clone_bubbleplot(
         colour instead of their level-0 palette colour.  Any valid matplotlib
         colour string is accepted (e.g. ``"black"``, ``"#333333"``).
         ``None`` (default) preserves per-group colouring from ``palette``.
+    show_enclosure_label : bool, optional
+        Whether to display the total cell count below each enclosing group
+        ring.  Only has an effect when ``show_count_labels=True``.
+        Default ``True``.
 
     Returns
     -------
@@ -1320,7 +1325,7 @@ def clone_bubbleplot(
                         fontweight="bold",
                         color=_ring_color,
                     )
-                if show_count_labels and count_groups:
+                if show_count_labels and count_groups and show_enclosure_label:
                     ax.text(
                         x,
                         y - r - 0.05,
@@ -1489,7 +1494,7 @@ def clone_bubbleplot(
                     linewidth=2,
                 )
             )
-            if show_count_labels:
+            if show_count_labels and show_enclosure_label:
                 _total = sum(c["datum"] for c in sub_hierarchy)
                 ax.text(
                     0,
