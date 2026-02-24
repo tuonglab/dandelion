@@ -523,4 +523,3 @@ def test_plot_clone_bubbleplot_new_features(create_testfolder):
         clone_bubbleplot(
             adata, group_by="isotype", as_subplots=True, min_clone_size=999
         )
-

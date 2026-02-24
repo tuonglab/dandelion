@@ -1123,7 +1123,9 @@ def clone_bubbleplot(
     for col in group_by_cols:
         data_ = data_[~data_[col].astype(str).isin(_no_clone)].copy()
 
-    def _auto_colors(col: str, vals: list[str], offset: int = 0) -> dict[str, tuple]:
+    def _auto_colors(
+        col: str, vals: list[str], offset: int = 0
+    ) -> dict[str, tuple]:
         """Return a {value: colour} map for *vals* in *col*.
 
         For AnnData inputs the column's ``.uns`` entry is consulted first.
@@ -1196,8 +1198,12 @@ def clone_bubbleplot(
         unique_vals = _ordered_vals(col)
         level_ordered_vals.append(unique_vals)
         if isinstance(palette, str):
-            full_pal = sns.color_palette(palette, _palette_offset + len(unique_vals))
-            cmap: dict[str, tuple] = dict(zip(unique_vals, full_pal[_palette_offset:]))
+            full_pal = sns.color_palette(
+                palette, _palette_offset + len(unique_vals)
+            )
+            cmap: dict[str, tuple] = dict(
+                zip(unique_vals, full_pal[_palette_offset:])
+            )
         elif isinstance(palette, dict):
             col_palette = palette.get(col, {})
             if isinstance(col_palette, list):
@@ -1286,7 +1292,11 @@ def clone_bubbleplot(
                 )
                 ax.add_patch(
                     mpatches.Circle(
-                        (x, y), r, fill=False, edgecolor=_ring_color, linewidth=2
+                        (x, y),
+                        r,
+                        fill=False,
+                        edgecolor=_ring_color,
+                        linewidth=2,
                     )
                 )
                 if show_group_labels:
@@ -1323,7 +1333,12 @@ def clone_bubbleplot(
                 )
                 if show_clone_labels and show_count_labels:
                     ax.text(
-                        x, y + r * 0.25, label, ha="center", va="center", fontsize=7
+                        x,
+                        y + r * 0.25,
+                        label,
+                        ha="center",
+                        va="center",
+                        fontsize=7,
                     )
                     ax.text(
                         x,
@@ -1395,7 +1410,11 @@ def clone_bubbleplot(
     if as_subplots:
         top_groups = level_ordered_vals[0]
         n_subplots = len(top_groups)
-        _n_col = n_col if n_col is not None else (4 if n_subplots > 4 else n_subplots)
+        _n_col = (
+            n_col
+            if n_col is not None
+            else (4 if n_subplots > 4 else n_subplots)
+        )
         _n_row = n_row if n_row is not None else -(-n_subplots // _n_col)
 
         # Pre-build all sub-hierarchies so totals are available for scaling
@@ -1403,7 +1422,9 @@ def clone_bubbleplot(
         for grp_val in top_groups:
             sub_data = data_[data_[group_by_cols[0]].astype(str) == grp_val]
             color_group_lookup.clear()
-            sub_hier = _build_hierarchy(sub_data, group_by_cols[1:], 1, (0, grp_val))
+            sub_hier = _build_hierarchy(
+                sub_data, group_by_cols[1:], 1, (0, grp_val)
+            )
             _sub_builds.append((grp_val, sub_hier, dict(color_group_lookup)))
 
         if scale_subplots:
@@ -1428,7 +1449,11 @@ def clone_bubbleplot(
                 continue
             if scale_subplots:
                 _base_r = (_sub_totals[idx] / _max_total) ** 0.5
-                _enc_r = _base_r * scale_factor if scale_factor is not None else _base_r
+                _enc_r = (
+                    _base_r * scale_factor
+                    if scale_factor is not None
+                    else _base_r
+                )
             else:
                 _enc_r = scale_factor if scale_factor is not None else 1.0
             _target_enc = circlify.Circle(0, 0, _enc_r)
@@ -1447,7 +1472,11 @@ def clone_bubbleplot(
             )
             ax.add_patch(
                 mpatches.Circle(
-                    (0, 0), _enc_r, fill=False, edgecolor=_outer_color, linewidth=2
+                    (0, 0),
+                    _enc_r,
+                    fill=False,
+                    edgecolor=_outer_color,
+                    linewidth=2,
                 )
             )
             if show_count_labels:
@@ -1476,7 +1505,9 @@ def clone_bubbleplot(
         if show_legend is not False:
             handles = _build_legend_handles()
             if handles:
-                axes_flat[n_subplots - 1].legend(handles=handles, **legend_kwargs)
+                axes_flat[n_subplots - 1].legend(
+                    handles=handles, **legend_kwargs
+                )
 
         if title is not None:
             fig.suptitle(title)
