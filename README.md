@@ -63,9 +63,17 @@ singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta
 
 Start off by creating a conda environment containing scanpy, following [official scanpy instructions](https://scanpy.readthedocs.io/en/stable/installation.html). Once done, run the following:
 
+**Base install:**
 ```bash
 pip install sc-dandelion
 ```
+
+**With Polars backend (recommended for improved performance):**
+```bash
+pip install sc-dandelion[polars]
+```
+
+The `polars` extra enables a faster backend for data operations. The base install uses `pandas` as the backend.
 
 Between this and the pipelines within the singularity container, you should be covered for most of your needs.
 
@@ -103,7 +111,7 @@ For some of the pre-processing steps, you will need to install `rpy2` and some R
 
 ```bash
 # in bash/zsh terminal
-conda install -c conda-forge rpy2 r-optparse r-alakazam r-tigger r-airr r-shazam
+conda install -c conda-forge -c bioconda rpy2 r-optparse r-alakazam r-tigger r-airr r-shazam r-scoper
 ```
 
 Otherwise, you can also use `pip` to install `rpy2` and then install the R packages manually:
@@ -116,7 +124,7 @@ pip install rpy2
 ```
 ```R
 # in R
-install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam"))
+install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam", "scoper"))
 ```
 and then lastly install dandelion:
 ```bash
@@ -128,34 +136,49 @@ pip install git+https://github.com/tuonglab/dandelion@branch_name
 ```
 
 ## Basic requirements
-Python packages
-```python
-# conda
-python>=3.7 (conda-forge)
-numpy>=1.18.4 (conda-forge)
-pandas>=1.0.3 (conda-forge)
-distance>=0.1.3 (conda-forge)
-jupyter (conda-forge) # if running via a notebook
-scikit-learn>=0.23.0 (conda-forge)
-numba>=0.48.0 (conda-forge)
-pytables>=3.6.1 (conda-forge)
-seaborn>=0.10.1 (conda-forge)
-leidenalg>=0.8.0 (conda-forge)
-plotnine>=0.6.0 (conda-forge)
 
-# Other executables (through conda)
-blast>=2.10.1 (bioconda)
+Python `>=3.11`
+
+### Base packages (auto-installed with `pip install sc-dandelion`)
+```
+numpy>=1.23
+pandas>=1.4
+changeo>=1.1
+anndata>=0.9
+scanpy>=1.9
+scikit-learn>=1.0
+scipy>=1.8
+numba>=0.56
+seaborn>=0.12
+networkx>=3.0
+leidenalg>=0.9
+polyleven>=0.4
+h5py>=3.6
+adjustText>=0.7
+distance>=0.1.3
+plotnine>=0.10
+palettable>=3.3
+mizani>=0.8
+nxviz>=0.7
+rapidfuzz>3.12.1
+zarr>=2.18.7
+circlify>=0.15.0
+airr
+```
+
+### Optional extras
+```bash
+pip install sc-dandelion[polars]    # polars>=1.34.0, pyarrow>=21.0.0
+pip install sc-dandelion[scirpy]    # scirpy>=0.21, awkward>=2.1, mudata>=0.2
+pip install sc-dandelion[scrublet]  # scrublet>=0.2, annoy<1.17.0
+pip install sc-dandelion[palantir]  # palantir>=0.2.3, pertpy>=0.1.0, jax>=0.3
+pip install sc-dandelion[dask]      # dask>=2025.11.0, distributed>=2025.11.0, psutil>=6.1.0
+```
+
+### Other executables (required for preprocessing)
+```
+blast>=2.10.1   (bioconda)
 igblast>=1.15.0 (bioconda)
-
-# pip
-anndata>=0.7.1
-scanpy>=1.4.6
-scrublet>=0.2.1
-changeo>=1.0.0
-presto>=0.6.0
-polyleven>=0.5
-networkx>=2.4
-rpy2>=3.4.2
 ```
 
 ## Acknowledgements

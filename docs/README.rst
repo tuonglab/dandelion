@@ -73,49 +73,140 @@ Start off by creating a conda environment containing scanpy, following
 `official scanpy instructions <https://scanpy.readthedocs.io/en/stable/installation.html>`__.
 Once done, run the following:
 
+**Base install:**
+
 .. code:: bash
 
-    conda install -c conda-forge graph-tool
     pip install sc-dandelion
 
+**With Polars backend (recommended for improved performance):**
+
+.. code:: bash
+
+    pip install sc-dandelion[polars]
+
+The ``polars`` extra enables a faster backend for data operations. The base install
+uses ``pandas`` as the backend.
 
 Between this and the pipelines within the singularity container, you
 should be covered for most of your needs.
 
+Manual full installation
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+For those who cannot use the singularity container, here is a detailed
+installation guide. Instructions may vary depending on your system.
+
+First, install igblast and blast:
+
+.. code:: bash
+
+    conda install -c bioconda igblast blast
+    # if the above doesn't work, download them manually:
+    # https://ftp.ncbi.nih.gov/blast/executables/igblast/release/LATEST/
+    # https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/
+    echo 'export PATH=path/to/igblast/bin:$PATH' >> ~/.bash_profile
+    echo 'export PATH=path/to/blast+/bin:$PATH' >> ~/.bash_profile
+
+Download the germline databases using the
+`scripts <https://github.com/tuonglab/dandelion/tree/master/container/scripts>`__
+in the ``container`` folder:
+
+.. code:: bash
+
+    python prepare_imgt_database.py
+    python prepare_ogrdb_database.py
+
+Set the paths to the germline and igblast databases:
+
+.. code:: bash
+
+    echo 'export GERMLINE=path/to/database/germlines/' >> ~/.bash_profile
+    echo 'export IGDATA=path/to/database/igblast/' >> ~/.bash_profile
+    echo 'export BLASTDB=path/to/database/blast/' >> ~/.bash_profile
+    source ~/.bash_profile
+
+R packages for preprocessing
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For some preprocessing steps you will need ``rpy2`` and the following R
+packages. The easiest way is via conda:
+
+.. code:: bash
+
+    conda install -c conda-forge -c bioconda rpy2 r-optparse r-alakazam r-tigger r-airr r-shazam r-scoper
+
+Alternatively, install ``rpy2`` via pip and the R packages from within R:
+
+.. code:: bash
+
+    pip install rpy2
+    # If compilation fails with clang, point to gcc first:
+    # env CC=/path/to/bin/gcc-9 pip install rpy2
+
+.. code:: r
+
+    install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam", "scoper"))
+
+Finally, install dandelion:
+
+.. code:: bash
+
+    pip install sc-dandelion
+    # or from GitHub
+    pip install git+https://github.com/tuonglab/dandelion.git
+    # or from a specific branch
+    pip install git+https://github.com/tuonglab/dandelion@branch_name
+
 Basic requirements
 ------------------
 
-Python packages
+Python ``>=3.11``
 
-.. code:: python
+Base packages (auto-installed with ``pip install sc-dandelion``)
 
-    # conda
-    python>=3.7 (conda-forge)
-    numpy>=1.18.4 (conda-forge)
-    pandas>=1.0.3 (conda-forge)
-    distance>=0.1.3 (conda-forge)
-    jupyter (conda-forge) # if running via a notebook
-    scikit-learn>=0.23.0 (conda-forge)
-    numba>=0.48.0 (conda-forge)
-    pytables>=3.6.1 (conda-forge)
-    seaborn>=0.10.1 (conda-forge)
-    leidenalg>=0.8.0 (conda-forge)
-    plotnine>=0.6.0 (conda-forge)
-    graph-tool>=2.3.5 (conda-forge) # optional
+.. code::
 
-    # Other executables (through conda)
-    blast>=2.10.1 (bioconda)
+    numpy>=1.23
+    pandas>=1.4
+    changeo>=1.1
+    anndata>=0.9
+    scanpy>=1.9
+    scikit-learn>=1.0
+    scipy>=1.8
+    numba>=0.56
+    seaborn>=0.12
+    networkx>=3.0
+    leidenalg>=0.9
+    polyleven>=0.4
+    h5py>=3.6
+    adjustText>=0.7
+    distance>=0.1.3
+    plotnine>=0.10
+    palettable>=3.3
+    mizani>=0.8
+    nxviz>=0.7
+    rapidfuzz>3.12.1
+    zarr>=2.18.7
+    circlify>=0.15.0
+    airr
+
+Optional extras
+
+.. code:: bash
+
+    pip install sc-dandelion[polars]    # polars>=1.34.0, pyarrow>=21.0.0
+    pip install sc-dandelion[scirpy]    # scirpy>=0.21, awkward>=2.1, mudata>=0.2
+    pip install sc-dandelion[scrublet]  # scrublet>=0.2, annoy<1.17.0
+    pip install sc-dandelion[palantir]  # palantir>=0.2.3, pertpy>=0.1.0, jax>=0.3
+    pip install sc-dandelion[dask]      # dask>=2025.11.0, distributed>=2025.11.0, psutil>=6.1.0
+
+Other executables (required for preprocessing)
+
+.. code::
+
+    blast>=2.10.1   (bioconda)
     igblast>=1.15.0 (bioconda)
-
-    # pip
-    anndata>=0.7.1
-    scanpy>=1.4.6
-    scrublet>=0.2.1
-    changeo>=1.0.0
-    presto>=0.6.0
-    polyleven>=0.5
-    networkx>=2.4
-    rpy2>=3.4.2
 
 
 Acknowledgements
