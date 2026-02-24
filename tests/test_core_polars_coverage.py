@@ -632,7 +632,7 @@ def test_update_metadata_duplicate_col(airr_polars):
 def test_initialize_metadata_update_isotype_dict(airr_polars):
     """Cover update_isotype_dict path (line 1796)."""
     vdj = airr_polars
-    vdj.initialize_metadata(
+    vdj._initialize_metadata(
         update_isotype_dict={"IGHA1": "IgA1", "IGHA2": "IgA2"}
     )
     assert vdj._metadata is not None
@@ -643,14 +643,14 @@ def test_initialize_metadata_empty_frames(airr_polars):
     # Create a minimal DandelionPolars without c_call to skip isotype
     vdj = DandelionPolars(airr_polars._data)
     # Remove most init_cols so that merge result may be empty
-    vdj.initialize_metadata(init_cols=[])
+    vdj._initialize_metadata(init_cols=[])
     assert vdj._metadata is not None
 
 
 def test_initialize_metadata_not_lazy(airr_polars):
     """Cover non-lazy path in _reinitialize_attributes (lines 1755-1757)."""
     vdj = DandelionPolars(airr_polars._data.collect(), lazy=False)
-    vdj.initialize_metadata()
+    vdj._initialize_metadata()
     assert isinstance(vdj._metadata, pl.DataFrame)
 
 

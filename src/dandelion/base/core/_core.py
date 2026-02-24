@@ -273,7 +273,13 @@ class Dandelion:
 
     @property
     def data(self) -> pd.DataFrame:
-        """One-dimensional annotation of contig observations (`pd.DataFrame`)."""
+        """One-dimensional annotation of contig observations.
+
+        Returns
+        -------
+        pd.DataFrame
+            The underlying contig-level data frame.
+        """
         return self._data
 
     @data.setter
@@ -284,7 +290,13 @@ class Dandelion:
 
     @property
     def data_names(self) -> pd.Index:
-        """Names of observations (alias for `.data.index`)."""
+        """Names of observations (alias for `.data.index`).
+
+        Returns
+        -------
+        pd.Index
+            Index of sequence_id values.
+        """
         return self._data.index
 
     @data_names.setter
@@ -295,7 +307,13 @@ class Dandelion:
 
     @property
     def metadata(self) -> pd.DataFrame:
-        """One-dimensional annotation of cell observations (`pd.DataFrame`)."""
+        """One-dimensional annotation of cell observations.
+
+        Returns
+        -------
+        pd.DataFrame
+            The underlying cell-level metadata frame.
+        """
         return self._metadata
 
     @metadata.setter
@@ -305,7 +323,13 @@ class Dandelion:
 
     @property
     def metadata_names(self) -> pd.Index:
-        """Names of observations (alias for `.metadata.index`)."""
+        """Names of observations (alias for `.metadata.index`).
+
+        Returns
+        -------
+        pd.Index
+            Index of cell_id values.
+        """
         return self._metadata.index
 
     @metadata_names.setter
@@ -561,7 +585,7 @@ class Dandelion:
         Parameters
         ----------
         suffix : str
-            Prefix to add to the IDs.
+            Suffix to add to the IDs.
         sync : bool, optional
             Whether to apply the same suffix to cell_id, by default True.
         remove_trailing_hyphen_number : bool, optional
@@ -616,7 +640,7 @@ class Dandelion:
         **kwargs,
     ) -> None:
         """
-        Add prefix to cell_id and optionally to sequence_id.
+        Add suffix to cell_id and optionally to sequence_id.
 
         Parameters
         ----------
@@ -650,7 +674,13 @@ class Dandelion:
     #     self._data["cell_id"] = self._original_cell_ids
 
     def simplify(self, **kwargs) -> None:
-        """Disambiguate VDJ and C gene calls when there's multiple calls separated by commas and strip the alleles."""
+        """Disambiguate VDJ and C gene calls when there's multiple calls separated by commas and strip the alleles.
+
+        Parameters
+        ----------
+        **kwargs
+            Additional arguments passed to `update_metadata`.
+        """
         # strip alleles from VDJ and constant gene calls
         for col in ["v_call", "v_call_genotyped", "d_call", "j_call", "c_call"]:
             if col in self._data:
@@ -662,7 +692,13 @@ class Dandelion:
         self.update_metadata(**kwargs)
 
     def update_data(self, skip: list[str] = []) -> None:
-        """Sync missing metadata columns into data via dictionary mapping."""
+        """Sync missing metadata columns into data via dictionary mapping.
+
+        Parameters
+        ----------
+        skip : list[str], optional
+            List of column names to skip when syncing metadata to data. Defaults to an empty list.
+        """
 
         new_cols_added = []
 
@@ -1312,8 +1348,6 @@ class Dandelion:
             column name in `.data` slot to retrieve and update the metadata.
         clone_key : str | None, optional
             column name of clone id. None defaults to 'clone_id'.
-        v_call_key : str , optional
-            column name of V gene call. Defaults to 'v_call'.
         retrieve_mode : Literal["split and unique only", "merge and unique only", "split and merge", "split and sum", "split and average", "split", "merge", "sum", "average", ], optional
             one of:
                 `split and unique only`
@@ -1347,7 +1381,7 @@ class Dandelion:
             whether to return the query/update by celltype.
         report_status_productive : bool, optional
             whether to report the locus and chain status for only productive contigs.
-        genotyped : bool, optional
+        genotyped_v_call : bool, optional
             whether or not to use genotyped v_call data to initialize metadata if available.
         custom_isotype_dict : dict[str, str] | None, optional
             custom isotype dictionary to update the default isotype dictionary.

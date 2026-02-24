@@ -583,7 +583,13 @@ class DandelionPolars:
 
     @property
     def n_obs(self) -> int:
-        """Number of observations."""
+        """Number of observations.
+
+        Returns
+        -------
+        int
+            Number of unique cells in `.metadata`.
+        """
         if self._metadata is None:
             return 0
         if isinstance(self._metadata, pl.LazyFrame):
@@ -597,7 +603,13 @@ class DandelionPolars:
 
     @property
     def n_contigs(self) -> int:
-        """Number of contigs."""
+        """Number of contigs.
+
+        Returns
+        -------
+        int
+            Number of contig rows in `.data`.
+        """
         if self._data is None:
             return 0
         if isinstance(self._data, pl.LazyFrame):
@@ -611,7 +623,13 @@ class DandelionPolars:
 
     @property
     def data(self) -> pl.DataFrame | pl.LazyFrame:
-        """One-dimensional annotation of contig observations."""
+        """One-dimensional annotation of contig observations.
+
+        Returns
+        -------
+        pl.DataFrame | pl.LazyFrame
+            The underlying contig-level data frame.
+        """
         if isinstance(self._data, pd.DataFrame):
             return self._data
         if isinstance(self._data, (pl.DataFrame, pl.LazyFrame)):
@@ -630,7 +648,13 @@ class DandelionPolars:
 
     @property
     def data_names(self) -> SeriesAccessor | pd.Index:
-        """Names of contig observations."""
+        """Names of contig observations.
+
+        Returns
+        -------
+        SeriesAccessor | pd.Index
+            The sequence_id values indexing the contig data.
+        """
         if isinstance(self._data, pd.DataFrame):
             return self._data.index
         if isinstance(self._data, pl.DataFrame):
@@ -658,7 +682,13 @@ class DandelionPolars:
 
     @property
     def metadata(self) -> pd.DataFrame | DataFrameAccessor:
-        """One-dimensional annotation of cell observations."""
+        """One-dimensional annotation of cell observations.
+
+        Returns
+        -------
+        pd.DataFrame | DataFrameAccessor
+            The underlying cell-level metadata frame.
+        """
         if isinstance(self._metadata, pd.DataFrame):
             return self._metadata
         if isinstance(self._metadata, (pl.DataFrame, pl.LazyFrame)):
@@ -684,7 +714,13 @@ class DandelionPolars:
 
     @property
     def metadata_names(self) -> pd.Index | pl.Series:
-        """Names of cell observations."""
+        """Names of cell observations.
+
+        Returns
+        -------
+        pd.Index | pl.Series
+            The cell_id values indexing the metadata.
+        """
         if isinstance(self._metadata, pd.DataFrame):
             return self._metadata.index
         if isinstance(self._metadata, pl.DataFrame):
@@ -1040,7 +1076,7 @@ class DandelionPolars:
         Parameters
         ----------
         suffix : str
-            Prefix to add to the IDs.
+            Suffix to add to the IDs.
         sync : bool, optional
             Whether to apply the same suffix to cell_id, by default True.
         remove_trailing_hyphen_number : bool, optional
@@ -1095,7 +1131,7 @@ class DandelionPolars:
         **kwargs,
     ) -> None:
         """
-        Add prefix to cell_id and optionally to sequence_id.
+        Add suffix to cell_id and optionally to sequence_id.
 
         Parameters
         ----------
@@ -1175,7 +1211,13 @@ class DandelionPolars:
             self._cache_data()
 
     def simplify(self, **kwargs) -> None:
-        """Disambiguate VDJ and C gene calls when there's multiple calls separated by commas and strip the alleles."""
+        """Disambiguate VDJ and C gene calls when there's multiple calls separated by commas and strip the alleles.
+
+        Parameters
+        ----------
+        **kwargs
+            Additional arguments passed to `update_metadata`.
+        """
         # Check dataframe type
         is_polars_lazy = isinstance(self._data, pl.LazyFrame)
         is_polars_eager = isinstance(self._data, pl.DataFrame)
@@ -1798,7 +1840,7 @@ class DandelionPolars:
         if reinitialize:
             self.update_metadata(clone_key=clone_key, **kwargs)
 
-    def initialize_metadata(
+    def _initialize_metadata(
         self,
         clone_key: str = "clone_id",
         v_call_key: str = "v_call",
@@ -2167,7 +2209,14 @@ class DandelionPolars:
         self._backend = "pandas"
 
     def to_polars(self, lazy: bool = True) -> None:
-        """Convert self from Pandas to Polars implementation."""
+        """Convert self from Pandas to Polars implementation.
+
+        Parameters
+        ----------
+        lazy : bool, optional
+            Whether to use lazy (LazyFrame) mode for the converted Polars data.
+            Defaults to True.
+        """
         if self._backend == "polars":
             return
         if not isinstance(
@@ -2192,7 +2241,18 @@ class DandelionPolars:
             self._cache_data()
 
     def to_anndata(self) -> AnnData:
-        """Convert DandelionPolars.metadata to AnnData"""
+        """Convert DandelionPolars.metadata to AnnData.
+
+        Returns
+        -------
+        AnnData
+            An AnnData object with `.obs` populated from `.metadata`.
+
+        Raises
+        ------
+        ValueError
+            If `.metadata` is None.
+        """
         if self._metadata is not None:
             if isinstance(self._metadata, pl.LazyFrame):
                 meta_df = self._metadata.collect(engine="streaming").to_pandas()
@@ -2231,7 +2291,14 @@ class DandelionPolars:
         self._lazy = False
 
     def to_lazy(self, *, chunks="auto") -> None:
-        """Convert eager slots to lazy slots."""
+        """Convert eager slots to lazy slots.
+
+        Parameters
+        ----------
+        chunks : str or int or tuple, optional
+            Chunk sizes for converting distance arrays to dask arrays.
+            Passed to `dask.array.from_array`. Defaults to ``"auto"``.
+        """
         if self._backend == "polars":
             if isinstance(self._data, pl.DataFrame):
                 self._data = self._data.lazy()
@@ -2271,13 +2338,19 @@ class DandelionPolars:
 
         Returns
         -------
-        Dandelion
-            a deep copy of Dandelion class.
+        DandelionPolars
+            a deep copy of DandelionPolars class.
         """
         return copy.deepcopy(self)
 
     def clone(self) -> DandelionPolars:
-        """Polars-style clone: duplicate frames and state without sharing cache handles."""
+        """Polars-style clone: duplicate frames and state without sharing cache handles.
+
+        Returns
+        -------
+        DandelionPolars
+            A new DandelionPolars instance with cloned frames and a fresh cache handle map.
+        """
 
         def _clone_frame(obj):
             if isinstance(obj, pl.LazyFrame) or isinstance(obj, pl.DataFrame):
@@ -2351,7 +2424,13 @@ class DandelionPolars:
             self._cache_data()
 
     def update_data(self, skip: list[str] = []) -> None:
-        """Sync metadata columns into data via dictionary mapping."""
+        """Sync metadata columns into data via dictionary mapping.
+
+        Parameters
+        ----------
+        skip : list[str], optional
+            List of column names to skip when syncing metadata to data. Defaults to an empty list.
+        """
         # Check dataframe type
         is_polars_lazy = isinstance(self._data, pl.LazyFrame)
         is_polars_eager = isinstance(self._data, pl.DataFrame)
@@ -2536,52 +2615,50 @@ class DandelionPolars:
         Parameters
         ----------
         retrieve : list[str] | str | None, optional
-            column name in `.data` slot to retrieve and update the metadata.
+            column name(s) in `.data` to retrieve and update the metadata.
         clone_key : str | None, optional
             column name of clone id. None defaults to 'clone_id'.
-        v_call_key : str , optional
-            column name of V gene call. Defaults to 'v_call'.
-        retrieve_mode : Literal["split and unique only", "merge and unique only", "split and merge", "split and sum", "split and average", "split", "merge", "sum", "average", ], optional
-            one of:
-                `split and unique only`
-                    returns the retrieval splitted into two columns,
-                    i.e. one for VDJ and one for VJ chains, separated by `|` for unique elements.
-                `merge and unique only`
-                    returns the retrieval merged into one column,
-                    separated by `|` for unique elements.
-                `split and merge`
-                    returns the retrieval splitted into two columns,
-                    i.e. one for VDJ and one for VJ chains, separated by `|` for every elements.
-                `split`
-                    returns the retrieval splitted into separate columns for each contig.
-                `merge`
-                    returns the retrieval merged into one columns for each contig,
-                    separated by `|` for unique elements.
-                `split and sum`
-                    returns the retrieval sum in the VDJ and VJ columns (separately).
-                `split and average`
-                    returns the retrieval averaged in the VDJ and VJ columns (separately).
-                `sum`
-                    returns the retrieval sum into one column for all contigs.
-                `average`
-                    returns the retrieval averaged into one column for all contigs.
-        reinitialize : bool, optional
-            whether or not to reinitialize the current metadata.
-            useful when updating older versions of `dandelion` to newer version.
+        split : bool, optional
+            whether to split the retrieved values into separate VDJ and VJ
+            columns. Defaults to True.
+        join : bool, optional
+            whether to join multiple values per cell with ``|``. Defaults to True.
+        unique : bool, optional
+            whether to keep only unique values when joining. Defaults to False.
+        first : bool, optional
+            whether to return only the first value per cell rather than
+            joining all values. Defaults to False.
+        average : bool, optional
+            whether to average numeric columns instead of summing them.
+            Defaults to False.
+        key_added : list[str] | str | None, optional
+            custom output column name(s) for the retrieved values. If None,
+            the original column name(s) from `retrieve` are used.
         strip_alleles : bool, optional
-            returns the V(D)J genes with allelic calls if False.
+            returns the V(D)J genes without allelic calls if True. Defaults to True.
+        reinitialize : bool, optional
+            whether or not to reinitialize the current metadata. Useful when
+            updating older versions of `dandelion` to newer version.
         init_cols : list[str] | None, optional
-            columns to initialize the metadata with. If None, uses default set of columns.
+            columns to initialize the metadata with. If None, uses the
+            default set of columns.
         productive_only : bool, optional
-            whether or not to use only productive contigs to initialize metadata.
+            whether or not to use only productive contigs to initialize
+            metadata. Defaults to True.
         check_rearrangement_status : bool, optional
             whether or not to check and update the rearrangement status.
+            Defaults to True.
         genotyped_v_call : bool, optional
-            whether or not to use genotyped v_call data to initialize metadata if available.
+            whether or not to use genotyped v_call data to initialize
+            metadata if available. Defaults to True.
         update_isotype_dict : dict[str, str] | None, optional
             custom isotype dictionary to update the default isotype dictionary.
-        by_celltype : bool, optional
-            whether to return the query/update by celltype.
+        lazy : bool, optional
+            whether to keep the metadata as a Polars LazyFrame after updating.
+            Defaults to True.
+        as_pandas : bool, optional
+            whether to convert the Dandelion object back to the pandas backend
+            after updating. Defaults to False.
 
         Raises
         ------
@@ -2620,7 +2697,7 @@ class DandelionPolars:
         metadata_status = self._metadata
 
         if (metadata_status is None) or reinitialize:
-            self.initialize_metadata(
+            self._initialize_metadata(
                 clone_key=clone_key,
                 v_call_key=v_call_key,
                 init_cols=init_cols,
@@ -3089,9 +3166,18 @@ class DandelionPolars:
         with optional compression.
 
         Storage scheme:
+
         - data and metadata → Parquet blobs
         - distances → Zarr arrays
         - graph, layout and germline → HDF5
+
+        Parameters
+        ----------
+        filename : str, optional
+            path to output `.zipddl` file.
+        compress : bool, optional
+            whether to compress stored data using Blosc/Zstd with bitshuffle.
+            Defaults to True.
         """
         # Create Zarr ZipStore container
         store = ZipStore(filename, mode="w")

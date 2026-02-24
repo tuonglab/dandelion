@@ -35,8 +35,25 @@ def read_zipddl(
     """
     Read a Dandelion object from a .zipddl file (hybrid Zarr v3 ZipStore container).
 
-    Returns:
-        Dandelion object
+    Parameters
+    ----------
+    filename : str
+        path to `.zipddl` file.
+    distance_zarr : Path | str | None, optional
+        path to an external Zarr array for distances, if the distances were not
+        embedded in the .zipddl file. Auto-detected when not provided.
+    verbose : bool, optional
+        whether or not to print messages during creation of the DandelionPolars object.
+
+    Returns
+    -------
+    DandelionPolars
+        DandelionPolars object.
+
+    Raises
+    ------
+    AttributeError
+        if `data` not found in the `.zipddl` file.
     """
     store = ZipStore(filename, mode="r")
     root = open_zarr_group(store, mode="r")
@@ -889,13 +906,13 @@ def read_parse_airr(
         whether or not to remove the trailing hyphen number e.g. '-1' from the
         cell/contig barcodes.
     verbose : bool, optional
-        whether or not to print messages during creation of the Dandelion object.
+        whether or not to print messages during creation of the DandelionPolars object.
     **kwargs
-        additional keyword arguments passed to Dandelion.
+        additional keyword arguments passed to DandelionPolars.
 
     Returns
     -------
-    Dandelion
+    DandelionPolars
         DandelionPolars object from Parse AIRR file.
     """
     data = load_polars(file)  # should return LazyFrame
