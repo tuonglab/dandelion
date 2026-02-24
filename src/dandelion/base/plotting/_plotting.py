@@ -971,7 +971,13 @@ def clone_bubbleplot(
         "loc": "center left",
         "frameon": False,
     },
-) -> tuple[Figure, Axes]:
+    as_subplots: bool = False,
+    n_col: int | None = None,
+    n_row: int | None = None,
+    scale_subplots: bool = True,
+    scale_factor: float | None = None,
+    outer_ring_color: str | None = None,
+) -> tuple[Figure, Axes] | tuple[Figure, list[Axes]]:
     """
     A bubble plot to visualise clone sizes within groups using circle packing.
 
@@ -1010,7 +1016,8 @@ def clone_bubbleplot(
               palette={"A": {"x": "red", "y": "blue"}, "B": {"x": "green"}}
               palette={"A": ["red", "blue"], "B": ["green", "orange"]}
     figsize : tuple[float, float], optional
-        Figure size.
+        Figure size. When ``as_subplots=True`` this is interpreted as the size
+        of each individual subplot panel.
     title : str | None, optional
         Title of plot.
     min_clone_size : int, optional
@@ -1034,11 +1041,52 @@ def clone_bubbleplot(
         * ``False``: hide the legend entirely.
     legend_kwargs : dict, optional
         Keyword arguments forwarded to ``ax.legend``.
+    as_subplots : bool, optional
+        If ``True``, split the figure into one subplot per top-level group
+        (the first element of ``group_by``). The subplots are tiled according
+        to ``n_col`` and ``n_row``.
+    n_col : int | None, optional
+        Number of subplot columns when ``as_subplots=True``. If ``None``,
+        defaults to 4 when there are more than 4 subplots, otherwise the
+        number of subplots. Ignored when ``as_subplots=False``.
+    n_row : int | None, optional
+        Number of subplot rows when ``as_subplots=True``. If ``None``,
+        computed automatically from ``n_col``. Ignored when
+        ``as_subplots=False``.
+    scale_subplots : bool, optional
+        When ``as_subplots=True``, scale each subplot's enclosing circle so
+        that its area is proportional to its total cell count relative to the
+        largest subplot. This keeps circle sizes visually comparable across
+        panels: a clone of size *n* always occupies the same area regardless
+        of which subplot it appears in. Uniform axis limits are applied to all
+        subplots. Has no effect when ``as_subplots=False``. Default ``True``.
+    scale_factor : float | None, optional
+        Direct multiplier on the enclosure radius. Larger values produce
+        larger circles; smaller values produce smaller circles. Applies in
+        both ``as_subplots=True`` and ``as_subplots=False`` modes.
+
+        * ``None`` (default): in single-panel mode the enclosure fills the
+          panel (radius = 1.0); in subplot mode the radius is determined
+          by ``scale_subplots`` alone.
+        * ``float``: the enclosure radius is set to ``scale_factor`` in
+          single-panel mode, or multiplied by ``scale_factor`` on top of
+          the ``scale_subplots`` auto-computed radius in subplot mode.
+          Axes are fixed to ``[-1.05, 1.05]`` so relative sizes remain
+          visually meaningful. Values < 1 shrink circles; values > 1
+          enlarge them.
+    outer_ring_color : str | None, optional
+        If set, all outermost group rings (depth-0 circles in single-panel
+        mode and the enclosing ring in each subplot) are drawn in this single
+        colour instead of their level-0 palette colour.  Any valid matplotlib
+        colour string is accepted (e.g. ``"black"``, ``"#333333"``).
+        ``None`` (default) preserves per-group colouring from ``palette``.
 
     Returns
     -------
     tuple[Figure, Axes]
-        Circle-packing bubble plot.
+        Circle-packing bubble plot (when ``as_subplots=False``).
+    tuple[Figure, list[Axes]]
+        Figure and list of per-group axes (when ``as_subplots=True``).
 
     Raises
     ------
@@ -1075,11 +1123,15 @@ def clone_bubbleplot(
     for col in group_by_cols:
         data_ = data_[~data_[col].astype(str).isin(_no_clone)].copy()
 
-    def _auto_colors(col: str, vals: list[str]) -> dict[str, tuple]:
+    def _auto_colors(col: str, vals: list[str], offset: int = 0) -> dict[str, tuple]:
         """Return a {value: colour} map for *vals* in *col*.
 
         For AnnData inputs the column's ``.uns`` entry is consulted first.
         Dandelion inputs always use Set2.
+
+        *offset* shifts the starting index in the palette so that successive
+        hierarchy levels draw from distinct colours rather than all cycling
+        from position 0.
         """
         if _is_adata:
             uns_key = f"{col}_colors"
@@ -1099,17 +1151,20 @@ def clone_bubbleplot(
                     str(c): clr for c, clr in zip(cats, _adata_uns[uns_key])
                 }
                 return {v: color_dict.get(v, "gray") for v in vals}
-            # Fallback: scanpy default palette cycle
+            # Fallback: scanpy default palette cycle with per-level offset
             n = len(vals)
-            if n <= 20:
+            total_needed = offset + n
+            if total_needed <= 20:
                 pal = list(palettes.default_20)
-            elif n <= 28:
+            elif total_needed <= 28:
                 pal = list(palettes.default_28)
             else:
                 pal = list(palettes.default_102)
-            return dict(zip(vals, cycle(pal)))
-        # Dandelion / non-AnnData: use Set2
-        return dict(zip(vals, sns.color_palette("Set2", len(vals))))
+            colors = [pal[i % len(pal)] for i in range(offset, offset + n)]
+            return dict(zip(vals, colors))
+        # Dandelion / non-AnnData: use Set2 with per-level offset
+        full_pal = sns.color_palette("Set2", max(8, offset + len(vals)))
+        return dict(zip(vals, full_pal[offset : offset + len(vals)]))
 
     def _ordered_vals(col: str) -> list[str]:
         """Return unique string values for col in the correct display order.
@@ -1130,23 +1185,26 @@ def clone_bubbleplot(
             return [str(v) for v in sorted(raw_vals, key=float)]
         return sorted(str(v) for v in raw_vals)
 
-    # Build one colour map per group_by level
+    # Build one colour map per group_by level.
+    # _palette_offset ensures each level starts from a fresh position in the
+    # auto-assigned palette so that outer-ring colours (level 0) are always
+    # visually distinct from inner-ring colours (level 1+).
     level_color_maps: list[dict[str, tuple]] = []
     level_ordered_vals: list[list[str]] = []
+    _palette_offset = 0
     for col in group_by_cols:
         unique_vals = _ordered_vals(col)
         level_ordered_vals.append(unique_vals)
         if isinstance(palette, str):
-            cmap: dict[str, tuple] = dict(
-                zip(unique_vals, sns.color_palette(palette, len(unique_vals)))
-            )
+            full_pal = sns.color_palette(palette, _palette_offset + len(unique_vals))
+            cmap: dict[str, tuple] = dict(zip(unique_vals, full_pal[_palette_offset:]))
         elif isinstance(palette, dict):
             col_palette = palette.get(col, {})
             if isinstance(col_palette, list):
                 cmap = dict(zip(unique_vals, col_palette))
                 missing = [v for v in unique_vals if v not in cmap]
                 if missing:
-                    cmap.update(_auto_colors(col, missing))
+                    cmap.update(_auto_colors(col, missing, _palette_offset))
             else:
                 cmap = {}
                 missing = []
@@ -1156,9 +1214,10 @@ def clone_bubbleplot(
                     else:
                         missing.append(v)
                 if missing:
-                    cmap.update(_auto_colors(col, missing))
+                    cmap.update(_auto_colors(col, missing, _palette_offset))
         else:
-            cmap = _auto_colors(col, unique_vals)
+            cmap = _auto_colors(col, unique_vals, _palette_offset)
+        _palette_offset += len(unique_vals)
         level_color_maps.append(cmap)
 
     # Side-lookup: id(node) → (level_index, group_value)
@@ -1203,108 +1262,108 @@ def clone_bubbleplot(
             result.append(node)
         return result
 
-    hierarchy = _build_hierarchy(data_, group_by_cols, 0, None)
+    def _render_circles_on_ax(
+        ax: Axes,
+        circles,
+        lookup: dict[int, tuple[int, str]],
+        count_groups: bool = True,
+    ) -> None:
+        for circle in circles:
+            if circle.ex is None:
+                continue
+            x, y, r = circle.x, circle.y, circle.r
+            label = circle.ex.get("id", "")
+            level_idx, group_val = lookup.get(id(circle.ex), (0, label))
+            level_idx = min(level_idx, len(level_color_maps) - 1)
+            color = level_color_maps[level_idx].get(group_val, "gray")
+            is_group = "children" in circle.ex
 
-    circles = circlify.circlify(
-        hierarchy,
-        show_enclosure=False,
-        target_enclosure=circlify.Circle(0, 0, 1),
-    )
-
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.set_aspect("equal")
-
-    for circle in circles:
-        if circle.ex is None:
-            continue
-
-        x, y, r = circle.x, circle.y, circle.r
-        label = circle.ex.get("id", "")
-        level_idx, group_val = color_group_lookup.get(id(circle.ex), (0, label))
-        level_idx = min(level_idx, len(level_color_maps) - 1)
-        color = level_color_maps[level_idx].get(group_val, "gray")
-        is_group = "children" in circle.ex
-
-        if is_group:
-            ax.add_patch(
-                mpatches.Circle(
-                    (x, y), r, fill=False, edgecolor=color, linewidth=2
+            if is_group:
+                _ring_color = (
+                    outer_ring_color
+                    if outer_ring_color is not None and level_idx == 0
+                    else color
                 )
+                ax.add_patch(
+                    mpatches.Circle(
+                        (x, y), r, fill=False, edgecolor=_ring_color, linewidth=2
+                    )
+                )
+                if show_group_labels:
+                    ax.text(
+                        x,
+                        y + r,
+                        label,
+                        ha="center",
+                        va="bottom",
+                        fontsize=9,
+                        fontweight="bold",
+                        color=_ring_color,
+                    )
+                if show_count_labels and count_groups:
+                    ax.text(
+                        x,
+                        y - r - 0.05,
+                        str(circle.ex["datum"]),
+                        ha="center",
+                        va="top",
+                        fontsize=7,
+                        color=_ring_color,
+                    )
+            else:
+                ax.add_patch(
+                    mpatches.Circle(
+                        (x, y),
+                        r,
+                        alpha=alpha,
+                        facecolor=color,
+                        edgecolor="white",
+                        linewidth=0.5,
+                    )
+                )
+                if show_clone_labels and show_count_labels:
+                    ax.text(
+                        x, y + r * 0.25, label, ha="center", va="center", fontsize=7
+                    )
+                    ax.text(
+                        x,
+                        y - r * 0.25,
+                        str(circle.ex["datum"]),
+                        ha="center",
+                        va="center",
+                        fontsize=7,
+                    )
+                elif show_clone_labels:
+                    ax.text(x, y, label, ha="center", va="center", fontsize=7)
+                elif show_count_labels:
+                    ax.text(
+                        x,
+                        y,
+                        str(circle.ex["datum"]),
+                        ha="center",
+                        va="center",
+                        fontsize=7,
+                    )
+
+    def _set_ax_limits(ax: Axes, circles) -> None:
+        xs = [c.x for c in circles if c.ex is not None]
+        ys = [c.y for c in circles if c.ex is not None]
+        rs = [c.r for c in circles if c.ex is not None]
+        if xs:
+            margin = 0.05
+            ax.set_xlim(
+                min(cx - cr for cx, cr in zip(xs, rs)) - margin,
+                max(cx + cr for cx, cr in zip(xs, rs)) + margin,
             )
-            if show_group_labels:
-                ax.text(
-                    x,
-                    y + r,
-                    label,
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
-                    fontweight="bold",
-                    color=color,
-                )
-            if show_count_labels:
-                ax.text(
-                    x,
-                    y,
-                    str(circle.ex["datum"]),
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                    color=color,
-                )
+            ax.set_ylim(
+                min(cy - cr for cy, cr in zip(ys, rs)) - margin,
+                max(cy + cr for cy, cr in zip(ys, rs)) + margin,
+            )
         else:
-            ax.add_patch(
-                mpatches.Circle(
-                    (x, y),
-                    r,
-                    alpha=alpha,
-                    facecolor=color,
-                    edgecolor="white",
-                    linewidth=0.5,
-                )
-            )
-            if show_clone_labels and show_count_labels:
-                ax.text(
-                    x, y + r * 0.25, label, ha="center", va="center", fontsize=7
-                )
-                ax.text(
-                    x,
-                    y - r * 0.25,
-                    str(circle.ex["datum"]),
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                )
-            elif show_clone_labels:
-                ax.text(x, y, label, ha="center", va="center", fontsize=7)
-            elif show_count_labels:
-                ax.text(
-                    x,
-                    y,
-                    str(circle.ex["datum"]),
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                )
+            ax.set_xlim(-1.1, 1.1)
+            ax.set_ylim(-1.1, 1.1)
 
-    xs = [c.x for c in circles if c.ex is not None]
-    ys = [c.y for c in circles if c.ex is not None]
-    rs = [c.r for c in circles if c.ex is not None]
-    if xs:
-        margin = 0.05
-        ax.set_xlim(
-            min(cx - cr for cx, cr in zip(xs, rs)) - margin,
-            max(cx + cr for cx, cr in zip(xs, rs)) + margin,
-        )
-        ax.set_ylim(
-            min(cy - cr for cy, cr in zip(ys, rs)) - margin,
-            max(cy + cr for cy, cr in zip(ys, rs)) + margin,
-        )
-    else:
-        ax.set_xlim(-1.1, 1.1)
-        ax.set_ylim(-1.1, 1.1)
-
-    if show_legend is not False:
+    def _build_legend_handles() -> list:
         if show_legend is None or show_legend is True:
             _legend_levels = None
         elif isinstance(show_legend, str):
@@ -1331,11 +1390,129 @@ def clone_bubbleplot(
             handles += [
                 mpatches.Patch(color=cmap[v], label=v) for v in ordered_vals
             ]
+        return handles
+
+    if as_subplots:
+        top_groups = level_ordered_vals[0]
+        n_subplots = len(top_groups)
+        _n_col = n_col if n_col is not None else (4 if n_subplots > 4 else n_subplots)
+        _n_row = n_row if n_row is not None else -(-n_subplots // _n_col)
+
+        # Pre-build all sub-hierarchies so totals are available for scaling
+        _sub_builds: list[tuple[str, list[dict], dict]] = []
+        for grp_val in top_groups:
+            sub_data = data_[data_[group_by_cols[0]].astype(str) == grp_val]
+            color_group_lookup.clear()
+            sub_hier = _build_hierarchy(sub_data, group_by_cols[1:], 1, (0, grp_val))
+            _sub_builds.append((grp_val, sub_hier, dict(color_group_lookup)))
+
+        if scale_subplots:
+            _sub_totals = [
+                sum(c["datum"] for c in hier) if hier else 0
+                for _, hier, _ in _sub_builds
+            ]
+            _max_total = max(_sub_totals) if any(_sub_totals) else 1
+
+        fig, axes = plt.subplots(
+            _n_row,
+            _n_col,
+            figsize=(figsize[0] * _n_col, figsize[1] * _n_row),
+            squeeze=False,
+        )
+        axes_flat: np.ndarray = axes.flatten()
+
+        for idx, (grp_val, sub_hierarchy, lookup) in enumerate(_sub_builds):
+            ax = axes_flat[idx]
+            if not sub_hierarchy:
+                ax.axis("off")
+                continue
+            if scale_subplots:
+                _base_r = (_sub_totals[idx] / _max_total) ** 0.5
+                _enc_r = _base_r * scale_factor if scale_factor is not None else _base_r
+            else:
+                _enc_r = scale_factor if scale_factor is not None else 1.0
+            _target_enc = circlify.Circle(0, 0, _enc_r)
+            sub_circles = circlify.circlify(
+                sub_hierarchy,
+                show_enclosure=False,
+                target_enclosure=_target_enc,
+            )
+            ax.set_aspect("equal")
+            _render_circles_on_ax(ax, sub_circles, lookup, count_groups=False)
+            # Outer ring for the top-level group (mirrors single-panel behaviour)
+            _outer_color = (
+                outer_ring_color
+                if outer_ring_color is not None
+                else level_color_maps[0].get(grp_val, "gray")
+            )
+            ax.add_patch(
+                mpatches.Circle(
+                    (0, 0), _enc_r, fill=False, edgecolor=_outer_color, linewidth=2
+                )
+            )
+            if show_count_labels:
+                _total = sum(c["datum"] for c in sub_hierarchy)
+                ax.text(
+                    0,
+                    -_enc_r - 0.05,
+                    str(_total),
+                    ha="center",
+                    va="top",
+                    fontsize=8,
+                    color=_outer_color,
+                )
+            if scale_subplots or scale_factor is not None:
+                _margin = 0.05
+                ax.set_xlim(-1.0 - _margin, 1.0 + _margin)
+                ax.set_ylim(-1.0 - _margin, 1.0 + _margin)
+            else:
+                _set_ax_limits(ax, sub_circles)
+            ax.set_title(grp_val, fontsize=10, fontweight="bold")
+            ax.axis("off")
+
+        for idx in range(n_subplots, _n_row * _n_col):
+            axes_flat[idx].axis("off")
+
+        if show_legend is not False:
+            handles = _build_legend_handles()
+            if handles:
+                axes_flat[n_subplots - 1].legend(handles=handles, **legend_kwargs)
+
+        if title is not None:
+            fig.suptitle(title)
+
+        return fig, list(axes_flat[:n_subplots])
+
+    hierarchy = _build_hierarchy(data_, group_by_cols, 0, None)
+
+    if scale_factor is not None:
+        _target_enc = circlify.Circle(0, 0, scale_factor)
+    else:
+        _target_enc = circlify.Circle(0, 0, 1)
+
+    circles = circlify.circlify(
+        hierarchy,
+        show_enclosure=False,
+        target_enclosure=_target_enc,
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_aspect("equal")
+    _render_circles_on_ax(ax, circles, color_group_lookup)
+    if scale_factor is not None:
+        _margin = 0.05
+        ax.set_xlim(-1.0 - _margin, 1.0 + _margin)
+        ax.set_ylim(-1.0 - _margin, 1.0 + _margin)
+    else:
+        _set_ax_limits(ax, circles)
+
+    if show_legend is not False:
+        handles = _build_legend_handles()
         ax.legend(handles=handles, **legend_kwargs)
 
     if title is not None:
         ax.set_title(title)
-    plt.axis("off")
+    ax.axis("off")
 
     return fig, ax
 

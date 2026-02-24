@@ -261,3 +261,266 @@ def test_plot_clone_bubbleplot(create_testfolder):
     assert ax is not None
     with pytest.raises(ValueError):
         clone_bubbleplot(vdj, group_by="isotype", min_clone_size=999)
+
+
+@pytest.mark.usefixtures("create_testfolder")
+def test_plot_clone_bubbleplot_new_features(create_testfolder):
+    """Tests for as_subplots, scale_*, outer_ring_color, and new count-label behaviour."""
+    import matplotlib.colors as mcolors
+    import matplotlib.patches as mpatches
+    from matplotlib.figure import Figure
+    from matplotlib.axes import Axes
+
+    f = create_testfolder / "test.ddl"
+    vdj = read_ddl(f)
+    f2 = create_testfolder / "test.h5ad"
+    adata = sc.read_h5ad(f2)
+
+    # --- Return-type contracts -----------------------------------------------
+
+    # Single-panel returns (Figure, Axes)
+    fig, ax = clone_bubbleplot(adata, group_by=["group2", "group3"])
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+
+    # as_subplots returns (Figure, list[Axes])
+    fig, axes = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], as_subplots=True
+    )
+    assert isinstance(fig, Figure)
+    assert isinstance(axes, list)
+    assert all(isinstance(a, Axes) for a in axes)
+    # group2 has two unique values ("a", "b") → two subplots
+    assert len(axes) == 2
+
+    # --- as_subplots with single-level group_by --------------------------------
+    fig, axes = clone_bubbleplot(adata, group_by="isotype", as_subplots=True)
+    assert isinstance(axes, list)
+    assert len(axes) >= 1
+
+    # --- n_col / n_row grid layout --------------------------------------------
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        n_col=1,
+        n_row=2,
+    )
+    assert len(axes) == 2
+    # 1-col × 2-row grid → 2 total axes
+    assert len(fig.get_axes()) == 2
+
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        n_col=1,
+        n_row=3,  # oversized: 1 padding cell
+    )
+    assert len(axes) == 2  # returned list only has active subplots
+    assert len(fig.get_axes()) == 3  # full grid including the off padding cell
+
+    # --- scale_subplots=False -------------------------------------------------
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        scale_subplots=False,
+    )
+    assert len(axes) == 2
+
+    # --- scale_factor (single-panel and subplot) ------------------------------
+    fig, ax = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], scale_factor=1.5
+    )
+    assert isinstance(ax, Axes)
+
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        scale_factor=0.7,
+    )
+    assert len(axes) == 2
+
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        scale_subplots=False,
+        scale_factor=0.8,
+    )
+    assert len(axes) == 2
+
+    # --- outer_ring_color in single-panel mode --------------------------------
+    fig, ax = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], outer_ring_color="blue"
+    )
+    blue_rgba = tuple(mcolors.to_rgba("blue"))
+    ring_patches = [
+        p
+        for p in ax.patches
+        if isinstance(p, mpatches.Circle)
+        and not p.get_fill()
+        and p.get_linewidth() >= 2.0
+    ]
+    assert len(ring_patches) >= 1
+    # All level-0 (outermost) rings should be blue
+    blue_patches = [
+        p for p in ring_patches if tuple(p.get_edgecolor()) == blue_rgba
+    ]
+    assert len(blue_patches) >= 1
+
+    # --- outer_ring_color in subplot mode ------------------------------------
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        outer_ring_color="black",
+    )
+    black_rgba = tuple(mcolors.to_rgba("black"))
+    for ax in axes:
+        # The manually drawn outer ring is always centred at (0, 0)
+        outer_at_origin = [
+            p
+            for p in ax.patches
+            if isinstance(p, mpatches.Circle)
+            and not p.get_fill()
+            and abs(p.center[0]) < 1e-9
+            and abs(p.center[1]) < 1e-9
+        ]
+        assert len(outer_at_origin) >= 1
+        assert tuple(outer_at_origin[0].get_edgecolor()) == black_rgba
+
+    # --- outer_ring_color with vdj (DandelionPolars / non-AnnData) -----------
+    fig, ax = clone_bubbleplot(vdj, group_by="isotype", outer_ring_color="red")
+    red_rgba = tuple(mcolors.to_rgba("red"))
+    ring_patches = [
+        p
+        for p in ax.patches
+        if isinstance(p, mpatches.Circle)
+        and not p.get_fill()
+        and p.get_linewidth() >= 2.0
+    ]
+    assert len(ring_patches) >= 1
+    assert all(tuple(p.get_edgecolor()) == red_rgba for p in ring_patches)
+
+    # --- show_count_labels: group totals outside ring, individual inside ------
+    # Single-panel: texts should be present for both groups and leaves
+    fig, ax = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], show_count_labels=True
+    )
+    assert len(ax.texts) > 0
+
+    # show_clone_labels + show_count_labels together
+    fig, ax = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        show_clone_labels=True,
+        show_count_labels=True,
+    )
+    assert len(ax.texts) > 0
+
+    # Group count labels are placed BELOW the ring (at y - r, va="top"),
+    # so their y-coordinate should be strictly below the group circle centre.
+    fig, ax = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        show_count_labels=True,
+        show_group_labels=False,  # suppress name labels so texts = count only
+    )
+    group_unfilled = [
+        p
+        for p in ax.patches
+        if isinstance(p, mpatches.Circle) and not p.get_fill()
+    ]
+    # For every group circle its count text must sit below its centre
+    for patch in group_unfilled:
+        cx, cy, cr = patch.center[0], patch.center[1], patch.get_radius()
+        # Find a text near (cx, cy - cr) — the expected label position
+        nearby = [
+            t
+            for t in ax.texts
+            if abs(t.get_position()[0] - cx) < 1e-6
+            and abs(t.get_position()[1] - (cy - cr - 0.05)) < 1e-6
+        ]
+        assert len(nearby) == 1, (
+            f"Expected one count-label below group circle at "
+            f"({cx:.3f}, {cy - cr:.3f}); found {len(nearby)}"
+        )
+
+    # --- show_count_labels in subplot mode: outer ring gets total label ------
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        show_count_labels=True,
+    )
+    for ax in axes:
+        # At least the outer-ring total text should be present
+        assert len(ax.texts) > 0
+
+    # --- title as suptitle in subplot mode, as ax.title in single-panel ------
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        title="Subplot Title",
+    )
+    assert any("Subplot Title" in t.get_text() for t in fig.texts)
+
+    fig, ax = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], title="Single Title"
+    )
+    assert ax.get_title() == "Single Title"
+
+    # --- legend control -------------------------------------------------------
+    # show_legend=False: no legend on any axis
+    fig, axes = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        show_legend=False,
+    )
+    for ax in axes:
+        assert ax.get_legend() is None
+
+    # Default (show_legend=None): legend goes on the last active subplot
+    fig, axes = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], as_subplots=True
+    )
+    assert axes[-1].get_legend() is not None
+
+    # --- palette offset: level-0 and level-1 auto-colours are distinct --------
+    # With palette=None and two group levels, run to completion without errors.
+    fig, ax = clone_bubbleplot(adata, group_by=["group2", "group3"])
+    # Collect edgecolors of all unfilled group-ring patches
+    all_ring_colors = [
+        tuple(p.get_edgecolor())
+        for p in ax.patches
+        if isinstance(p, mpatches.Circle) and not p.get_fill()
+    ]
+    # With the palette offset fix, the two level-0 rings and the inner
+    # level-1 rings should not all share the same colour.
+    assert len(set(all_ring_colors)) > 1
+
+    # --- named string palette with offset ------------------------------------
+    fig, ax = clone_bubbleplot(
+        adata, group_by=["group2", "group3"], palette="tab10"
+    )
+    assert ax is not None
+
+    # --- palette dict with auto-fill for missing values ----------------------
+    fig, ax = clone_bubbleplot(
+        adata,
+        group_by=["group2", "group3"],
+        palette={"group2": {"a": "red"}, "group3": {"a": "green"}},
+    )
+    assert ax is not None
+
+    # --- ValueError when no clones remain ------------------------------------
+    with pytest.raises(ValueError):
+        clone_bubbleplot(
+            adata, group_by="isotype", as_subplots=True, min_clone_size=999
+        )
+
