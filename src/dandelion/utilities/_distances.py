@@ -147,6 +147,22 @@ class CallableMetric:
         func: Callable[[str, str], float] | None = None,
         vectorized_func: Callable[[list[str]], np.ndarray] | None = None,
     ):
+        """
+        Parameters
+        ----------
+        func : Callable[[str, str], float] | None, optional
+            Pairwise distance function taking two strings and returning a float.
+            Auto-detected from signature if a single callable is provided.
+        vectorized_func : Callable[[list[str]], np.ndarray] | None, optional
+            Vectorized distance function taking a list of strings and returning
+            a square distance matrix as an ndarray.
+
+        Raises
+        ------
+        ValueError
+            if neither ``func`` nor ``vectorized_func`` is provided, or if
+            ``func`` has an unexpected number of positional parameters.
+        """
         if func is None and vectorized_func is None:
             raise ValueError(
                 "Must provide at least one of 'func' or 'vectorized_func'"
@@ -187,7 +203,20 @@ class CallableMetric:
             self._vectorized_func = vectorized_func
 
     def compute(self, s1: str, s2: str) -> float:
-        """Use provided function to compute distance between two strings."""
+        """Use provided function to compute distance between two strings.
+
+        Parameters
+        ----------
+        s1 : str
+            First sequence.
+        s2 : str
+            Second sequence.
+
+        Returns
+        -------
+        float
+            Distance between ``s1`` and ``s2``.
+        """
         if self.func is not None:
             return float(self.func(s1, s2))
         else:
@@ -201,10 +230,20 @@ class CallableMetric:
         n_cpus: int = 1,
     ) -> np.ndarray:
         """
-        Use provided vectorized function.
+        Use provided vectorized function to compute all pairwise distances.
 
-        Note: n_cpus is provided for built-in metrics but is ignored for custom callables.
-        Custom callables don't receive n_cpus - parallelization is handled at the chunk level.
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare.
+        n_cpus : int, optional
+            Provided for interface compatibility; ignored for custom callables
+            (parallelization is handled at the chunk level).
+
+        Returns
+        -------
+        np.ndarray
+            Square distance matrix of shape (n, n).
         """
         # Use custom vectorized implementation if provided
         if self._vectorized_func is not None:
@@ -231,6 +270,20 @@ class LevenshteinMetric:
     """Metric that computes Levenshtein edit distance."""
 
     def compute(self, s1: str, s2: str) -> float:
+        """Compute Levenshtein edit distance between two strings.
+
+        Parameters
+        ----------
+        s1 : str
+            First sequence.
+        s2 : str
+            Second sequence.
+
+        Returns
+        -------
+        float
+            Levenshtein distance between ``s1`` and ``s2``.
+        """
         return float(Levenshtein.distance(s1, s2))
 
     def compute_vectorized(
@@ -238,6 +291,20 @@ class LevenshteinMetric:
         seqs: list[str],
         n_cpus: int = 1,
     ) -> np.ndarray:
+        """Compute all pairwise Levenshtein distances using rapidfuzz.
+
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare.
+        n_cpus : int, optional
+            Number of worker processes to use.
+
+        Returns
+        -------
+        np.ndarray
+            Square distance matrix of shape (n, n) with dtype float32.
+        """
         if not seqs:
             return np.empty((0, 0), dtype=float)
 
@@ -257,14 +324,11 @@ class HammingMetric:
 
     def __init__(self, verbose: bool = True):
         """
-        Initialize with automatic or manual backend selection.
+        Initialize with automatic backend selection.
 
         Parameters
         ----------
-        backend : str, optional
-            Force a specific backend: "cupy", "torch", or "numpy".
-            If None, auto-detects best available option.
-        verbose : bool
+        verbose : bool, optional
             Print which backend is being used.
         """
         self.verbose = verbose
@@ -325,10 +389,6 @@ class HammingMetric:
             List of sequences to compare.
         n_cpus : int, optional
             Number of CPUs to use (currently not utilized for GPU backends).
-        memmap : bool, optional
-            Whether to use memory-mapped storage. Default is False.
-        temp_dir : str or None, optional
-            Directory to create temp memmap files in. If None, uses system default.
 
         Returns
         -------

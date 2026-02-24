@@ -759,8 +759,8 @@ def assign_isotypes(
 
     Parameters
     ----------
-    fastas : list[str]
-        list of paths to fasta files.
+    fastas : list[Path | str] | Path | str
+        path(s) to fasta file(s).
     org : Literal["human", "mouse"], optional
         organism of reference folder.
     evalue : float, optional
@@ -4390,10 +4390,11 @@ def check_multimapper(
         path to multimapper file.
     filename2 : str
         path to reference file containing all information.
+
     Returns
     -------
-    pd.DataFrame
-        Mapped multimapper data frame.
+    None
+        Writes the filtered multimapper data back to ``filename1`` in-place.
     """
     if filename1 is not None:
         if filename2 is not None:
@@ -4515,7 +4516,19 @@ def mask_dj(
     d_evalue_threshold: float,
     j_evalue_threshold: float,
 ) -> None:
-    """Mask d/j assignment."""
+    """Mask d/j assignment.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str]
+        list of prefixes of file names preceding '_contig'.
+    d_evalue_threshold : float
+        e-value threshold above which d_call is cleared.
+    j_evalue_threshold : float
+        e-value threshold above which j_call is cleared.
+    """
     for i in range(0, len(data)):
         filePath = check_filepath(
             data[i],
@@ -4600,7 +4613,15 @@ def change_file_location(
 def move_to_tmp(
     data: list[Path | str], filename_prefix: list[str] | str | None = None
 ) -> None:
-    """Move file to tmp."""
+    """Move file to tmp.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str] | str | None, optional
+        list of prefixes of file names preceding '_contig'. ``None`` defaults to 'all'.
+    """
     data, filename_prefix = check_data(data, filename_prefix)
 
     for i in range(0, len(data)):
@@ -4622,7 +4643,17 @@ def make_all(
     filename_prefix: list[str] | str | None = None,
     loci: Literal["ig", "tr"] = "tr",
 ) -> None:
-    """Construct db-all tsv file."""
+    """Construct db-all tsv file.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str] | str | None, optional
+        list of prefixes of file names preceding '_contig'. ``None`` defaults to 'all'.
+    loci : Literal["ig", "tr"], optional
+        locus type determining which intermediate files to combine.
+    """
     data, filename_prefix = check_data(data, filename_prefix)
 
     for i in range(0, len(data)):
@@ -4704,7 +4735,19 @@ def rename_dandelion(
     ends_with: str = "_igblast_db-pass_genotyped.tsv",
     sub_dir: str | None = None,
 ) -> None:
-    """Rename final dandlion file."""
+    """Rename final dandelion file.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str] | str | None, optional
+        list of prefixes of file names preceding '_contig'. ``None`` defaults to 'all'.
+    ends_with : str, optional
+        suffix of the file to rename.
+    sub_dir : str | None, optional
+        sub-directory to look in when searching for the file.
+    """
     data, filename_prefix = check_data(data, filename_prefix)
 
     for i in range(0, len(data)):

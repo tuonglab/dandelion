@@ -687,6 +687,11 @@ def clone_view(
         The key in `.obsp` to set as active `.obsp["distances"]` if `mode` is None.
     embedding_key : str | None, optional
         If specified, set `.obsm["X_vdj"]` to `.obsm[embedding_key]` if `mode` is None.
+
+    Raises
+    ------
+    KeyError
+        if the requested connectivities, distances, or embedding key is not found.
     """
     if mode is None:
         # use the other key directly
@@ -774,7 +779,14 @@ def clone_size(
     clone_key : str | None, optional
         Column specifying clone identifiers. Defaults to 'clone_id'.
     key_added : str | None, optional
-        Prefix for new metadata column names.
+        Base name used as a prefix for the new metadata column names
+        (e.g. ``{key_added}_clone_size``, ``{key_added}_clone_proportion``).
+        Defaults to the value of ``clone_key``.
+
+    Raises
+    ------
+    KeyError
+        if ``clone_key`` is not found in metadata.
     """
     # --- Select metadata
     if hasattr(vdj, "mod"):
@@ -1124,8 +1136,6 @@ def productive_ratio(
     Only the contig with the highest umi count in a cell will be used for this
     tabulation.
 
-    Returns inplace AnnData with `.uns['productive_ratio']`.
-
     Parameters
     ----------
     adata : AnnData
@@ -1138,6 +1148,11 @@ def productive_ratio(
         Optional list of categories to return.
     locus : Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"], optional
         One of the accepted locuses to perform the tabulation
+
+    Returns
+    -------
+    None
+        Modifies ``adata`` in place, storing the result in ``adata.uns['productive_ratio']``.
     """
     start = logg.info("Tabulating productive ratio")
     vdjx = vdj[(vdj._data.cell_id.isin(adata.obs_names))].copy()
@@ -1262,6 +1277,11 @@ def vj_usage_pca(
     -------
     AnnData
         AnnData object with obs as groups and V/J genes as features.
+
+    Raises
+    ------
+    ValueError
+        if none of ``use_vdj_v``, ``use_vdj_j``, ``use_vj_v``, ``use_vj_j`` is True.
     """
     start = logg.info("Computing PCA for V/J gene usage")
     # filtering
@@ -1879,6 +1899,11 @@ def to_scirpy(
     -------
     AnnData | MuData
         The converted data in either AnnData or MuData format.
+
+    Raises
+    ------
+    ImportError
+        if ``scirpy`` is not installed.
     """
     # if gex_adata is provided, make sure to only transfer cells that are present in both
     # we will only filter the vdj data to match gex_adata

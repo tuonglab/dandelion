@@ -94,7 +94,7 @@ def format_fasta(
         whether or not to remove the trailing hyphen number e.g. '-1' from the
         cell/contig barcodes.
     high_confidence_filtering : bool, optional
-        whether ot not to filter to only `high confidence` contigs.
+        whether or not to filter to only `high confidence` contigs.
     out_dir : str | None, optional
         path to output location. `None` defaults to 'dandelion'.
     filename_prefix : str | None, optional
@@ -363,9 +363,9 @@ def format_fastas(
         whether or not to remove the trailing hyphen number e.g. '-1' from the
         cell/contig barcodes.
     high_confidence_filtering : bool, optional
-        whether ot not to filter to only `high confidence` contigs.
+        whether or not to filter to only `high confidence` contigs.
     out_dir : Path | str | None, optional
-        path to out put location.
+        path to output location.
     filename_prefix : list[str] | str | None, optional
         list of prefixes of file names preceding '_contig'. `None` defaults to
         'all'.
@@ -860,8 +860,8 @@ def assign_isotypes(
 
     Parameters
     ----------
-    fastas : list[str]
-        list of paths to fasta files.
+    fastas : list[Path | str] | Path | str
+        path(s) to fasta file(s).
     org : Literal["human", "mouse"], optional
         organism of reference folder.
     evalue : float, optional
@@ -3845,7 +3845,17 @@ def make_all(
     filename_prefix: list[str] | str | None = None,
     loci: Literal["ig", "tr"] = "tr",
 ) -> None:
-    """Construct db-all tsv file using vectorized Polars operations."""
+    """Construct db-all tsv file using vectorized Polars operations.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str] | str | None, optional
+        list of prefixes of file names preceding '_contig'. ``None`` defaults to 'all'.
+    loci : Literal["ig", "tr"], optional
+        locus type determining which intermediate files to combine.
+    """
     data, filename_prefix = check_data(data, filename_prefix)
 
     for i in range(len(data)):
@@ -4004,7 +4014,15 @@ def check_complete_polars(df: pl.DataFrame) -> pl.DataFrame:
 def move_to_tmp(
     data: list[Path | str], filename_prefix: list[str] | str | None = None
 ) -> None:
-    """Move file to tmp."""
+    """Move file to tmp.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str] | str | None, optional
+        list of prefixes of file names preceding '_contig'. ``None`` defaults to 'all'.
+    """
     data, filename_prefix = check_data(data, filename_prefix)
 
     for i in range(0, len(data)):
@@ -4027,7 +4045,19 @@ def rename_dandelion(
     ends_with: str = "_igblast_db-pass_genotyped.tsv",
     sub_dir: str | None = None,
 ) -> None:
-    """Rename final dandlion file."""
+    """Rename final dandelion file.
+
+    Parameters
+    ----------
+    data : list[Path | str]
+        list of paths to data folders.
+    filename_prefix : list[str] | str | None, optional
+        list of prefixes of file names preceding '_contig'. ``None`` defaults to 'all'.
+    ends_with : str, optional
+        suffix of the file to rename.
+    sub_dir : str | None, optional
+        sub-directory to look in when searching for the file.
+    """
     data, filename_prefix = check_data(data, filename_prefix)
 
     for i in range(0, len(data)):
@@ -4045,7 +4075,18 @@ def rename_dandelion(
 
 
 def safe_json_load(s: list | str | None) -> list:
-    """Safely load json arrays."""
+    """Safely load json arrays.
+
+    Parameters
+    ----------
+    s : list | str | None
+        JSON-encoded string, an already-parsed list, or None.
+
+    Returns
+    -------
+    list
+        Parsed list, or an empty list if ``s`` is falsy.
+    """
     if not s:  # empty string or None
         return []  # fallback empty list
     return json.loads(s)
@@ -4076,7 +4117,7 @@ def check_contigs(
 
     Parameters
     ----------
-    data : DandelionPolars | pl.DataFrame | str
+    vdj : DandelionPolars | pl.DataFrame | str
         V(D)J AIRR data to check. Can be DandelionPolars object, polars DataFrame,
         or file path to AIRR `.tsv` file.
     adata : AnnData | None, optional
@@ -4660,7 +4701,18 @@ def resolve_duplicates(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def all_missing_polars(col: pl.Series) -> bool:
-    """Check if all values in a Polars series are null or empty string."""
+    """Check if all values in a Polars series are null or empty string.
+
+    Parameters
+    ----------
+    col : pl.Series
+        Polars Series to check.
+
+    Returns
+    -------
+    bool
+        True if every value is null or (for string columns) an empty string.
+    """
     all_null = col.is_null().all()
     if all_null:
         return True

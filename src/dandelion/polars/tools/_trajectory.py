@@ -222,7 +222,7 @@ def setup_vdj_pseudobulk(
     filter_pattern: str | None = ",|None|No_contig",
     remove_missing: bool = True,
 ) -> AnnData:
-    """Function for prepare anndata for computing pseudobulk vdj feature space.
+    """Function to prepare AnnData for computing pseudobulk vdj feature space.
 
     Parameters
     ----------
@@ -542,6 +542,13 @@ def vdj_pseudobulk(
         VDJ genes stored in pb_adata.var\n
         pseudobulk metadata stored in pb_adata.obs\n
         pseudobulk assignment (binary matrix with input cells as columns) stored in pb_adata.obsm['pbs']\n
+
+    Raises
+    ------
+    ValueError
+        if neither ``pbs`` nor ``obs_to_bulk`` is specified, or if both are specified.
+    ValueError
+        if required VDJ columns are not in ``adata.obs`` and ``vdj`` is not provided.
     """
     # Check if we need to use context manager
     needs_context = False

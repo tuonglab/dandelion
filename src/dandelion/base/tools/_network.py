@@ -139,8 +139,6 @@ def generate_network(
     dist_func : Callable | str | None, optional
         distance function to use. If None, `polyleven.levenshtein` is used. If a string is provided, it will use Bio.Align's
         substitution matrices (e.g., 'BLOSUM62', 'PAM250'). See `Bio.Align.substitution_matrices.load` for available options.
-    blosom_matrix : str | None, optional
-        If provided, dist_func is ignored and this substitution matrix from Bio.Align is used instead.
     pad_to_max : bool, optional
         whether or not to pad sequences to the maximum length in the dataset before distance calculation. This will
         allow for distance calculations that need sequences of the same length (e.g., Hamming distance). Note that this
@@ -163,7 +161,7 @@ def generate_network(
         Fraction of available memory to use. Defaults to 0.3 (i.e., 30% of available memory will be used for chunk size calculation).
     compress: bool, optional
         Whether to compress the Zarr array using Blosc with zstd.
-    rnandom_state : int | np.random.RandomState | None, optional
+    random_state : int | np.random.RandomState | None, optional
         Random state for reproducible sampling.
     **kwargs
         additional kwargs passed layout generation in `generate_layout`.
@@ -171,7 +169,7 @@ def generate_network(
     Returns
     -------
     Dandelion | tuple[Dandelion, AnnData]
-        Dandelionbject with `.edges`, `.layout`, `.graph` initialized.
+        Dandelion object with `.edges`, `.layout`, `.graph` initialized.
 
     Raises
     ------

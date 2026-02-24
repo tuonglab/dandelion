@@ -596,12 +596,36 @@ def bh(pvalues: np.array) -> np.array:  # pragma: no cover
 
 
 def is_categorical(array_like: pd.Series) -> bool:
-    """Check if categorical."""
+    """Check if a pandas Series has categorical dtype.
+
+    Parameters
+    ----------
+    array_like : pd.Series
+        Series to check.
+
+    Returns
+    -------
+    bool
+        True if the Series dtype is ``"category"``.
+    """
     return array_like.dtype.name == "category"
 
 
 def type_check(dataframe: pd.DataFrame, key: str) -> bool:
-    """Check dtype."""
+    """Check if a DataFrame column is string-like, categorical, or boolean.
+
+    Parameters
+    ----------
+    dataframe : pd.DataFrame
+        DataFrame containing the column.
+    key : str
+        Column name to check.
+
+    Returns
+    -------
+    bool
+        True if the column dtype is str, object, categorical, or bool.
+    """
     return (
         dataframe[key].dtype == str
         or dataframe[key].dtype == object
@@ -716,21 +740,65 @@ def cmp_to_key(mycmp):
 
 
 def not_same_call(a: str, b: str, pattern: str) -> bool:
-    """Utility function to check if a == b in terms of pattern."""
+    """Check if exactly one of ``a`` or ``b`` matches ``pattern``.
+
+    Parameters
+    ----------
+    a : str
+        First string.
+    b : str
+        Second string.
+    pattern : str
+        Regex pattern to match against.
+
+    Returns
+    -------
+    bool
+        True if exactly one of ``a`` or ``b`` matches ``pattern``.
+    """
     return (re.search(pattern, a) and not re.search(pattern, b)) or (
         re.search(pattern, b) and not re.search(pattern, a)
     )
 
 
 def same_call(a: str, b: str, c: str, pattern: str) -> bool:
-    """Utility function to check if a == b == c in terms of pattern."""
+    """Check if all non-null values among ``a``, ``b``, ``c`` match ``pattern``.
+
+    Parameters
+    ----------
+    a : str
+        First string.
+    b : str
+        Second string.
+    c : str
+        Third string.
+    pattern : str
+        Regex pattern to match against.
+
+    Returns
+    -------
+    bool
+        True if all non-null values match ``pattern``.
+    """
     queries = [a, b, c]
     queries = [q for q in queries if pd.notnull(q)]
     return all([re.search(pattern, x) for x in queries])
 
 
 def present(x: str | None) -> bool:
-    """Utility function to check if x is not null or blank."""
+    """Check if ``x`` is not null or a blank/missing sentinel string.
+
+    Parameters
+    ----------
+    x : str | None
+        Value to check.
+
+    Returns
+    -------
+    bool
+        True if ``x`` is not null and not one of the blank sentinel values
+        (``""``, ``"None"``, ``"none"``, ``"NA"``, ``"na"``, ``"NaN"``, ``"nan"``).
+    """
     return pd.notnull(x) and x not in [
         "",
         "None",
@@ -743,17 +811,50 @@ def present(x: str | None) -> bool:
 
 
 def check_missing(x: str | None) -> bool:
-    """Utility function to check if x is null or blank."""
+    """Check if ``x`` is null or an empty string.
+
+    Parameters
+    ----------
+    x : str | None
+        Value to check.
+
+    Returns
+    -------
+    bool
+        True if ``x`` is null or ``""``.
+    """
     return pd.isnull(x) or x == ""
 
 
 def all_missing(x: str | None) -> bool:
-    """Utility function to check if all x is not null or blank."""
+    """Check if all elements in ``x`` are null or empty strings.
+
+    Parameters
+    ----------
+    x : str | None
+        Iterable of values to check.
+
+    Returns
+    -------
+    bool
+        True if all values are null or ``""``.
+    """
     return all(pd.isnull(x)) or all(x == "")
 
 
 def all_missing2(x: str | None) -> bool:
-    """Utility function to check if all x is not null or blank or the word None."""
+    """Check if all elements in ``x`` are null, empty strings, or the string ``"None"``.
+
+    Parameters
+    ----------
+    x : str | None
+        Iterable of values to check.
+
+    Returns
+    -------
+    bool
+        False if ``x`` is empty; True if all values are null, ``""``, or ``"None"``.
+    """
     if len(x) == 0:
         return False
     return all(pd.isnull(x)) or all(x == "") or all(x == "None")
@@ -1002,7 +1103,18 @@ def sanitize_data(data: pd.DataFrame, ignore: str = "clone_id") -> None:
 
 
 def sanitize_blastn(data: pd.DataFrame) -> None:
-    """Quick sanitize dtypes."""
+    """Sanitize dtypes in a blastn output DataFrame to AIRR schema types.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame to sanitize in place.
+
+    Returns
+    -------
+    pd.DataFrame
+        Sanitized DataFrame with corrected dtypes.
+    """
     data = data.astype("object")
     data = data.infer_objects()
     for d in data:
@@ -1038,7 +1150,13 @@ def sanitize_blastn(data: pd.DataFrame) -> None:
 
 
 def validate_airr(data: pd.DataFrame) -> None:
-    """Validate dtypes in airr table."""
+    """Validate dtypes in an AIRR table against the AIRR schema.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing AIRR-format contig data.
+    """
     tmp = data.copy()
     int_columns = []
     for d in tmp:
@@ -1080,6 +1198,15 @@ class Contig:
     """Class Object to hold contig."""
 
     def __init__(self, contig: dict, mapper: dict | None = None) -> None:
+        """
+        Parameters
+        ----------
+        contig : dict
+            Dictionary of contig fields (typically a row from an AIRR DataFrame).
+        mapper : dict | None, optional
+            Optional column-name mapping to rename keys before storing. Any keys
+            not in ``mapper`` are kept under their original names.
+        """
         if mapper is not None:
             mapper.update({k: k for k in contig.keys() if k not in mapper})
             self._contig = ContigDict(
@@ -1100,7 +1227,22 @@ class Contig:
 def deprecated(
     details: str, deprecated_in: str, removed_in: str
 ) -> Callable[[F], F]:
-    """Decorator to mark a function as deprecated"""
+    """Decorator to mark a function as deprecated.
+
+    Parameters
+    ----------
+    details : str
+        Message describing what to use instead.
+    deprecated_in : str
+        Version in which the function was deprecated.
+    removed_in : str
+        Version in which the function will be removed.
+
+    Returns
+    -------
+    Callable
+        Wrapped function that emits a ``DeprecationWarning`` when called.
+    """
 
     def deprecated_decorator(func: F) -> F:
         """Deprecate dectorator"""
@@ -1121,7 +1263,19 @@ def deprecated(
 
 
 def format_isotype1(metadata: pd.DataFrame) -> list[str]:
-    """Quick format isotype."""
+    """Format isotype column, collapsing IgM/IgD co-expression and marking multiples.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata DataFrame containing an ``isotype`` column.
+
+    Returns
+    -------
+    list[str]
+        List of formatted isotype strings; co-expressed IgM+IgD becomes
+        ``"IgM/IgD"`` and any other multi-isotype entry becomes ``"Multi"``.
+    """
     isotype_status = [
         (
             "IgM/IgD"
@@ -1134,7 +1288,20 @@ def format_isotype1(metadata: pd.DataFrame) -> list[str]:
 
 
 def format_isotype2(metadata: pd.DataFrame) -> list[str]:
-    """Format isotype status so that if the chain is called "exception" it is allowed to have the special isotype "IgM/IgD"."""
+    """Format isotype_status, allowing IgM/IgD for exception chain statuses.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Metadata DataFrame containing ``isotype_status`` and ``chain_status`` columns.
+
+    Returns
+    -------
+    list[str]
+        List of formatted isotype-status strings. Cells with an exception
+        chain status keep their original ``isotype_status``; cells with
+        ``"Extra pair"`` status are relabelled ``"Multi"``.
+    """
     isotype_status = [
         (x if "exception" in y else ("Multi" if y == "Extra pair" else x))
         for x, y in zip(metadata["isotype_status"], metadata["chain_status"])
@@ -1149,7 +1316,26 @@ def format_locus(
     suffix_vj: str = "_VJ",
     productive_only: bool = True,
 ) -> pd.Series:
-    """Extract locus call value from data."""
+    """Extract locus call value from data.
+
+    Parameters
+    ----------
+    metadata : pd.DataFrame
+        Per-cell metadata DataFrame.
+    vcall : str
+        Base name of the V-call column (e.g. ``"v_call"`` or ``"v_call_genotyped"``).
+    suffix_vdj : str, optional
+        Suffix appended to locus/productive/call columns for the VDJ chain.
+    suffix_vj : str, optional
+        Suffix appended to locus/productive/call columns for the VJ chain.
+    productive_only : bool, optional
+        If True, only consider productive chains when determining the locus call.
+
+    Returns
+    -------
+    pd.Series
+        Series of locus call strings indexed by cell barcode.
+    """
     locus_1 = dict(metadata["locus" + suffix_vdj])
     locus_2 = dict(metadata["locus" + suffix_vj])
     constant_1 = dict(metadata["isotype_status"])
@@ -1338,7 +1524,22 @@ def movecol(
     cols_to_move: list = [],
     ref_col: str = "",
 ) -> pd.DataFrame:
-    """A way to order columns."""
+    """Reorder DataFrame columns, inserting ``cols_to_move`` after ``ref_col``.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    cols_to_move : list, optional
+        Columns to reposition after ``ref_col``.
+    ref_col : str, optional
+        Column after which ``cols_to_move`` will be inserted.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with reordered columns.
+    """
     # https://towardsdatascience.com/reordering-pandas-dataframe-columns-thumbs-down-on-standard-solutions-1ff0bc2941d5
     cols = df.columns.tolist()
     seg1 = cols[: list(cols).index(ref_col) + 1]
@@ -1350,7 +1551,19 @@ def movecol(
 
 
 def format_chain_status(locus_status):
-    """Format chain status from locus status."""
+    """Format chain status labels from per-cell locus-status strings.
+
+    Parameters
+    ----------
+    locus_status : iterable of str
+        Iterable of locus-status strings, one per cell.
+
+    Returns
+    -------
+    list[str]
+        List of chain-status labels such as ``"Single pair"``, ``"Extra pair"``,
+        ``"Orphan VDJ"``, ``"Orphan VJ"``, ``"Orphan VDJ-exception"``, etc.
+    """
     chain_status = []
     for ls in locus_status:
         if ("Orphan" in ls) and (re.search("TRB|IGH|TRD|VDJ", ls)):
@@ -1508,7 +1721,21 @@ def set_blast_env(
 def check_data(
     data: list[Path | str] | Path | str, filename_prefix: list[str] | str | None
 ) -> tuple[list[str], list[str]]:
-    """Quick check for data and filename prefixes"""
+    """Normalise ``data`` and ``filename_prefix`` to matching-length lists.
+
+    Parameters
+    ----------
+    data : list[Path | str] | Path | str
+        One or more paths to data folders or files.
+    filename_prefix : list[str] | str | None
+        One or more filename prefixes preceding ``'_contig'``. If a single
+        value is given and ``data`` has multiple entries, it is broadcast.
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        ``(data, filename_prefix)`` both as lists of equal length.
+    """
     if type(data) is not list:
         data = [data]
     if not isinstance(filename_prefix, list):
@@ -1522,12 +1749,31 @@ def check_data(
 
 
 def check_same_celltype(clone_def1: str, clone_def2: str) -> bool:
-    """Check if the first key is the same."""
+    """Check whether two clone definition strings share the same cell-type prefix.
+
+    Parameters
+    ----------
+    clone_def1 : str
+        First clone definition key (e.g. ``"B_clone_id"``).
+    clone_def2 : str
+        Second clone definition key.
+
+    Returns
+    -------
+    bool
+        True if the portion before the first ``"_"`` is identical in both strings.
+    """
     return clone_def1.split("_", 1)[0] == clone_def2.split("_", 1)[0]
 
 
 def clear_h5file(filename: Path | str) -> None:
-    """Little hack to overwrite an existing h5 file."""
+    """Clear all datasets from an existing HDF5 file.
+
+    Parameters
+    ----------
+    filename : Path | str
+        Path to the HDF5 file to clear.
+    """
     with h5py.File(filename, "w") as hf:
         for datasetname in hf.keys():
             del hf[datasetname]

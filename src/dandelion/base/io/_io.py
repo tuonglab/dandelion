@@ -469,6 +469,8 @@ def read_10x_vdj(
     remove_trailing_hyphen_number : bool, optional
         whether or not to remove the trailing hyphen number e.g. '-1' from the
         cell/contig barcodes.
+    verbose : bool, optional
+        whether or not to print messages during creation of the Dandelion object.
 
     Returns
     -------
@@ -477,7 +479,7 @@ def read_10x_vdj(
 
     Raises
     ------
-    IOError
+    OSError
         if contig_annotations.csv and all_contig_annotations.json file(s) not found in the input folder.
     TypeError
         if data is not a valid type (Path, str, or pandas.DataFrame).

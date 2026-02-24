@@ -232,8 +232,6 @@ def generate_network(
     dist_func : Callable | str | None, optional
         distance function to use. If None, `polyleven.levenshtein` is used. If a string is provided, it will use Bio.Align's
         substitution matrices (e.g., 'BLOSUM62', 'PAM250'). See `Bio.Align.substitution_matrices.load` for available options.
-    blosom_matrix : str | None, optional
-        If provided, dist_func is ignored and this substitution matrix from Bio.Align is used instead.
     pad_to_max : bool, optional
         whether or not to pad sequences to the maximum length in the dataset before distance calculation. This will
         allow for distance calculations that need sequences of the same length (e.g., Hamming distance). Note that this
@@ -261,7 +259,7 @@ def generate_network(
     Returns
     -------
     DandelionPolars | tuple[DandelionPolars, AnnData]
-        Dandelionbject with `.edges`, `.layout`, `.graph` initialized.
+        DandelionPolars object with `.edges`, `.layout`, `.graph` initialized.
 
     Raises
     ------
@@ -1106,6 +1104,11 @@ def clone_degree(
     weight : str | None, optional
         Attribute name for retrieving edge weight in graph. None defaults to ignoring this. See `networkx.Graph.degree`.
 
+    Returns
+    -------
+    None
+        Modifies ``vdj._metadata`` in place, adding a ``clone_degree`` column.
+
     Raises
     ------
     AttributeError
@@ -1148,6 +1151,11 @@ def clone_centrality(vdj: DandelionPolars):
     ----------
     vdj : DandelionPolars
         DandelionPolars object after `tl.generate_network` has been run.
+
+    Returns
+    -------
+    None
+        Modifies ``vdj._metadata`` in place, adding a ``clone_centrality`` column.
 
     Raises
     ------

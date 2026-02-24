@@ -1078,7 +1078,7 @@ def transfer(
     ----------
     adata : AnnData | MuData
         AnnData object or `MuData` object.
-    dandelion : DandelionPolars
+    vdj : DandelionPolars
         Dandelion object.
     main_view : Literal["all", "expanded", "full"], optional
         Which graph becomes the *main* adjacency written to adata.obsp['connectivities'] / ['distances'].
@@ -1095,6 +1095,14 @@ def transfer(
     overwrite : bool | list[str] | str | None, optional
         Whether or not to overwrite existing anndata columns. Specifying a string indicating column name or
         list of column names will overwrite that specific column(s).
+    obs : bool, optional
+        Whether to transfer `.metadata` columns to `adata.obs`. Defaults to True.
+    obsm : bool, optional
+        Whether to transfer layout embeddings to `adata.obsm`. Defaults to True.
+    uns : bool, optional
+        Whether to transfer graph and layout data to `adata.uns`. Defaults to True.
+    obsp : bool, optional
+        Whether to transfer distance and connectivity matrices to `adata.obsp`. Defaults to True.
     """
     start = logg.info("Transferring network")
 
@@ -1505,6 +1513,11 @@ def clone_view(
         The key in `.obsp` to set as active `.obsp["distances"]` if `mode` is None.
     embedding_key : str | None, optional
         If specified, set `.obsm["X_vdj"]` to `.obsm[embedding_key]` if `mode` is None.
+
+    Raises
+    ------
+    KeyError
+        if the requested connectivities, distances, or embedding key is not found.
     """
     if mode is None:
         # use the other key directly
@@ -1606,7 +1619,7 @@ def clone_size(
 
     Parameters
     ----------
-    vdj : Dandelion | AnnData | MuData
+    vdj : DandelionPolars | AnnData | MuData
         VDJ data.
     group_by : str | None, optional
         Column in metadata to group by before calculating clone sizes.
@@ -1616,7 +1629,14 @@ def clone_size(
     clone_key : str | None, optional
         Column specifying clone identifiers. Defaults to 'clone_id'.
     key_added : str | None, optional
-        Prefix for new metadata column names.
+        Base name used as a prefix for the new metadata column names
+        (e.g. ``{key_added}_clone_size``, ``{key_added}_clone_proportion``).
+        Defaults to the value of ``clone_key``.
+
+    Raises
+    ------
+    KeyError
+        if ``clone_key`` is not found in metadata.
     """
     # --- Select metadata
     if hasattr(vdj, "mod"):
@@ -2429,6 +2449,11 @@ def to_scirpy(
     -------
     AnnData | MuData
         The converted data in either AnnData or MuData format.
+
+    Raises
+    ------
+    ImportError
+        if ``scirpy`` is not installed.
     """
     original_backend = data._backend
     original_lazy = data._lazy
@@ -3124,8 +3149,6 @@ def productive_ratio(
     Only the contig with the highest umi count in a cell will be used for this
     tabulation.
 
-    Returns inplace AnnData with `.uns['productive_ratio']`.
-
     Parameters
     ----------
     adata : AnnData
@@ -3138,6 +3161,11 @@ def productive_ratio(
         Optional list of categories to return.
     locus : Literal["TRB", "TRA", "TRD", "TRG", "IGH", "IGK", "IGL"], optional
         One of the accepted locuses to perform the tabulation
+
+    Returns
+    -------
+    None
+        Modifies ``adata`` in place, storing the result in ``adata.uns['productive_ratio']``.
     """
     start = logg.info("Tabulating productive ratio")
 
