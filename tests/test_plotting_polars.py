@@ -488,16 +488,26 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
         ]
         assert len(below) == 0
 
-    # Subplot mode: no text outside outer ring when show_enclosure_label=False
-    fig, axes = clone_circlepackplot(
+    # Subplot mode: show_enclosure_label=False removes exactly the outer ring
+    # total text (leaf clone count texts are separate and unaffected).
+    fig, axes_with = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        show_count_labels=True,
+        show_enclosure_label=True,
+        show_group_labels=False,
+    )
+    fig, axes_without = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         as_subplots=True,
         show_count_labels=True,
         show_enclosure_label=False,
+        show_group_labels=False,
     )
-    for ax in axes:
-        assert len(ax.texts) == 0
+    for ax_with, ax_without in zip(axes_with, axes_without):
+        assert len(ax_without.texts) == len(ax_with.texts) - 1
 
     # --- title as suptitle in subplot mode, as ax.title in single-panel ------
     fig, axes = clone_circlepackplot(
