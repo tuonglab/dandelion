@@ -1,6 +1,6 @@
 #!/opt/conda/envs/sc-dandelion-container/bin/python
 import os
-import pandas as pd
+import polars as pl
 import dandelion as ddl
 
 from unittest.mock import patch
@@ -23,14 +23,14 @@ def test_container():
     os.system(
         "cd /tests; python /share/dandelion_preprocess.py --meta test.csv --file_prefix filtered;"
     )
-    dat = pd.read_csv(
+    dat = pl.read_csv(
         "/tests/sample_test_10x/dandelion/filtered_contig_dandelion.tsv",
-        sep="\t",
+        separator="\t",
     )
-    assert not dat["c_call"].empty
-    assert not dat["v_call_genotyped"].empty
-    assert not dat["mu_count"].empty
-    assert not dat["mu_freq"].empty
+    assert dat["c_call"].len() > 0
+    assert dat["v_call_genotyped"].len() > 0
+    assert dat["mu_count"].len() > 0
+    assert dat["mu_freq"].len() > 0
     vdj = None
     try:
         vdj = ddl.Dandelion(dat)
@@ -44,13 +44,13 @@ def test_container_skip_tigger():
     os.system(
         "cd /tests; python /share/dandelion_preprocess.py --meta test.csv --file_prefix filtered --skip_tigger;"
     )
-    dat = pd.read_csv(
+    dat = pl.read_csv(
         "/tests/sample_test_10x/dandelion/filtered_contig_dandelion.tsv",
-        sep="\t",
+        separator="\t",
     )
-    assert not dat["c_call"].empty
-    assert not dat["mu_count"].empty
-    assert not dat["mu_freq"].empty
+    assert dat["c_call"].len() > 0
+    assert dat["mu_count"].len() > 0
+    assert dat["mu_freq"].len() > 0
     vdj = None
     try:
         vdj = ddl.Dandelion(dat)
@@ -66,4 +66,4 @@ def test_threshold(mock_show):
         "cd /tests; python /share/changeo_clonotypes.py --h5ddl sample_test_10x/demo-vdj.h5ddl;"
     )
     dat = ddl.read_h5ddl("/tests/sample_test_10x/demo-vdj_changeo.h5ddl")
-    assert not dat._data.changeo_clone_id.empty
+    assert dat._data.collect()["changeo_clone_id"].len() > 0

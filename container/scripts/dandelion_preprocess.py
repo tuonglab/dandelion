@@ -284,6 +284,19 @@ def main():
         strain=args.strain,
     )
 
+    # drop any samples that produced no passing sequences from MakeDb
+    _prefix = str(args.file_prefix) if args.file_prefix is not None else "all"
+    samples = [
+        s
+        for s in samples
+        if (
+            _p := Path(s) / "tmp" / f"{_prefix}_contig_igblast_db-pass.tsv"
+        ).exists()
+        and pd.read_csv(_p, sep="\t", nrows=1).shape[0] > 0
+    ]
+    if not meta.empty:
+        meta = meta[meta.index.isin(samples)]
+
     # IG requires further preprocessing, TR is done now
     if args.chain == "ig":
         if not args.skip_tigger:

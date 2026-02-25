@@ -1000,6 +1000,18 @@ def reannotate_genes(
             additional_args=additional_args["makedb"],
             loci=loci,
         )
+        _pass_path = (
+            filePath.parent / "tmp" / (filePath.stem + "_igblast_db-pass.tsv")
+        )
+        if (
+            not _pass_path.exists()
+            or pd.read_csv(_pass_path, sep="\t", nrows=1).shape[0] == 0
+        ):
+            logg.warning(
+                f"MakeDb produced no passing sequences for {filePath}. "
+                "Skipping this sample. Check the corresponding fail file for more details."
+            )
+            continue
         # block this for now, until I figure out if it's
         # worth it
         if flavour == "strict":
