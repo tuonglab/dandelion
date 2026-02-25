@@ -11,6 +11,7 @@ from dandelion.base.io import (
     read_bd_airr,
     read_h5ddl,
     read_parse_airr,
+    read_seekgene_vdj,
 )
 from dandelion.base.tools import (
     concat,
@@ -208,6 +209,43 @@ def test_read10xvdj_folder(create_testfolder, annotation_10x, fasta_10x):
     assert vdj._metadata.shape[0] == 5
     assert not vdj._data.sequence.empty
     os.remove(fasta_file)
+
+
+_10X_SUFFIXED_COLS = [
+    "is_cell_10x",
+    "high_confidence_10x",
+    "sequence_length_10x",
+    "raw_consensus_id_10x",
+    "exact_subclonotype_id_10x",
+]
+
+
+@pytest.mark.usefixtures("create_testfolder", "annotation_10x_cr6")
+def test_read_seekgene_vdj_csv(create_testfolder, annotation_10x_cr6):
+    """read_seekgene_vdj must strip _10x column names from CSV reads."""
+    annot_file = create_testfolder / "test_filtered_contig_annotations.csv"
+    annotation_10x_cr6.to_csv(annot_file, index=False)
+    vdj = read_seekgene_vdj(annot_file, filename_prefix="test_filtered")
+    assert vdj._data.shape[0] == 26
+    assert vdj._metadata.shape[0] == 10
+    for col in _10X_SUFFIXED_COLS:
+        assert col not in vdj._data.columns, f"unexpected _10x column: {col}"
+    assert "is_cell" in vdj._data.columns
+    assert "high_confidence" in vdj._data.columns
+
+
+@pytest.mark.usefixtures("create_testfolder", "json_10x_cr6")
+def test_read_seekgene_vdj_json(create_testfolder, json_10x_cr6):
+    """read_seekgene_vdj must strip _10x column names from JSON reads."""
+    json_file = create_testfolder / "test_all_contig_annotations.json"
+    with open(json_file, "w") as outfile:
+        json.dump(json_10x_cr6, outfile)
+    vdj = read_seekgene_vdj(json_file, filename_prefix="test_all")
+    assert vdj._data.shape[0] == 26
+    assert vdj._metadata.shape[0] == 10
+    for col in _10X_SUFFIXED_COLS:
+        assert col not in vdj._data.columns, f"unexpected _10x column: {col}"
+    os.remove(json_file)
 
 
 @pytest.mark.usefixtures("create_testfolder", "annotation_10x")

@@ -3390,7 +3390,7 @@ class DandelionPolars:
 
     write = write_ddl = write_zipddl  # aliases
 
-    def write_10x(
+    def write_vdj(
         self,
         folder: Path | str = "dandelion_data",
         filename_prefix: str = "all",
@@ -3398,14 +3398,22 @@ class DandelionPolars:
         clone_key: str = "clone_id",
     ) -> None:
         """
-        Writes a Dandelion class to 10x formatted files so that it can be ingested for other tools.
+        Writes a DandelionPolars object to contig-annotation formatted files compatible with
+        multiple platforms (10x Genomics, SeekGene, etc.) so that it can be ingested by
+        other tools.
+
+        Produces:
+
+        - ``{filename_prefix}_contig.fasta`` : sequences in FASTA format.
+        - ``{filename_prefix}_contig_annotations.csv`` : contig annotation table with
+          columns matching the 10x / SeekGene contig annotation schema.
 
         Parameters
         ----------
         folder : Path | str, optional
-            path to save the 10x formatted files.
+            path to save the output files.
         filename_prefix : str, optional
-            prefix for the 10x formatted files.
+            prefix for the output files.
         sequence_key : str, optional
             column name in `.data` slot to retrieve and write out in fasta format.
         clone_key : str, optional
@@ -3442,9 +3450,21 @@ class DandelionPolars:
         }
         if "complete_vdj" not in self._data.columns:
             column_map.pop("full_length")
-        if "is_cell_10x" not in self._data.columns:
+        # Support both _10x-suffixed (10x CellRanger) and plain (SeekGene) column names.
+        is_cell_col = next(
+            (c for c in ["is_cell_10x", "is_cell"] if c in self._data.columns), None
+        )
+        if is_cell_col:
+            column_map["is_cell"] = is_cell_col
+        else:
             column_map.pop("is_cell")
-        if "high_confidence_10x" not in self._data.columns:
+        high_confidence_col = next(
+            (c for c in ["high_confidence_10x", "high_confidence"] if c in self._data.columns),
+            None,
+        )
+        if high_confidence_col:
+            column_map["high_confidence"] = high_confidence_col
+        else:
             column_map.pop("high_confidence")
         anno = []
         bool_map = {
@@ -3468,6 +3488,34 @@ class DandelionPolars:
         anno = pd.DataFrame(anno)
         anno = anno.map(lambda x: bool_map[x] if x in bool_map.keys() else x)
         anno.to_csv(out_anno_path, index=False)
+
+    def write_10x(
+        self,
+        folder: Path | str = "dandelion_data",
+        filename_prefix: str = "all",
+        sequence_key: str = "sequence",
+        clone_key: str = "clone_id",
+    ) -> None:
+        """
+        Alias for :meth:`write_vdj` kept for backwards compatibility.
+
+        Parameters
+        ----------
+        folder : Path | str, optional
+            path to save the output files.
+        filename_prefix : str, optional
+            prefix for the output files.
+        sequence_key : str, optional
+            column name in `.data` slot to retrieve and write out in fasta format.
+        clone_key : str, optional
+            column name in `.data` slot for clone id information.
+        """
+        self.write_vdj(
+            folder=folder,
+            filename_prefix=filename_prefix,
+            sequence_key=sequence_key,
+            clone_key=clone_key,
+        )
 
 
 def load_polars(

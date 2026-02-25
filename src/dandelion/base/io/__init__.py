@@ -5,6 +5,7 @@ from dandelion.base.io._io import (
     read_airr,
     read_bd_airr,
     read_parse_airr,
+    read_seekgene_vdj,
     read_ddl,
     read_h5ddl,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "read_airr",
     "read_bd_airr",
     "read_parse_airr",
+    "read_seekgene_vdj",
     "read_ddl",
     "read_h5ddl",
 ]

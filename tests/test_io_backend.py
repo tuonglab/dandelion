@@ -154,6 +154,48 @@ def test_read_standard(airr_bd):
     ddl.read_airr(airr_bd)
 
 
+_10X_SUFFIXED_COLS = [
+    "is_cell_10x",
+    "high_confidence_10x",
+    "sequence_length_10x",
+    "raw_consensus_id_10x",
+    "exact_subclonotype_id_10x",
+]
+
+
+def _data_columns(vdj) -> list:
+    """Return column names regardless of backend (pandas/polars eager/lazy)."""
+    if hasattr(vdj._data, "collect_schema"):
+        return vdj._data.collect_schema().names()
+    return list(vdj._data.columns)
+
+
+@pytest.mark.usefixtures("create_testfolder", "annotation_10x_cr6")
+def test_read_seekgene_vdj_csv(create_testfolder, annotation_10x_cr6):
+    """read_seekgene_vdj must strip _10x-suffixed columns from CSV reads."""
+    annot_file = create_testfolder / "test_filtered_contig_annotations.csv"
+    annotation_10x_cr6.to_csv(annot_file, index=False)
+    vdj = ddl.read_seekgene_vdj(annot_file, filename_prefix="test_filtered")
+    cols = _data_columns(vdj)
+    for col in _10X_SUFFIXED_COLS:
+        assert col not in cols, f"unexpected _10x column: {col}"
+    assert "is_cell" in cols
+    assert "high_confidence" in cols
+
+
+@pytest.mark.usefixtures("create_testfolder", "json_10x_cr6")
+def test_read_seekgene_vdj_json(create_testfolder, json_10x_cr6):
+    """read_seekgene_vdj must strip _10x-suffixed columns from JSON reads."""
+    json_file = create_testfolder / "test_all_contig_annotations.json"
+    with open(json_file, "w") as outfile:
+        json.dump(json_10x_cr6, outfile)
+    vdj = ddl.read_seekgene_vdj(json_file, filename_prefix="test_all")
+    cols = _data_columns(vdj)
+    for col in _10X_SUFFIXED_COLS:
+        assert col not in cols, f"unexpected _10x column: {col}"
+    os.remove(json_file)
+
+
 @pytest.mark.usefixtures("create_testfolder", "airr_reannotated", "dummy_adata")
 def test_readwrite_h5ddl(create_testfolder, airr_reannotated, dummy_adata):
     """Round-trip write_h5ddl / read_h5ddl via backend dispatcher."""

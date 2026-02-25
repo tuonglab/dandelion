@@ -780,6 +780,91 @@ def read_10x_vdj(
     return vdj
 
 
+def read_seekgene_vdj(
+    data: Path | str | pd.DataFrame | pl.DataFrame | pl.LazyFrame | None = None,
+    filename_prefix: str | None = None,
+    prefix: str | None = None,
+    suffix: str | None = None,
+    sep: str = "_",
+    remove_malformed: bool = True,
+    remove_trailing_hyphen_number: bool = False,
+    verbose: bool = False,
+) -> DandelionPolars:
+    """
+    A parser to read .csv and .json files directly from folder containing SeekGene VDJ outputs,
+    or parse an existing pandas/polars DataFrame.
+
+    SeekGene produces contig annotation files in the same format as 10x CellRanger VDJ output.
+    This function is a convenience wrapper around :func:`read_10x_vdj` with SeekGene-specific
+    naming for clarity.
+
+    Minimum requirement is one of either {filename_prefix}_contig_annotations.csv or
+    all_contig_annotations.json when reading from a file path.
+
+    If .fasta, .json files are found in the same folder, additional info will be appended to
+    the final table.
+
+    Parameters
+    ----------
+    data : Path | str | pandas.DataFrame | polars.DataFrame | polars.LazyFrame | None
+        path to folder containing `.csv` and/or `.json` files, path to files directly, or a pandas/polars
+        DataFrame containing the contig annotations data.
+    filename_prefix : str | None, optional
+        prefix of file name preceding '_contig'. None defaults to 'all'. Only used when data is a file/folder.
+    prefix : str | None, optional
+        Prefix to append to sequence_id and cell_id.
+    suffix : str | None, optional
+        Suffix to append to sequence_id and cell_id.
+    sep : str, optional
+        the separator to append suffix/prefix.
+    remove_malformed : bool, optional
+        whether or not to remove malformed contigs.
+    remove_trailing_hyphen_number : bool, optional
+        whether or not to remove the trailing hyphen number e.g. '-1' from the
+        cell/contig barcodes.
+    verbose : bool, optional
+        whether or not to print messages during creation of the DandelionPolars object.
+
+    Returns
+    -------
+    DandelionPolars
+        DandelionPolars object holding the parsed data.
+
+    Raises
+    ------
+    OSError
+        if contig_annotations.csv and all_contig_annotations.json file(s) not found in the input folder.
+    TypeError
+        if data is not a valid type (Path, str, DataFrame, or LazyFrame).
+    """
+    ddl = read_10x_vdj(
+        data=data,
+        filename_prefix=filename_prefix,
+        prefix=prefix,
+        suffix=suffix,
+        sep=sep,
+        remove_malformed=remove_malformed,
+        remove_trailing_hyphen_number=remove_trailing_hyphen_number,
+        verbose=verbose,
+    )
+    # SeekGene VDJ files share the same CSV/JSON format as 10x CellRanger, but the
+    # resulting internal columns should not carry a _10x suffix.
+    _10x_rename = {
+        "is_cell_10x": "is_cell",
+        "high_confidence_10x": "high_confidence",
+        "sequence_length_10x": "sequence_length",
+        "raw_consensus_id_10x": "raw_consensus_id",
+        "exact_subclonotype_id_10x": "exact_subclonotype_id",
+        "filtered_10x": "filtered",
+        "is_asm_cell_10x": "is_asm_cell",
+    }
+    existing_cols = ddl._data.collect_schema().names() if isinstance(ddl._data, pl.LazyFrame) else ddl._data.columns
+    rename_map = {k: v for k, v in _10x_rename.items() if k in existing_cols}
+    if rename_map:
+        ddl._data = ddl._data.rename(rename_map)
+    return ddl
+
+
 def read_airr(
     file: Path | str,
     prefix: str | None = None,

@@ -8,7 +8,7 @@
 
 ![](docs/notebooks/img/dandelion_logo_illustration.png)
 
-Hi there! I have put together a python package for analyzing single cell BCR/TCR data from 10x Genomics 5' solution! It streamlines the pre-processing, leveraging some tools from immcantation suite, and integrates with scanpy/anndata for single-cell BCR/TCR analysis. It also includes a couple of functions for visualization.
+Hi there! I have put together a python package for analyzing single cell BCR/TCR data from multiple platforms, including 10x Genomics 5' VDJ, BD Rhapsody, Parse Biosciences, SeekGene, and other AIRR-compatible sequencing sources. It streamlines the pre-processing, leveraging some tools from the immcantation suite, and integrates with scanpy/anndata for single-cell BCR/TCR analysis. It also includes a couple of functions for visualization.
 
 ## Citation
 `dandelion` is now published at [***Nature Biotechnology***](https://www.nature.com/articles/s41587-023-01734-7)!
@@ -36,7 +36,7 @@ Illustration of the `Dandelion` class slots
 
 Please refer to the [documentation](https://sc-dandelion.readthedocs.io/).
 
-The raw files for the examples can be downloaded from 10X's Single Cell Immune Profiling datasets [website](https://support.10xgenomics.com/single-cell-vdj/datasets).
+The raw files used in the example notebooks can be downloaded from 10X's Single Cell Immune Profiling datasets [website](https://support.10xgenomics.com/single-cell-vdj/datasets).
 
 ## Installation
 

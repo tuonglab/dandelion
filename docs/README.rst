@@ -3,8 +3,10 @@
 |logo|
 
 Hi there! I have put together a python package for analyzing single cell
-BCR/TCR data from 10x Genomics 5' solution! It streamlines the
-pre-processing, leveraging some tools from immcantation suite, and
+BCR/TCR data from multiple platforms, including 10x Genomics 5' VDJ,
+BD Rhapsody, Parse Biosciences, SeekGene, and other AIRR-compatible
+sequencing sources. It streamlines the
+pre-processing, leveraging some tools from the immcantation suite, and
 integrates with scanpy/anndata for single-cell BCR/TCR analysis. It also
 includes a couple of functions for visualization. Try it out on |Colab| !
 
@@ -29,8 +31,8 @@ Please refer to the
 notebooks
 `here <https://nbviewer.jupyter.org/github/tuonglab/dandelion/tree/latest/docs/notebooks/>`__:
 
-The raw files for the examples can be downloaded from 10X's Single Cell
-Immune Profiling datasets
+The raw files used in the example notebooks can be downloaded from 10X's
+Single Cell Immune Profiling datasets
 `website <https://support.10xgenomics.com/single-cell-vdj/datasets>`__.
 
 

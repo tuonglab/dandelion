@@ -62,8 +62,8 @@ Plotting: `pl`
    spectratype
    stackedbarplot
 
-IO
---
+Reading: `io`
+-------------
 .. module:: dandelion.base.io
 
 .. autosummary::
@@ -75,11 +75,12 @@ IO
    read_airr
    read_bd_airr
    read_parse_airr
+   read_seekgene_vdj
    read_ddl
    read_h5ddl
 
-Dandelion
----------
+Dandelion Class
+---------------
 .. currentmodule:: dandelion.base.core
 
 .. autosummary::
@@ -105,6 +106,7 @@ Dandelion
    Dandelion.write_airr
    Dandelion.write_ddl
    Dandelion.write_h5ddl
+   Dandelion.write_vdj
 
 
 Polars Backend: ``dandelion.polars``
@@ -171,8 +173,8 @@ Plotting: `pl`
    spectratype
    stackedbarplot
 
-IO
---
+Reading: `io`
+-------------
 .. module:: dandelion.polars.io
 
 .. autosummary::
@@ -184,12 +186,13 @@ IO
    read_airr
    read_bd_airr
    read_parse_airr
+   read_seekgene_vdj
    read_ddl
    read_h5ddl
    read_zipddl
 
-Dandelion
----------
+Dandelion Class
+---------------
 .. currentmodule:: dandelion.polars.core
 
 .. autosummary::
@@ -224,6 +227,7 @@ Dandelion
    Dandelion.write_airr
    Dandelion.write_ddl
    Dandelion.write_h5ddl
+   Dandelion.write_vdj
    Dandelion.write_zipddl
 
 
