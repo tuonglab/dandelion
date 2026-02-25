@@ -858,7 +858,11 @@ def read_seekgene_vdj(
         "filtered_10x": "filtered",
         "is_asm_cell_10x": "is_asm_cell",
     }
-    existing_cols = ddl._data.collect_schema().names() if isinstance(ddl._data, pl.LazyFrame) else ddl._data.columns
+    existing_cols = (
+        ddl._data.collect_schema().names()
+        if isinstance(ddl._data, pl.LazyFrame)
+        else ddl._data.columns
+    )
     rename_map = {k: v for k, v in _10x_rename.items() if k in existing_cols}
     if rename_map:
         ddl._data = ddl._data.rename(rename_map)

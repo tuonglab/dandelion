@@ -1807,14 +1807,19 @@ class Dandelion:
             column_map.pop("full_length")
         # Support both _10x-suffixed (10x CellRanger) and plain (SeekGene) column names.
         is_cell_col = next(
-            (c for c in ["is_cell_10x", "is_cell"] if c in self._data.columns), None
+            (c for c in ["is_cell_10x", "is_cell"] if c in self._data.columns),
+            None,
         )
         if is_cell_col:
             column_map["is_cell"] = is_cell_col
         else:
             column_map.pop("is_cell")
         high_confidence_col = next(
-            (c for c in ["high_confidence_10x", "high_confidence"] if c in self._data.columns),
+            (
+                c
+                for c in ["high_confidence_10x", "high_confidence"]
+                if c in self._data.columns
+            ),
             None,
         )
         if high_confidence_col:
