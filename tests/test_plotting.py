@@ -576,3 +576,134 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
         clone_circlepackplot(
             adata, group_by="isotype", as_subplots=True, min_clone_size=999
         )
+
+
+# ---------------------------------------------------------------------------
+# _temporary_obs_columns context manager (base backend)
+# ---------------------------------------------------------------------------
+
+
+def test_temporary_obs_columns_no_mudata():
+    """Plain AnnData with mudata=None: kwargs must pass through unchanged."""
+    import numpy as np
+    import pandas as pd
+    import anndata as ad
+    from dandelion.base.plotting._plotting import _temporary_obs_columns
+
+    obs = pd.DataFrame({"cell": ["A", "B"]}, index=["A", "B"])
+    adata = ad.AnnData(X=np.zeros((2, 2)), obs=obs)
+    with _temporary_obs_columns(adata, None, color="cell") as out_kwargs:
+        assert out_kwargs == {"color": "cell"}
+    # nothing should have been added to obs
+    assert "cell" in adata.obs.columns  # was there before
+
+
+def test_temporary_obs_columns_mod_col():
+    """'mod:col' adds a temp column inside the block and removes it on exit."""
+    try:
+        import numpy as np
+        import pandas as pd
+        import anndata as ad
+        from mudata import MuData
+        from dandelion.base.plotting._plotting import _temporary_obs_columns
+    except ImportError:
+        pytest.skip("mudata not installed")
+
+    obs = pd.DataFrame(index=["A", "B"])
+    X = np.zeros((2, 2))
+    airr_adata = ad.AnnData(X=X, obs=obs.copy())
+    airr_adata.obs["color_col"] = ["red", "blue"]
+    gex_adata = ad.AnnData(X=X, obs=obs.copy())
+    mdata = MuData({"airr": airr_adata, "gex": gex_adata})
+
+    with _temporary_obs_columns(airr_adata, mdata, color="airr:color_col") as kw:
+        assert kw["color"] == "airr:color_col"
+        assert "airr:color_col" in airr_adata.obs.columns
+
+    # cleanup: temporary column must be removed after the context exits
+    assert "airr:color_col" not in airr_adata.obs.columns
+
+
+def test_temporary_obs_columns_shared_obs():
+    """Plain column name pulls from mudata.obs and cleans up on exit."""
+    try:
+        import numpy as np
+        import pandas as pd
+        import anndata as ad
+        from mudata import MuData
+        from dandelion.base.plotting._plotting import _temporary_obs_columns
+    except ImportError:
+        pytest.skip("mudata not installed")
+
+    obs = pd.DataFrame(index=["A", "B"])
+    X = np.zeros((2, 2))
+    airr_adata = ad.AnnData(X=X, obs=obs.copy())
+    gex_adata = ad.AnnData(X=X, obs=obs.copy())
+    mdata = MuData({"airr": airr_adata, "gex": gex_adata})
+    mdata.obs["shared_col"] = ["x", "y"]
+
+    with _temporary_obs_columns(airr_adata, mdata, color="shared_col") as kw:
+        assert kw["color"] == "shared_col"
+        assert "shared_col" in airr_adata.obs.columns
+
+    assert "shared_col" not in airr_adata.obs.columns
+
+
+def test_temporary_obs_columns_invalid_modality():
+    """'bad_mod:col' raises KeyError when modality doesn't exist."""
+    try:
+        import numpy as np
+        import pandas as pd
+        import anndata as ad
+        from mudata import MuData
+        from dandelion.base.plotting._plotting import _temporary_obs_columns
+    except ImportError:
+        pytest.skip("mudata not installed")
+
+    obs = pd.DataFrame(index=["A", "B"])
+    airr_adata = ad.AnnData(X=np.zeros((2, 2)), obs=obs)
+    mdata = MuData({"airr": airr_adata})
+
+    with pytest.raises(KeyError, match="bad_mod"):
+        with _temporary_obs_columns(airr_adata, mdata, color="bad_mod:col"):
+            pass
+
+
+def test_temporary_obs_columns_invalid_column_in_mod():
+    """'airr:missing' raises KeyError when column doesn't exist in modality."""
+    try:
+        import numpy as np
+        import pandas as pd
+        import anndata as ad
+        from mudata import MuData
+        from dandelion.base.plotting._plotting import _temporary_obs_columns
+    except ImportError:
+        pytest.skip("mudata not installed")
+
+    obs = pd.DataFrame(index=["A", "B"])
+    airr_adata = ad.AnnData(X=np.zeros((2, 2)), obs=obs)
+    mdata = MuData({"airr": airr_adata})
+
+    with pytest.raises(KeyError, match="missing"):
+        with _temporary_obs_columns(airr_adata, mdata, color="airr:missing"):
+            pass
+
+
+def test_temporary_obs_columns_invalid_shared_obs():
+    """Plain column not in mudata.obs raises KeyError."""
+    try:
+        import numpy as np
+        import pandas as pd
+        import anndata as ad
+        from mudata import MuData
+        from dandelion.base.plotting._plotting import _temporary_obs_columns
+    except ImportError:
+        pytest.skip("mudata not installed")
+
+    obs = pd.DataFrame(index=["A", "B"])
+    airr_adata = ad.AnnData(X=np.zeros((2, 2)), obs=obs)
+    mdata = MuData({"airr": airr_adata})
+
+    with pytest.raises(KeyError, match="nonexistent"):
+        with _temporary_obs_columns(airr_adata, mdata, color="nonexistent"):
+            pass
