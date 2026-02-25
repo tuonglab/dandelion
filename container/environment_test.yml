@@ -10,6 +10,7 @@ dependencies:
   - statsmodels
   - numba
   - polars
+  - pyarrow
   - python-igraph
   - leidenalg
   - pip
