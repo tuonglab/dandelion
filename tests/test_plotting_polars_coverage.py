@@ -398,7 +398,9 @@ def test_temporary_obs_columns_mod_col_cleanup():
     gex_adata = ad.AnnData(X=X, obs=obs.copy())
     mdata = MuData({"airr": airr_adata, "gex": gex_adata})
 
-    with _temporary_obs_columns(airr_adata, mdata, color="airr:color_col") as kw:
+    with _temporary_obs_columns(
+        airr_adata, mdata, color="airr:color_col"
+    ) as kw:
         assert kw["color"] == "airr:color_col"
         assert "airr:color_col" in airr_adata.obs.columns
 
