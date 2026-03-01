@@ -1,9 +1,5 @@
 #!/usr/bin/env python
-import pytest
-from dandelion.preprocessing._preprocessing import (
-    check_productive_chain,
-    # check_productive_chain,
-)
+from dandelion.base.preprocessing._preprocessing import check_productive_chain
 
 UMI_FOLDCHANGE_CUTOFF = 2
 CON_FOLDCHANGE_CUTOFF = 5

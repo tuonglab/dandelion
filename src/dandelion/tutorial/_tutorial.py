@@ -2,8 +2,18 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 
-def download_file(url: str, dest: Path | str, chunk_size: int = 8192):
-    """Download a file using urllib with a User-Agent header."""
+def _download_file(url: str, dest: Path | str, chunk_size: int = 8192):
+    """Download a file using urllib.
+
+    Parameters
+    ----------
+    url : str
+        URL of the file to download.
+    dest : Path | str
+        Destination file path to write the downloaded content.
+    chunk_size : int, optional
+        Number of bytes to read per chunk. Defaults to 8192.
+    """
     req = Request(
         url, headers={"User-Agent": "Mozilla/5.0 (compatible; Python urllib)"}
     )
@@ -16,7 +26,17 @@ def download_file(url: str, dest: Path | str, chunk_size: int = 8192):
 
 
 def setup_dandelion_tutorial_bcr(path: Path | str | None = None) -> None:
-    """Download example BCR datasets for Dandelion tutorial."""
+    """Download example BCR datasets for Dandelion tutorial.
+
+    Downloads 10x Genomics PBMC BCR datasets into a local directory for use
+    in the dandelion BCR preprocessing tutorial.
+
+    Parameters
+    ----------
+    path : Path | str | None, optional
+        Root directory to download datasets into.
+        Defaults to ``./dandelion_tutorial``.
+    """
     base = Path("./dandelion_tutorial") if path is None else Path(path)
     base.mkdir(parents=True, exist_ok=True)
 
@@ -53,11 +73,21 @@ def setup_dandelion_tutorial_bcr(path: Path | str | None = None) -> None:
             if outfile.exists():
                 continue
             print(f"Downloading {filename} → {outfile}")
-            download_file(url, outfile)
+            _download_file(url, outfile)
 
 
 def setup_dandelion_tutorial_tcr(path: Path | str | None = None) -> None:
-    """Download example TCR datasets for Dandelion tutorial."""
+    """Download example TCR datasets for Dandelion tutorial.
+
+    Downloads 10x Genomics PBMC and melanoma TCR datasets into a local
+    directory for use in the dandelion TCR preprocessing tutorial.
+
+    Parameters
+    ----------
+    path : Path | str | None, optional
+        Root directory to download datasets into.
+        Defaults to ``./dandelion_tutorial``.
+    """
     base = Path("./dandelion_tutorial") if path is None else Path(path)
     base.mkdir(parents=True, exist_ok=True)
 
@@ -85,11 +115,26 @@ def setup_dandelion_tutorial_tcr(path: Path | str | None = None) -> None:
             if outfile.exists():
                 continue
             print(f"Downloading {filename} → {outfile}")
-            download_file(url, outfile)
+            _download_file(url, outfile)
 
 
 def setup_dandelion_tutorial_trajectory(path: Path | str | None = None) -> None:
-    """Download example datasets for Dandelion V(D)J trajectory tutorial."""
+    """Download example datasets for Dandelion V(D)J trajectory tutorial.
+
+    Downloads panfetal B-cell trajectory GEX and VDJ data from Google Drive
+    using ``gdown``.
+
+    Parameters
+    ----------
+    path : Path | str | None, optional
+        Root directory to download datasets into.
+        Defaults to ``./dandelion_tutorial``.
+
+    Raises
+    ------
+    ImportError
+        If ``gdown`` is not installed.
+    """
     try:
         import gdown
     except ImportError:
@@ -100,15 +145,36 @@ def setup_dandelion_tutorial_trajectory(path: Path | str | None = None) -> None:
     base.mkdir(parents=True, exist_ok=True)
 
     gex_id = "1-LbAinwhAhJW3Y60wpO9GWJJcaMa_liy"
-    # Destination filenames
-    gex_path = base / "demo-pseudobulk.h5ad"
-    if not gex_path.exists():
-        url = f"https://drive.google.com/uc?id={gex_id}"
-        gdown.download(url, str(gex_path), quiet=False)
+    vdj_id = "1lyScJWdGopW2nLoIhZmfUGVSWLWI_qWg"
+    datasets = {
+        "panfetal_trajectory": {
+            "demo-pseudobulk.h5ad": f"https://drive.google.com/uc?id={gex_id}",
+            "demo-vdj-traj.tsv.gz": f"https://drive.google.com/uc?id={vdj_id}",
+        }
+    }
+    for dirname, files in datasets.items():
+        dirpath = base / dirname
+        dirpath.mkdir(parents=True, exist_ok=True)
+        for filename, url in files.items():
+            outfile = dirpath / filename
+            if outfile.exists():
+                continue
+            print(f"Downloading {filename} → {outfile}")
+            gdown.download(url, str(outfile), quiet=False)
 
 
 def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
-    """Download the extremely large dataset from Parse Biosciences for Dandelion tutorial."""
+    """Download the extremely large dataset from Parse Biosciences for Dandelion tutorial.
+
+    Downloads the Parse Biosciences 1M human BCR dataset (cell metadata CSV
+    and AIRR rearrangement TSV) into a local directory.
+
+    Parameters
+    ----------
+    path : Path | str | None, optional
+        Root directory to download datasets into.
+        Defaults to ``./dandelion_tutorial``.
+    """
     base = Path("./dandelion_tutorial") if path is None else Path(path)
     base.mkdir(parents=True, exist_ok=True)
     datasets = {
@@ -126,4 +192,4 @@ def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
             if outfile.exists():
                 continue
             print(f"Downloading {filename} → {outfile}")
-            download_file(url, outfile)
+            _download_file(url, outfile)

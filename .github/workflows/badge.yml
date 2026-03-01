@@ -20,7 +20,7 @@ jobs:
       - id: version
         name: Install package
         run: |
-          pip install git+https://www.github.com/zktuong/dandelion.git
+          pip install git+https://www.github.com/tuonglab/dandelion.git
           echo "version=$(python -m pip show sc-dandelion | grep Version | awk '{print $2}')" >> $GITHUB_OUTPUT
       - name: version badge
         uses: RubbaBoy/BYOB@v1.3.0

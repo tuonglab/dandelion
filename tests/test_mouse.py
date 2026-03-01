@@ -3,12 +3,14 @@ import pandas as pd
 import dandelion as ddl
 import pytest
 
+from dandelion.utilities._utilities import write_fasta, makeblastdb
+
 
 @pytest.mark.usefixtures("create_testfolder", "fasta_10x_mouse")
 def test_write_fasta(create_testfolder, fasta_10x_mouse):
     """test_write_fasta"""
     out_fasta = create_testfolder / "filtered_contig.fasta"
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x_mouse, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x_mouse, out_fasta=out_fasta)
     assert len(list(create_testfolder.iterdir())) == 1
 
 
@@ -61,7 +63,7 @@ def test_reassignalleles(create_testfolder, database_paths_mouse):
 @pytest.mark.usefixtures("database_paths_mouse")
 def test_updateblastdb(database_paths_mouse):
     """test_updateblastdb"""
-    ddl.utl.makeblastdb(database_paths_mouse["blastdb_fasta"])
+    makeblastdb(database_paths_mouse["blastdb_fasta"])
 
 
 @pytest.mark.usefixtures(
@@ -106,17 +108,17 @@ def test_filtercontigs(create_testfolder, processed_files, dummy_adata_mouse):
     f = create_testfolder / "dandelion" / processed_files["filtered"]
     dat = pd.read_csv(f, sep="\t")
     vdj, adata = ddl.pp.check_contigs(dat, dummy_adata_mouse)
-    f1 = create_testfolder / "test.h5ddl"
+    f1 = create_testfolder / "test.ddl"
     f2 = create_testfolder / "test.h5ad"
-    vdj.write_h5ddl(f1)
+    vdj.write_ddl(f1)
     adata.write_h5ad(f2)
 
 
 @pytest.mark.usefixtures("create_testfolder")
 def test_generate_network(create_testfolder):
     """test_generate_network"""
-    f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
+    f = create_testfolder / "test.ddl"
+    vdj = ddl.read_ddl(f)
     with pytest.raises(ValueError):
         ddl.tl.generate_network(vdj, compute_layout=False)
     ddl.tl.find_clones(vdj)
@@ -132,8 +134,8 @@ def test_generate_network(create_testfolder):
 @pytest.mark.usefixtures("create_testfolder")
 def test_generate_network_new(create_testfolder):
     """test_generate_network"""
-    f = create_testfolder / "test.h5ddl"
-    vdj = ddl.read_h5ddl(f)
+    f = create_testfolder / "test.ddl"
+    vdj = ddl.read_ddl(f)
     ddl.tl.find_clones(vdj)
     ddl.tl.generate_network(vdj, layout_method="mod_fr", expanded_only=True)
     # assert vdj.n_obs == 448

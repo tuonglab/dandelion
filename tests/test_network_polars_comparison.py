@@ -1,0 +1,308 @@
+"""
+Test to compare pandas and Polars implementations of generate_network.
+Ensures both implementations produce identical results.
+"""
+
+import pytest
+import numpy as np
+
+from dandelion.base.tools import generate_network
+from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.tools._network import (
+    generate_network as generate_network_polars,
+)
+
+
+@pytest.mark.usefixtures("vdj_smaller")
+def test_generate_network_polars_vs_pandas_clone(vdj_smaller):
+    """
+    Compare generate_network results between pandas and Polars implementations.
+    Test with distance_mode='clone' and compute_graph=True.
+    """
+    # Create two identical copies for comparison
+    vdj_pandas = vdj_smaller.copy()
+    vdj_polars = DandelionPolars(vdj_smaller.data)
+
+    # Run generate_network on pandas version
+    generate_network(
+        vdj_pandas,
+        key="junction",
+        distance_mode="clone",
+        compute_graph=True,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=False,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Run generate_network on Polars version
+    generate_network_polars(
+        vdj_polars,
+        key="junction",
+        distance_mode="clone",
+        compute_graph=True,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=False,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Compare distance matrices
+    distances_pandas = vdj_pandas.distances.toarray()
+    distances_polars = vdj_polars.distances.toarray()
+    print(distances_pandas), print(distances_polars)
+    np.fill_diagonal(distances_pandas, 0.0)
+    np.fill_diagonal(distances_polars, 0.0)
+    assert np.array_equal(
+        distances_pandas, distances_polars, equal_nan=True
+    ), "Distance matrices differ between pandas and Polars implementations"
+    assert (
+        np.nan_to_num(distances_pandas).sum()
+        == np.nan_to_num(distances_polars).sum()
+    ), "Distance matrix sums differ"
+
+    # Compare graph structure (both full and MST graphs in tuple)
+    assert vdj_pandas.graph is not None, "Pandas: graph not computed"
+    assert vdj_polars.graph is not None, "Polars: graph not computed"
+
+    # Handle graph as tuple (full_graph, mst_graph)
+    pandas_graphs = (
+        vdj_pandas.graph
+        if isinstance(vdj_pandas.graph, tuple)
+        else (vdj_pandas.graph,)
+    )
+    polars_graphs = (
+        vdj_polars.graph
+        if isinstance(vdj_polars.graph, tuple)
+        else (vdj_polars.graph,)
+    )
+
+    assert len(pandas_graphs) == len(polars_graphs), "Number of graphs differ"
+
+    # Compare each graph in the tuple
+    for g_idx, (pandas_g, polars_g) in enumerate(
+        zip(pandas_graphs, polars_graphs)
+    ):
+        # Compare number of nodes and edges
+        assert len(pandas_g.nodes()) == len(
+            polars_g.nodes()
+        ), f"Graph {g_idx}: Number of nodes differ"
+        assert len(pandas_g.edges()) == len(
+            polars_g.edges()
+        ), f"Graph {g_idx}: Number of edges differ"
+
+        assert len(pandas_g.edges()) == len(
+            polars_g.edges()
+        ), f"Graph {g_idx}: Number of edges differ"
+
+        assert (
+            pandas_g.edges() == polars_g.edges()
+        ), f"Graph {g_idx}: Edge sets differ between implementations"
+
+        # Compare edge weights between Polars and pandas graphs
+
+        pandas_edge_dict = {
+            (frozenset((u, v)), w) for u, v, w in pandas_g.edges(data="weight")
+        }
+        polars_edge_dict = {
+            (frozenset((u, v)), w) for u, v, w in polars_g.edges(data="weight")
+        }
+
+        assert (
+            pandas_edge_dict == polars_edge_dict
+        ), f"Graph {g_idx}: Edge weights differ between pandas and Polars graphs"
+
+
+@pytest.mark.usefixtures("vdj_smaller")
+def test_generate_network_polars_vs_pandas_full(vdj_smaller):
+    """
+    Compare generate_network results between pandas and Polars implementations.
+    Test with distance_mode='full' and compute_graph=True.
+    """
+    # Create two identical copies for comparison
+    vdj_pandas = vdj_smaller.copy()
+    vdj_polars = DandelionPolars(vdj_smaller.data)
+
+    # Run generate_network on pandas version
+    generate_network(
+        vdj_pandas,
+        key="junction",
+        distance_mode="full",
+        compute_graph=True,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=False,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Run generate_network on Polars version
+    generate_network_polars(
+        vdj_polars,
+        key="junction",
+        distance_mode="full",
+        compute_graph=True,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=False,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Compare distance matrices
+    distances_pandas = vdj_pandas.distances.toarray()
+    distances_polars = vdj_polars.distances.toarray()
+    np.fill_diagonal(distances_pandas, 0.0)
+    np.fill_diagonal(distances_polars, 0.0)
+
+    assert np.array_equal(
+        distances_pandas, distances_polars, equal_nan=True
+    ), "Distance matrices differ between pandas and Polars implementations"
+    assert (
+        np.nan_to_num(distances_pandas).sum()
+        == np.nan_to_num(distances_polars).sum()
+    ), "Distance matrix sums differ"
+
+    # Compare graph structure (both full and MST graphs in tuple)
+    assert vdj_pandas.graph is not None, "Pandas: graph not computed"
+    assert vdj_polars.graph is not None, "Polars: graph not computed"
+
+    # Handle graph as tuple (full_graph, mst_graph)
+    pandas_graphs = (
+        vdj_pandas.graph
+        if isinstance(vdj_pandas.graph, tuple)
+        else (vdj_pandas.graph,)
+    )
+    polars_graphs = (
+        vdj_polars.graph
+        if isinstance(vdj_polars.graph, tuple)
+        else (vdj_polars.graph,)
+    )
+
+    assert len(pandas_graphs) == len(polars_graphs), "Number of graphs differ"
+
+    # Compare each graph in the tuple
+    for g_idx, (pandas_g, polars_g) in enumerate(
+        zip(pandas_graphs, polars_graphs)
+    ):
+        assert len(pandas_g.nodes()) == len(
+            polars_g.nodes()
+        ), f"Graph {g_idx}: Number of nodes differ"
+        assert len(pandas_g.edges()) == len(
+            polars_g.edges()
+        ), f"Graph {g_idx}: Number of edges differ"
+
+
+@pytest.mark.usefixtures("vdj_smaller", "create_testfolder")
+def test_generate_network_polars_lazy_vs_eager(create_testfolder, vdj_smaller):
+    """
+    Compare lazy and eager modes in Polars implementation.
+    Ensures both modes produce identical results.
+    """
+    # Create two identical copies for comparison
+    vdj_lazy = DandelionPolars(vdj_smaller.data)
+    vdj_eager = DandelionPolars(vdj_smaller.data, lazy=False)
+
+    # Run eager mode
+    generate_network_polars(
+        vdj_eager,
+        key="junction",
+        distance_mode="clone",
+        compute_graph=True,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=False,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Run lazy mode
+    generate_network_polars(
+        vdj_lazy,
+        key="junction",
+        distance_mode="clone",
+        compute_graph=True,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=False,
+        lazy=True,
+        zarr_path=str(create_testfolder / "test_lazy.zarr"),
+        verbose=False,
+    )
+
+    # Compute lazy distances using DandelionPolars.compute()
+    vdj_lazy.compute()
+    lazy_distances = vdj_lazy.distances.toarray()
+
+    eager_distances = vdj_eager.distances.toarray()
+    np.fill_diagonal(eager_distances, 0.0)
+    np.fill_diagonal(lazy_distances, 0.0)
+    # Compare results
+    assert np.array_equal(
+        eager_distances, lazy_distances, equal_nan=True
+    ), "Distance matrices differ between eager and lazy modes"
+    assert (
+        np.nan_to_num(eager_distances).sum()
+        == np.nan_to_num(lazy_distances).sum()
+    ), "Distance matrix sums differ between modes"
+
+
+@pytest.mark.usefixtures("vdj_smaller")
+@pytest.mark.parametrize("pad_to_max", [False, True])
+def test_generate_network_polars_vs_pandas_padded(vdj_smaller, pad_to_max):
+    """
+    Compare generate_network with and without padding between implementations.
+    """
+    # Create two identical copies for comparison
+    vdj_pandas = vdj_smaller.copy()
+    vdj_polars = DandelionPolars(vdj_smaller.data)
+
+    # Run on pandas version
+    generate_network(
+        vdj_pandas,
+        key="junction",
+        distance_mode="full",
+        compute_graph=False,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=pad_to_max,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Run on Polars version
+    generate_network_polars(
+        vdj_polars,
+        key="junction",
+        distance_mode="full",
+        compute_graph=False,
+        use_existing_graph=False,
+        sequential_chain=False,
+        n_cpus=1,
+        pad_to_max=pad_to_max,
+        lazy=False,
+        verbose=False,
+    )
+
+    # Compare distance matrices
+    distances_pandas = vdj_pandas.distances.toarray()
+    distances_polars = vdj_polars.distances.toarray()
+    np.fill_diagonal(distances_pandas, 0.0)
+    np.fill_diagonal(distances_polars, 0.0)
+
+    assert np.array_equal(
+        distances_pandas, distances_polars, equal_nan=True
+    ), f"Distance matrices differ with pad_to_max={pad_to_max}"
+    assert (
+        np.nan_to_num(distances_pandas).sum()
+        == np.nan_to_num(distances_polars).sum()
+    ), f"Distance matrix sums differ with pad_to_max={pad_to_max}"

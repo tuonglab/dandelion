@@ -13,6 +13,19 @@ try:
 except KeyError:
     pass
 
+from dandelion.base.core import Dandelion
+from dandelion.base.io import read_h5ddl
+from dandelion.base.preprocessing import (
+    assign_isotypes,
+    check_contigs,
+    create_germlines,
+    format_fastas,
+    quantify_mutations,
+    reannotate_genes,
+    reassign_alleles,
+)
+from dandelion.utilities._utilities import write_fasta, makeblastdb
+
 
 @pytest.mark.usefixtures("create_testfolder_number", "fasta_10x")
 @pytest.mark.parametrize(
@@ -21,7 +34,7 @@ except KeyError:
 def test_write_fasta(create_testfolder_number, fasta_10x, filename, expected):
     """test_write_fasta"""
     out_fasta = create_testfolder_number / (filename + "_contig.fasta")
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x, out_fasta=out_fasta)
     assert len(list(create_testfolder_number.iterdir())) == expected
 
 
@@ -49,7 +62,7 @@ def test_write_annotation(
 )
 def test_formatfasta(create_testfolder_number, filename, expected):
     """test_formatfasta"""
-    ddl.pp.format_fastas(create_testfolder_number, filename_prefix=filename)
+    format_fastas(create_testfolder_number, filename_prefix=filename)
     assert (
         len(list((create_testfolder_number / "dandelion").iterdir()))
         == expected
@@ -60,17 +73,15 @@ def test_formatfasta(create_testfolder_number, filename, expected):
 def test_reannotate_fails(create_testfolder_number, database_paths):
     """test_reannotate_fails"""
     with pytest.raises(KeyError):
-        ddl.pp.reannotate_genes(
-            create_testfolder_number, filename_prefix="filtered"
-        )
+        reannotate_genes(create_testfolder_number, filename_prefix="filtered")
     with pytest.raises(KeyError):
-        ddl.pp.reannotate_genes(
+        reannotate_genes(
             create_testfolder_number,
             igblast_db=database_paths["igblast_db"],
             filename_prefix="filtered",
         )
     with pytest.raises(KeyError):
-        ddl.pp.reannotate_genes(
+        reannotate_genes(
             create_testfolder_number,
             germline=database_paths["germline"],
             filename_prefix="filtered",
@@ -85,7 +96,7 @@ def test_reannotategenes(
     create_testfolder_number, database_paths, filename, expected
 ):
     """test_reannotategenes"""
-    ddl.pp.reannotate_genes(
+    reannotate_genes(
         create_testfolder_number,
         igblast_db=database_paths["igblast_db"],
         germline=database_paths["germline"],
@@ -101,11 +112,11 @@ def test_reannotategenes(
 def test_reassign_alleles_fails(create_testfolder_number, database_paths):
     """test_reassign_alleles_fails"""
     with pytest.raises(TypeError):
-        ddl.pp.reassign_alleles(
+        reassign_alleles(
             str(create_testfolder_number), filename_prefix="filtered"
         )
     with pytest.raises(KeyError):
-        ddl.pp.reassign_alleles(
+        reassign_alleles(
             str(create_testfolder_number),
             combined_folder=create_testfolder_number / "reassigned_filtered",
             filename_prefix="filtered",
@@ -124,7 +135,7 @@ def test_reassignalleles(
     create_testfolder_number, database_paths, filename, combine, expected
 ):
     """test_reassignalleles"""
-    ddl.pp.reassign_alleles(
+    reassign_alleles(
         str(create_testfolder_number),
         combined_folder=create_testfolder_number / combine,
         germline=database_paths["germline"],
@@ -144,7 +155,7 @@ def test_reassign_alleles_combined_number(
     create_testfolder_number, database_paths
 ):
     """test_reassign_alleles_fails"""
-    ddl.pp.reassign_alleles(
+    reassign_alleles(
         str(create_testfolder_number),
         combined_folder=create_testfolder_number / str(2),
         germline=database_paths["germline"],
@@ -162,7 +173,7 @@ def test_reassign_alleles_combined_number(
 @pytest.mark.usefixtures("database_paths")
 def test_updateblastdb(database_paths):
     """test_updateblastdb"""
-    ddl.utl.makeblastdb(database_paths["blastdb_fasta"])
+    makeblastdb(database_paths["blastdb_fasta"])
 
 
 @pytest.mark.usefixtures("create_testfolder_number", "database_paths")
@@ -173,7 +184,7 @@ def test_assignsisotypes(
     create_testfolder_number, database_paths, filename, expected
 ):
     """test_assignsisotypes"""
-    ddl.pp.assign_isotypes(
+    assign_isotypes(
         create_testfolder_number,
         blastdb=database_paths["blastdb_fasta"],
         filename_prefix=filename,
@@ -200,7 +211,7 @@ def test_create_germlines_fails(create_testfolder_number, processed_files):
     """test_create_germlines_fails"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
     with pytest.raises(KeyError):
-        ddl.pp.create_germlines(f)
+        create_germlines(f)
 
 
 @pytest.mark.usefixtures(
@@ -211,7 +222,7 @@ def test_create_germlines(
 ):
     """test_create_germlines"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    ddl.pp.create_germlines(f, germline=database_paths["germline"])
+    create_germlines(f, germline=database_paths["germline"])
     f2 = create_testfolder_number / "dandelion" / processed_files["germ-pass"]
     dat = pd.read_csv(f2, sep="\t")
     assert not dat["germline_alignment_d_mask"].empty
@@ -223,7 +234,7 @@ def test_store_germline_references_fail2(
 ):
     """test_store_germline_references_fail2"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     with pytest.raises(KeyError):
         vdj.store_germline_reference()
 
@@ -236,7 +247,7 @@ def test_store_germline_references(
 ):
     """test_store_germline_references"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     vdj.store_germline_reference(germline=database_paths["germline"])
     assert len(vdj.germline) > 0
 
@@ -256,7 +267,7 @@ def test_quantify_mut(
     """test_quantify_mut"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
     try:
-        ddl.pp.quantify_mutations(f, frequency=freq)
+        quantify_mutations(f, frequency=freq)
     except:
         pytest.skip("R package 'shazam' not installed")
     dat = pd.read_csv(f, sep="\t")
@@ -275,9 +286,9 @@ def test_quantify_mut_2(
 ):
     """test_quantify_mut_2"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     try:
-        ddl.pp.quantify_mutations(vdj, frequency=freq)
+        quantify_mutations(vdj, frequency=freq)
     except:
         pytest.skip("R package 'shazam' not installed")
     assert not vdj._data[colname].empty
@@ -307,7 +318,7 @@ def test_checkcontigs(
     """test_checkcontigs"""
     f = create_testfolder_number / "dandelion" / processed_files[filename]
     dat = pd.read_csv(f, sep="\t")
-    vdj, adata = ddl.pp.check_contigs(dat, dummy_adata)
+    vdj, adata = check_contigs(dat, dummy_adata)
     assert dat.shape[0] == 9
     assert vdj._data.shape[0] == size
     assert vdj._metadata.shape[0] == 5
@@ -318,12 +329,12 @@ def test_checkcontigs(
 def test_assign_isotypes_fails(create_testfolder_number, database_paths):
     """test_assign_isotypes_fails"""
     with pytest.raises(FileNotFoundError):
-        ddl.pp.assign_isotypes(
+        assign_isotypes(
             create_testfolder_number, filename_prefix="filtered", plot=False
         )
-    ddl.pp.format_fastas(create_testfolder_number, filename_prefix="filtered")
+    format_fastas(create_testfolder_number, filename_prefix="filtered")
     with pytest.raises(KeyError):
-        ddl.pp.assign_isotypes(
+        assign_isotypes(
             create_testfolder_number, filename_prefix="filtered", plot=False
         )
 
@@ -344,7 +355,7 @@ def test_assign_isotypes_fails(create_testfolder_number, database_paths):
 )
 def test_formatfasta2(create_testfolder_number, prefix, suffix, sep, remove):
     """test_formatfasta2"""
-    ddl.pp.format_fastas(
+    format_fastas(
         create_testfolder_number,
         filename_prefix="filtered",
         prefix=prefix,
@@ -389,7 +400,7 @@ def test_store_germline_references_fail(
 ):
     """test_store_germline_references_fail"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     with pytest.raises(KeyError):
         vdj.store_germline_reference()
 
@@ -402,12 +413,12 @@ def test_store_germline_references2(
 ):
     """test_store_germline_references2"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     vdj.store_germline_reference(germline=database_paths["germline"])
     assert len(vdj.germline) > 0
     out_file = create_testfolder_number / "test_airr_reannotated.h5ddl"
     vdj.write_h5ddl(out_file)
-    tmp = ddl.read_h5ddl(out_file)
+    tmp = read_h5ddl(out_file)
     assert len(tmp.germline) > 0
     vdj.store_germline_reference(
         germline=database_paths["germline"],
@@ -430,7 +441,7 @@ def test_store_germline_reference_fail(
 ):
     """test_store_germline_reference_fail"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     with pytest.raises(KeyError):
         vdj.store_germline_reference()
 
@@ -443,12 +454,12 @@ def test_store_germline_reference2(
 ):
     """test_store_germline_references2"""
     f = create_testfolder_number / "dandelion" / processed_files["filtered"]
-    vdj = ddl.Dandelion(f)
+    vdj = Dandelion(f)
     vdj.store_germline_reference(germline=database_paths["germline"])
     assert len(vdj.germline) > 0
     out_file = create_testfolder_number / "test_airr_reannotated.h5ddl"
     vdj.write_h5ddl(out_file)
-    tmp = ddl.read_h5ddl(out_file)
+    tmp = read_h5ddl(out_file)
     assert len(tmp.germline) > 0
     vdj.store_germline_reference(
         germline=database_paths["germline"],

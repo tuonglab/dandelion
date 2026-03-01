@@ -1,66 +1,121 @@
 from __future__ import annotations
+import hashlib
+import inspect
 
-from Bio.Align import substitution_matrices as _submat
-from polyleven import levenshtein
+import numpy as np
+
+from Bio.Align import PairwiseAligner
+from Bio.Align.substitution_matrices import load
+from rapidfuzz.distance import Levenshtein
+from rapidfuzz import process
 from typing import Callable, Protocol, runtime_checkable
 
 
-def dist_func_long_sep(
-    x: list[str],
-    y: list[str],
+def prepare_sequences_with_separator(
+    sequences: list[list[str]],
     metric: Metric,
     pad_to_max: bool = False,
     sep: str = "#",
-) -> float:
+) -> list[str]:
     """
-    Concatenate column-wise with long separators and apply the metric.
+    Prepare multi-column sequences for vectorized distance computation.
+
+    This function handles:
+    - Concatenation of multiple sequence columns with separators
+    - Global padding (if requested) - all sequences padded to max length
+    - Returns flat list of strings ready for metric.compute_vectorized()
+
+    Parameters
+    ----------
+    sequences : list[list[str]]
+        List of sequence rows, where each row contains multiple sequence columns.
+        Example: [['ACGT', 'CGAT'], ['AAAA', 'TTTT'], ['CCCC', 'AAAA']]
+    metric : Metric
+        Distance metric (used to determine separator strategy)
+    pad_to_max : bool, optional
+        If True, pad all sequences to global maximum length.
+        Note: This is GLOBAL padding, different from the original per-pair padding.
+    sep : str, optional
+        Separator character
+
+    Returns
+    -------
+    list[str]
+        Flat list of concatenated strings, one per sequence row
+
+    Examples
+    --------
+    >>> from dandelion.utilities._distances import LevenshteinMetric
+    >>> metric = LevenshteinMetric()
+    >>> seqs = [['ACGT', 'CGAT'], ['AAAA', 'TTTT'], ['CCCC', 'AAAA']]
+    >>> prepared = prepare_sequences_with_separator(seqs, metric, pad_to_max=False)
+    >>> len(prepared)
+    3
+    >>> prepared[0]  # Concatenated with separator
+    'ACGT#####CGAT'
+
+    Notes
+    -----
+    This function uses GLOBAL padding (all sequences to max length) rather than
+    the original per-pair padding. This enables vectorization and is simpler,
+    but may produce slightly different distance values.
     """
-    # If the metric is a substitution matrix, skip sep padding
+    if not sequences:
+        return []
+
+    # Handle single-column case
+    n_cols = len(sequences[0]) if sequences else 0
+    if n_cols == 0:
+        return []
+
+    if n_cols == 1:
+        # Single column - no concatenation needed, just extract
+        if pad_to_max:
+            # Global padding for single column
+            max_len = max(len(row[0]) for row in sequences)
+            return [row[0].ljust(max_len, sep) for row in sequences]
+        else:
+            return [row[0] for row in sequences]
+
+    # Multi-column case
     if isinstance(metric, SubstitutionMatrixMetric):
-        # Just concatenate without adding separators
-        s1 = "".join(x)
-        s2 = "".join(y)
-    elif pad_to_max:
-        max_len = [max(len(a), len(b)) for a, b in zip(x, y)]
-        s1_parts, s2_parts = [], []
+        # No separator for substitution matrices - just concatenate
+        return ["".join(row) for row in sequences]
 
-        for s1, s2, le in zip(x, y, max_len):
-            # Pad each element
-            s1_parts.append(s1.ljust(le + 1, sep))
-            s2_parts.append(s2.ljust(le + 1, sep))
+    if pad_to_max:
+        # Global padding: find max length across all sequences and columns
+        max_lens = []
+        for col_idx in range(n_cols):
+            max_len = max(
+                len(row[col_idx]) for row in sequences if col_idx < len(row)
+            )
+            max_lens.append(max_len)
 
-        # Join with per-column separators
-        s1_result, s2_result = [], []
-        for i, (s1_part, s2_part, le) in enumerate(
-            zip(s1_parts, s2_parts, max_len)
-        ):
-            s1_result.append(s1_part)
-            s2_result.append(s2_part)
+        # Pad each sequence
+        result = []
+        for row in sequences:
+            parts = []
+            for col_idx, seq in enumerate(row):
+                # Pad this column to its max length
+                padded = seq.ljust(max_lens[col_idx] + 1, sep)
+                parts.append(padded)
 
-            # Add separator between columns (but not after the last one)
-            if i < len(max_len) - 1:
-                col_sep = sep * (le + 2)  # Longer than padded length (le + 1)
-                s1_result.append(col_sep)
-                s2_result.append(col_sep)
+                # Add inter-column separator (longer than padded length)
+                if col_idx < len(row) - 1:
+                    col_sep = sep * (max_lens[col_idx] + 2)
+                    parts.append(col_sep)
 
-        s1 = "".join(s1_result)
-        s2 = "".join(s2_result)
+            result.append("".join(parts))
+        return result
     else:
-        # Dynamically choose separator length: longer than the max column
-        try:
-            max_x = max(len(s) for s in x)
-        except ValueError:
-            max_x = 0
-        try:
-            max_y = max(len(s) for s in y)
-        except ValueError:
-            max_y = 0
-        max_len = max(max_x, max_y)
-        long_sep = sep * (max_len + 1)
-        s1 = long_sep.join(x)
-        s2 = long_sep.join(y)
+        # Dynamic separator: use length longer than any sequence in dataset
+        max_len = 0
+        for row in sequences:
+            for seq in row:
+                max_len = max(max_len, len(seq))
 
-    return metric.compute(s1, s2)
+        long_sep = sep * (max_len + 1)
+        return [long_sep.join(row) for row in sequences]
 
 
 @runtime_checkable
@@ -69,98 +124,572 @@ class Metric(Protocol):
     Protocol for metric objects used to compute distance between two strings.
 
     Implementors must provide `compute(s1: str, s2: str) -> float`.
+    Optionally can provide `compute_vectorized(seqs: list[str]) -> np.ndarray` for performance.
     """
 
-    def compute(self, s1: str, s2: str) -> float: ...
+    def compute(self, s1: str, s2: str, n_cpus: int = 1) -> float: ...
+
+    def compute_vectorized(
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+    ) -> np.ndarray: ...
 
 
 class CallableMetric:
-    """Wraps a callable f(s1, s2) into a Metric object."""
+    """Wraps a callable f(s1, s2) or f(seqs) into a Metric object.
 
-    def __init__(self, func: Callable[[str, str], float]):
-        self.func = func
+    Automatically detects whether the callable is pairwise (2 params) or vectorized (1 param).
+    """
+
+    def __init__(
+        self,
+        func: Callable[[str, str], float] | None = None,
+        vectorized_func: Callable[[list[str]], np.ndarray] | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        func : Callable[[str, str], float] | None, optional
+            Pairwise distance function taking two strings and returning a float.
+            Auto-detected from signature if a single callable is provided.
+        vectorized_func : Callable[[list[str]], np.ndarray] | None, optional
+            Vectorized distance function taking a list of strings and returning
+            a square distance matrix as an ndarray.
+
+        Raises
+        ------
+        ValueError
+            if neither ``func`` nor ``vectorized_func`` is provided, or if
+            ``func`` has an unexpected number of positional parameters.
+        """
+        if func is None and vectorized_func is None:
+            raise ValueError(
+                "Must provide at least one of 'func' or 'vectorized_func'"
+            )
+
+        # Auto-detect if single function provided
+        if func is not None and vectorized_func is None:
+            try:
+                sig = inspect.signature(func)
+                params = [
+                    p
+                    for p in sig.parameters.values()
+                    if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                ]
+
+                if len(params) == 1:
+                    # Vectorized function: f(seqs) -> np.ndarray
+                    self.func = None
+                    self._vectorized_func = func
+                elif len(params) == 2:
+                    # Pairwise function: f(s1, s2) -> float
+                    self.func = func
+                    self._vectorized_func = None
+                else:
+                    raise ValueError(
+                        f"Callable must have 1 parameter (vectorized) or 2 parameters (pairwise), got {len(params)}"
+                    )
+            except ValueError as e:
+                # Built-in C functions don't have inspectable signatures
+                # Try to detect by calling with 2 args - if it works, it's pairwise
+                if "no signature found for builtin" in str(e):
+                    self.func = func
+                    self._vectorized_func = None
+                else:
+                    raise
+        else:
+            self.func = func
+            self._vectorized_func = vectorized_func
 
     def compute(self, s1: str, s2: str) -> float:
-        return float(self.func(s1, s2))
+        """Use provided function to compute distance between two strings.
+
+        Parameters
+        ----------
+        s1 : str
+            First sequence.
+        s2 : str
+            Second sequence.
+
+        Returns
+        -------
+        float
+            Distance between ``s1`` and ``s2``.
+        """
+        if self.func is not None:
+            return float(self.func(s1, s2))
+        else:
+            # Fall back to computing on a 2-element list if only vectorized is available
+            result = self._vectorized_func([s1, s2])
+            return float(result[0, 1])
+
+    def compute_vectorized(
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+    ) -> np.ndarray:
+        """
+        Use provided vectorized function to compute all pairwise distances.
+
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare.
+        n_cpus : int, optional
+            Provided for interface compatibility; ignored for custom callables
+            (parallelization is handled at the chunk level).
+
+        Returns
+        -------
+        np.ndarray
+            Square distance matrix of shape (n, n).
+        """
+        # Use custom vectorized implementation if provided
+        if self._vectorized_func is not None:
+            result = self._vectorized_func(seqs)
+            return result
+
+        # Fall back to loop using pairwise function
+        n = len(seqs)
+        if n == 0:
+            return np.empty((0, 0), dtype=float)
+
+        dist_matrix = np.zeros((n, n))
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                d = self.compute(seqs[i], seqs[j])
+                dist_matrix[i, j] = d
+                dist_matrix[j, i] = d
+
+        return dist_matrix
 
 
 class LevenshteinMetric:
-    """Metric that computes edit distance using the polyleven implementation."""
+    """Metric that computes Levenshtein edit distance."""
 
     def compute(self, s1: str, s2: str) -> float:
-        return float(levenshtein(s1, s2))
+        """Compute Levenshtein edit distance between two strings.
+
+        Parameters
+        ----------
+        s1 : str
+            First sequence.
+        s2 : str
+            Second sequence.
+
+        Returns
+        -------
+        float
+            Levenshtein distance between ``s1`` and ``s2``.
+        """
+        return float(Levenshtein.distance(s1, s2))
+
+    def compute_vectorized(
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+    ) -> np.ndarray:
+        """Compute all pairwise Levenshtein distances using rapidfuzz.
+
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare.
+        n_cpus : int, optional
+            Number of worker processes to use.
+
+        Returns
+        -------
+        np.ndarray
+            Square distance matrix of shape (n, n) with dtype float32.
+        """
+        if not seqs:
+            return np.empty((0, 0), dtype=float)
+
+        result = process.cdist(
+            seqs,
+            seqs,
+            scorer=Levenshtein.distance,
+            dtype=np.int32,
+            workers=n_cpus if n_cpus > 1 else 1,
+        ).astype(np.float32)
+
+        return result
+
+
+class HammingMetric:
+    """Metric that computes Hamming distance between two strings."""
+
+    def __init__(self, verbose: bool = True):
+        """
+        Initialize with automatic backend selection.
+
+        Parameters
+        ----------
+        verbose : bool, optional
+            Print which backend is being used.
+        """
+        self.verbose = verbose
+        self._auto_detect_backend()
+
+    def _auto_detect_backend(self):
+        """Auto-detect best available backend."""
+        # Try PyTorch with GPU (CUDA or MPS)
+        try:
+            import torch
+
+            if torch.cuda.is_available():  # pragma: no cover
+                self.backend_name = "torch"
+                self.torch = torch
+                self.device = torch.device("cuda")
+                if self.verbose:
+                    print(f"Using PyTorch backend with CUDA GPU")
+                return
+            elif torch.backends.mps.is_available():  # pragma: no cover
+                self.backend_name = "torch"
+                self.torch = torch
+                self.device = torch.device("mps")
+                if self.verbose:
+                    print(f"Using PyTorch backend with Apple Metal GPU")
+                return
+        except ImportError:
+            pass
+
+        # Fall back to NumPy CPU
+        self.backend_name = "numpy"
+        if self.verbose:
+            print(f"Using NumPy backend (CPU only)")
+
+    def compute(self, s1: str, s2: str) -> float:
+        """
+        Compute Hamming distance between two strings.
+
+        Raises ValueError if strings are not of equal length.
+        """
+        if len(s1) != len(s2):
+            raise ValueError(
+                f"Hamming distance requires equal length strings. "
+                f"Got lengths {len(s1)} and {len(s2)}"
+            )
+        return float(sum(c1 != c2 for c1, c2 in zip(s1, s2)))
+
+    def compute_vectorized(
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+    ) -> np.ndarray:
+        """
+        Compute pairwise Hamming distances using the best available backend.
+
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare.
+        n_cpus : int, optional
+            Number of CPUs to use (currently not utilized for GPU backends).
+
+        Returns
+        -------
+        np.ndarray
+            Distance matrix of shape (n, n).
+        """
+        n = len(seqs)
+
+        if n == 0:
+            return np.array([[]])
+
+        # Route to appropriate backend
+        if self.backend_name == "torch":  # pragma: no cover
+            result = self._compute_torch(seqs, n)
+        else:  # numpy
+            result = self._compute_numpy(seqs, n)
+
+        return result
+
+    def _compute_torch(
+        self, seqs: list[str], n: int
+    ) -> np.ndarray:  # pragma: no cover
+        """PyTorch implementation."""
+        seqs_tensor = self.torch.tensor(
+            np.frombuffer("".join(seqs).encode(), dtype=np.uint8).reshape(
+                n, -1
+            ),
+            device=self.device,
+        )
+
+        dist_matrix = (
+            (seqs_tensor[:, None, :] != seqs_tensor[None, :, :])
+            .sum(dim=2)
+            .float()
+        )
+
+        return dist_matrix.cpu().numpy()
+
+    def _compute_numpy(self, seqs: list[str], n: int) -> np.ndarray:
+        """NumPy implementation."""
+        seqs_array = np.frombuffer("".join(seqs).encode(), dtype="S1").reshape(
+            n, -1
+        )
+        return (
+            (seqs_array[:, None, :] != seqs_array[None, :, :])
+            .sum(axis=2)
+            .astype(np.float32)
+        )
+
+
+class IdentityMetric:
+    """Metric that computes identity distance between strings using stable hash-based comparison."""
+
+    def __init__(self, verbose: bool = True):
+        self.verbose = verbose
+        self._auto_detect_backend()
+
+    def _auto_detect_backend(self):
+        """Auto-detect best available backend."""
+        # Try PyTorch with GPU
+        try:
+            import torch
+
+            if torch.cuda.is_available():  # pragma: no cover
+                self.backend_name = "torch"
+                self.torch = torch
+                self.device = torch.device("cuda")
+                if self.verbose:
+                    print("Using PyTorch backend with CUDA GPU for identity")
+                return
+            elif torch.backends.mps.is_available():  # pragma: no cover
+                self.backend_name = "torch"
+                self.torch = torch
+                self.device = torch.device("mps")
+                if self.verbose:
+                    print(
+                        "Using PyTorch backend with Apple Metal GPU for identity"
+                    )
+                return
+        except ImportError:
+            pass
+
+        # Fall back to NumPy CPU
+        self.backend_name = "numpy"
+        if self.verbose:
+            print("Using NumPy backend (CPU only) for identity")
+
+    @staticmethod
+    def _stable_hash(s: str) -> np.uint64:
+        """Compute a stable 64-bit hash for a string."""
+        # blake2b is faster than sha256 and designed for hashing
+        return np.uint64(
+            int.from_bytes(
+                hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest(),
+                byteorder="little",
+                signed=False,
+            )
+        )
+
+    def _hash_sequences(self, seqs: list[str]) -> np.ndarray:
+        """Hash all sequences into a NumPy int64 array."""
+        # Pre-allocate array for better performance
+        hashes = np.empty(len(seqs), dtype=np.uint64)
+        for i, s in enumerate(seqs):
+            hashes[i] = self._stable_hash(s)
+        return hashes
+
+    def compute(self, s1: str, s2: str) -> float:
+        """Compute identity distance between two strings (0 = same, 1 = different)."""
+        return 0.0 if s1 == s2 else 1.0
+
+    def compute_vectorized(
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+    ) -> np.ndarray:
+        """
+        Compute pairwise identity distance matrix.
+
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare.
+        n_cpus : int, optional
+            Number of CPUs to use (currently not utilized for GPU backends).
+
+        Returns
+        -------
+        np.ndarray
+            Distance matrix of shape (n, n), where:
+            - 0.0 = sequences are identical
+            - 1.0 = sequences are different
+        """
+        n = len(seqs)
+        if n == 0:
+            return np.empty((0, 0), dtype=np.float32)
+
+        hashes = self._hash_sequences(seqs)
+
+        if self.backend_name == "torch":  # pragma: no cover
+            result = self._compute_torch(hashes)
+        else:
+            result = self._compute_numpy(hashes)
+
+        return result
+
+    def _compute_numpy(self, hashes: np.ndarray) -> np.ndarray:
+        """NumPy backend."""
+        identity = hashes[:, None] == hashes[None, :]
+        return (~identity).astype(np.float32)
+
+    def _compute_torch(
+        self, hashes: np.ndarray
+    ) -> np.ndarray:  # pragma: no cover
+        """PyTorch backend."""
+        h = self.torch.as_tensor(hashes, device=self.device)
+        identity = h[:, None] == h[None, :]
+        return (~identity).float().cpu().numpy()
 
 
 class SubstitutionMatrixMetric:
     """
-    Metric that uses a substitution matrix (e.g. BLOSUM62).
+    Metric that uses a substitution matrix (e.g. BLOSUM62),
+    following the approach used by Scirpy's AlignmentDistanceCalculator.
 
-    Distance is computed as:
-        distance = max_possible_score - actual_score
-    Optionally normalized to [0, 1].
+    Distance between sequences s1 and s2 is defined as:
+        distance = max_achievable_score - alignment_score
+    where max_achievable_score = min(self_score(s1), self_score(s2)).
 
     Parameters
     ----------
     matrix_name : str
         Name of the Biopython substitution matrix (e.g., "BLOSUM62").
-    gap_penalty : float, default=-4.0
-        Penalty for gaps or characters not in the matrix.
+    gap_open : float, default=-11
+        Gap opening penalty for alignments.
+    gap_extend : float, default=-11
+        Gap extension penalty for alignments.
     """
 
-    def __init__(
-        self,
-        matrix_name: str,
-        gap_penalty: float = -4.0,
-    ):
-        self.gap_penalty = float(gap_penalty)
+    def __init__(self, matrix_name="BLOSUM62", gap_open=-11, gap_extend=-11):
+        self.aligner = PairwiseAligner()
+        self.aligner.mode = "global"
 
-        # Load Biopython substitution matrix
-        try:
-            bio_mat = _submat.load(matrix_name)
-        except Exception as e:
-            raise ValueError(
-                f"Could not load substitution matrix '{matrix_name}'. "
-                "Please ensure it is a valid matrix name supported by Biopython."
-            ) from e
+        # Load substitution matrix
+        sub_mat = load(matrix_name)
+        self.aligner.substitution_matrix = sub_mat
 
-        # Convert to dict for fast lookup
-        self.matrix: dict[tuple[str, str], float] = {}
-        for a in bio_mat.alphabet:
-            for b in bio_mat.alphabet:
-                v = float(bio_mat[a, b])
-                self.matrix[(a, b)] = v
-                self.matrix[(b, a)] = v  # symmetric access
+        # Set affine gap penalties
+        self.aligner.open_gap_score = float(gap_open)
+        self.aligner.extend_gap_score = float(gap_extend)
+
+    def _self_score(self, seq: str) -> float:
+        """
+        Compute the self-alignment score of a sequence using the configured aligner.
+
+        Parameters
+        ----------
+        seq : str
+            Amino acid sequence.
+
+        Returns
+        -------
+        float
+            Self-alignment score.
+        """
+        if len(seq) < 1 or seq is None:
+            return 0.0
+        return self.aligner.score(seq, seq)
 
     def compute(self, s1: str, s2: str) -> float:
-        """Compute distance between two sequences based on substitution matrix."""
+        """
+        Compute the BLOSUM-based distance between two sequences.
 
-        min_len = min(len(s1), len(s2))
-        score = 0.0
+        Parameters
+        ----------
+        s1, s2 : str
+            Amino acid sequences to compare.
 
-        # Sum substitution matrix scores for aligned positions
-        for i in range(min_len):
-            a, b = s1[i], s2[i]
-            score += self.matrix.get((a, b), self.gap_penalty)
+        Returns
+        -------
+        float
+            Non-negative distance between s1 and s2.
+        """
+        score_12 = self.aligner.score(s1, s2)
+        s1_self = self._self_score(s1)
+        s2_self = self._self_score(s2)
+        max_score = min(s1_self, s2_self)
+        return max(0.0, max_score - score_12)
 
-        # Apply gap penalties for unequal lengths
-        len_diff = abs(len(s1) - len(s2))
-        score += len_diff * self.gap_penalty
+    def compute_vectorized(
+        self,
+        seqs: list[str],
+        n_cpus: int = 1,
+    ) -> np.ndarray:
+        """
+        Vectorized pairwise distance computation using substitution matrices.
 
-        # Compute max possible score for s1 (perfect self-alignment)
-        max_score = sum(self.matrix.get((c, c), 0.0) for c in s1)
-        max_score += len_diff * self.gap_penalty  # consider gaps
+        Uses Biopython's PairwiseAligner to score all pairs and
+        computes distances as min(self_score_i, self_score_j) - pair_score.
 
-        # Distance = max_score - actual_score, clamped at 0
-        distance = max(0.0, max_score - score)
+        Parameters
+        ----------
+        seqs : list[str]
+            List of sequences to compare (can have different lengths).
+        n_cpus : int, optional
+            Number of CPUs to use (currently not utilized).
 
-        return distance
+        Returns
+        -------
+        np.ndarray
+            Distance matrix of shape (n, n).
+        """
+        n = len(seqs)
+
+        if n == 0:
+            return np.empty((0, 0), dtype=float)
+
+        # Precompute self-alignment scores once
+        self_scores = np.array([self._self_score(s) for s in seqs], dtype=float)
+
+        lengths = np.array([len(s) for s in seqs], dtype=int)
+        all_equal_len = np.all(lengths == lengths[0])
+        assert (
+            all_equal_len
+        ), "Currently only equal-length sequences are supported for vectorized scoring."
+
+        # Build character index and score lookup from the configured substitution matrix
+        sub_mat = self.aligner.substitution_matrix
+        alphabet = list(sub_mat.alphabet)
+        char_to_idx = {c: i for i, c in enumerate(alphabet)}
+        k = len(alphabet)
+        score_lookup = np.zeros((k, k), dtype=float)
+        for a in alphabet:
+            for b in alphabet:
+                score_lookup[char_to_idx[a], char_to_idx[b]] = float(
+                    sub_mat[a, b]
+                )
+        # Encode sequences to indices (n, L)
+        seq_indices = np.array(
+            [[char_to_idx[c] for c in s] for s in seqs], dtype=int
+        )
+        # Broadcast lookup to get per-position pair scores and sum over positions
+        pair_scores = score_lookup[
+            seq_indices[:, None, :], seq_indices[None, :, :]
+        ].sum(axis=2)
+        # Distance matrix from min of self scores
+        max_scores = np.minimum(self_scores[:, None], self_scores[None, :])
+        dist_matrix = np.maximum(max_scores - pair_scores, 0.0).astype(
+            np.float32
+        )
+        # Ensure diagonal is exactly zero
+        np.fill_diagonal(dist_matrix, 0.0)
+
+        return dist_matrix
 
 
 # -------------------------
 # Metric resolver
 # -------------------------
 def resolve_metric(
-    dist_func: Callable[[str, str], float] | str | Metric | None,
+    dist_func: Callable[[str, str], float] | str | Metric,
 ) -> Metric:
     """
     Convert user-supplied dist_func into a Metric object.
@@ -168,15 +697,19 @@ def resolve_metric(
     Parameters
     ----------
     dist_func : Callable[[str, str], float] | str | Metric | None
-        Distance function specification.
+        Distance function specification. Can be:
+        - "levenshtein": uses Levenshtein distance
+        - "hamming": uses Hamming distance
+        - "identity": uses 100% identity metric (based on stable hashing)
+        - str (other): treated as substitution matrix name (e.g., "BLOSUM62")
+        - Callable: wrapped in CallableMetric
+        - Metric: returned as-is
+
     Returns
     -------
     Metric
         Resolved Metric object.
     """
-    if dist_func is None:
-        return LevenshteinMetric()
-
     if isinstance(dist_func, Metric):
         return dist_func
 
@@ -184,8 +717,16 @@ def resolve_metric(
         return CallableMetric(dist_func)
 
     if isinstance(dist_func, str):
+        # Check for hamming distance
+        if dist_func.lower() == "hamming":
+            return HammingMetric()
+        elif dist_func.lower() == "levenshtein":
+            return LevenshteinMetric()
+        elif dist_func.lower() == "identity":
+            return IdentityMetric()
+        # Otherwise treat as substitution matrix
         return SubstitutionMatrixMetric(dist_func)
 
     raise TypeError(
-        "dist_func must be None, callable, Metric, or substitution matrix name string."
+        "dist_func must be 'hamming', 'levenshtein', 'identity', substitution matrix name or a callable metric e.g. lambda function"
     )

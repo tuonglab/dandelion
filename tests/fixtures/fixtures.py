@@ -1,6 +1,5 @@
 """fixtures"""
 
-import dandelion as ddl
 import pandas as pd
 import pytest
 import scipy.sparse
@@ -8,6 +7,8 @@ import scipy.sparse
 from anndata import AnnData
 from pathlib import Path
 from typing import Dict
+
+from dandelion.base.io import read_h5ddl
 
 DATABASE_PATH = Path("container") / "database"
 HBLASTDB_PATH = DATABASE_PATH / "blast" / "human"
@@ -13511,11 +13512,11 @@ def airr_bd():
 def vdj_small():
     """Small dandelion object for testing."""
     data_path = Path(__file__).parent / "vdj_processed.h5ddl"
-    return ddl.read_h5ddl(data_path)
+    return read_h5ddl(data_path)
 
 
 @pytest.fixture
 def vdj_smaller():
     """Smaller dandelion object for testing."""
     data_path = Path(__file__).parent / "vdj_processed_smaller.h5ddl"
-    return ddl.read_h5ddl(data_path)
+    return read_h5ddl(data_path)

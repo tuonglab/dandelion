@@ -2,6 +2,8 @@
 import pytest
 import dandelion as ddl
 
+from dandelion.utilities._utilities import write_fasta
+
 
 @pytest.mark.usefixtures("create_testfolder", "fasta_10x")
 @pytest.mark.parametrize(
@@ -10,7 +12,7 @@ import dandelion as ddl
 def test_write_fasta(create_testfolder, fasta_10x, filename, expected):
     """test_write_fasta"""
     out_fasta = create_testfolder / (filename + "_contig.fasta")
-    ddl.utl._core.write_fasta(fasta_dict=fasta_10x, out_fasta=out_fasta)
+    write_fasta(fasta_dict=fasta_10x, out_fasta=out_fasta)
     assert len(list(create_testfolder.iterdir())) == expected
 
 

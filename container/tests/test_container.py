@@ -66,4 +66,4 @@ def test_threshold(mock_show):
         "cd /tests; python /share/changeo_clonotypes.py --h5ddl sample_test_10x/demo-vdj.h5ddl;"
     )
     dat = ddl.read_h5ddl("/tests/sample_test_10x/demo-vdj_changeo.h5ddl")
-    assert not dat._data.changeo_clone_id.empty
+    assert dat._data.collect()["changeo_clone_id"].len() > 0

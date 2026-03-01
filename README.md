@@ -1,14 +1,14 @@
 [![](https://readthedocs.org/projects/sc-dandelion/badge/?version=latest)](https://sc-dandelion.readthedocs.io/en/latest/?badge=latest)
 [![](https://img.shields.io/pypi/v/sc-dandelion?logo=PyPI)](https://pypi.org/project/sc-dandelion/)
-[![](https://byob.yarr.is/zktuong/dandelion/master-version)](https://github.com/zktuong/dandelion/tree/master)
-[![master](https://github.com/zktuong/dandelion/actions/workflows/tests.yml/badge.svg?branch=master)]((https://github.com/zktuong/dandelion/actions/workflows/tests.yml))
-[![codecov](https://codecov.io/gh/zktuong/dandelion/branch/master/graph/badge.svg?token=661BMU1FBO)](https://codecov.io/gh/zktuong/dandelion)
+[![](https://byob.yarr.is/tuonglab/dandelion/master-version)](https://github.com/tuonglab/dandelion/tree/master)
+[![master](https://github.com/tuonglab/dandelion/actions/workflows/tests.yml/badge.svg?branch=master)]((https://github.com/tuonglab/dandelion/actions/workflows/tests.yml))
+[![codecov](https://codecov.io/gh/tuonglab/dandelion/graph/badge.svg?token=i2BhIz2a4r)](https://codecov.io/gh/tuonglab/dandelion)
 [![](https://img.shields.io/static/v1?label=AIRR-C%20sw-tools%20v1&message=compliant&color=008AFF&labelColor=000000&style=plastic)](https://docs.airr-community.org/en/stable/swtools/airr_swtools_standard.html)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zktuong/dandelion/blob/master/container/dandelion_singularity.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb)
 
 ![](docs/notebooks/img/dandelion_logo_illustration.png)
 
-Hi there! I have put together a python package for analyzing single cell BCR/TCR data from 10x Genomics 5' solution! It streamlines the pre-processing, leveraging some tools from immcantation suite, and integrates with scanpy/anndata for single-cell BCR/TCR analysis. It also includes a couple of functions for visualization.
+Hi there! I have put together a python package for analyzing single cell BCR/TCR data from multiple platforms, including 10x Genomics 5' VDJ, BD Rhapsody, Parse Biosciences, SeekGene, and other AIRR-compatible sequencing sources. It streamlines the pre-processing, leveraging some tools from the immcantation suite, and integrates with scanpy/anndata for single-cell BCR/TCR analysis. It also includes a couple of functions for visualization.
 
 ## Citation
 `dandelion` is now published at [***Nature Biotechnology***](https://www.nature.com/articles/s41587-023-01734-7)!
@@ -17,7 +17,7 @@ Please cite the following if you use version 0.3.0 onwards:
 
 Suo, C., Polanski, K., Dann, E. et al. ***Dandelion uses the single-cell adaptive immune receptor repertoire to explore lymphocyte developmental origins***. Nat Biotechnol (2023). https://doi.org/10.1038/s41587-023-01734-7
 
-The data used in the Nature Biotechnology paper is available at a separate [repository](https://github.com/zktuong/dandelion-demo-files/tree/master/dandelion_manuscript).
+The data used in the Nature Biotechnology paper is available at a separate [repository](https://github.com/tuonglab/dandelion-demo-files/tree/master/dandelion_manuscript).
 
 This repository also includes a Git submodule for the dandelion_manuscript folder, which is stored in the dandelion-demo-files repository (click link above that says `dandelion_manuscript`)
 
@@ -36,7 +36,7 @@ Illustration of the `Dandelion` class slots
 
 Please refer to the [documentation](https://sc-dandelion.readthedocs.io/).
 
-The raw files for the examples can be downloaded from 10X's Single Cell Immune Profiling datasets [website](https://support.10xgenomics.com/single-cell-vdj/datasets).
+The raw files used in the example notebooks can be downloaded from 10X's Single Cell Immune Profiling datasets [website](https://support.10xgenomics.com/single-cell-vdj/datasets).
 
 ## Installation
 
@@ -63,10 +63,17 @@ singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta
 
 Start off by creating a conda environment containing scanpy, following [official scanpy instructions](https://scanpy.readthedocs.io/en/stable/installation.html). Once done, run the following:
 
+**Base install:**
 ```bash
-conda install -c conda-forge graph-tool
 pip install sc-dandelion
 ```
+
+**With Polars backend (recommended for improved performance):**
+```bash
+pip install sc-dandelion[polars]
+```
+
+The `polars` extra enables a faster backend for data operations. The base install uses `pandas` as the backend.
 
 Between this and the pipelines within the singularity container, you should be covered for most of your needs.
 
@@ -85,7 +92,7 @@ echo 'export PATH=path/to/igblast/bin:$PATH' >> ~/.bash_profile
 echo 'export PATH=path/to/blast+/bin:$PATH' >> ~/.bash_profile
 ```
 
-You will need to download the database folder in this repository and place them somewhere accessible. There are [scripts](https://github.com/zktuong/dandelion/tree/master/container/scripts) in the `container` folder that will help you download the imgt/ogrdb databases and you can use them like this:
+You will need to download the database folder in this repository and place them somewhere accessible. There are [scripts](https://github.com/tuonglab/dandelion/tree/master/container/scripts) in the `container` folder that will help you download the imgt/ogrdb databases and you can use them like this:
 
 ```bash
 python prepare_imgt_database.py
@@ -104,7 +111,7 @@ For some of the pre-processing steps, you will need to install `rpy2` and some R
 
 ```bash
 # in bash/zsh terminal
-conda install -c conda-forge rpy2 r-optparse r-alakazam r-tigger r-airr r-shazam
+conda install -c conda-forge -c bioconda rpy2 r-optparse r-alakazam r-tigger r-airr r-shazam r-scoper
 ```
 
 Otherwise, you can also use `pip` to install `rpy2` and then install the R packages manually:
@@ -117,47 +124,61 @@ pip install rpy2
 ```
 ```R
 # in R
-install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam"))
+install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam", "scoper"))
 ```
 and then lastly install dandelion:
 ```bash
 pip install sc-dandelion
 # or
-pip install git+https://github.com/zktuong/dandelion.git
+pip install git+https://github.com/tuonglab/dandelion.git
 # or  installing from a specific branch
-pip install git+https://github.com/zktuong/dandelion@branch_name
+pip install git+https://github.com/tuonglab/dandelion@branch_name
 ```
 
 ## Basic requirements
-Python packages
-```python
-# conda
-python>=3.7 (conda-forge)
-numpy>=1.18.4 (conda-forge)
-pandas>=1.0.3 (conda-forge)
-distance>=0.1.3 (conda-forge)
-jupyter (conda-forge) # if running via a notebook
-scikit-learn>=0.23.0 (conda-forge)
-numba>=0.48.0 (conda-forge)
-pytables>=3.6.1 (conda-forge)
-seaborn>=0.10.1 (conda-forge)
-leidenalg>=0.8.0 (conda-forge)
-plotnine>=0.6.0 (conda-forge)
-graph-tool>=2.3.5 (conda-forge) # optional
 
-# Other executables (through conda)
-blast>=2.10.1 (bioconda)
+Python `>=3.11`
+
+### Base packages (auto-installed with `pip install sc-dandelion`)
+```
+numpy>=1.23
+pandas>=1.4
+changeo>=1.1
+anndata>=0.9
+scanpy>=1.9
+scikit-learn>=1.0
+scipy>=1.8
+numba>=0.56
+seaborn>=0.12
+networkx>=3.0
+leidenalg>=0.9
+polyleven>=0.4
+h5py>=3.6
+adjustText>=0.7
+distance>=0.1.3
+plotnine>=0.10
+palettable>=3.3
+mizani>=0.8
+nxviz>=0.7
+rapidfuzz>3.12.1
+zarr>=2.18.7
+circlify>=0.15.0
+airr
+```
+
+### Optional extras
+```bash
+pip install sc-dandelion[polars]    # polars>=1.34.0, pyarrow>=21.0.0
+pip install sc-dandelion[scirpy]    # scirpy>=0.21, awkward>=2.1, mudata>=0.2
+pip install sc-dandelion[scrublet]  # scrublet>=0.2, annoy<1.17.0
+pip install sc-dandelion[palantir]  # palantir>=0.2.3, pertpy>=0.1.0, jax>=0.3
+pip install sc-dandelion[dask]      # dask>=2025.11.0, distributed>=2025.11.0, psutil>=6.1.0
+```
+
+### Other executables (required for preprocessing)
+```
+blast>=2.10.1   (bioconda)
 igblast>=1.15.0 (bioconda)
-
-# pip
-anndata>=0.7.1
-scanpy>=1.4.6
-scrublet>=0.2.1
-changeo>=1.0.0
-presto>=0.6.0
-polyleven>=0.5
-networkx>=2.4
-rpy2>=3.4.2
 ```
 
 ## Acknowledgements

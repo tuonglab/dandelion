@@ -352,7 +352,7 @@ def main():
             )
             if args.skip_tigger:
                 ddl.pp.create_germlines(
-                    vdj_data=samp_path,
+                    vdj=samp_path,
                     org=args.org,
                     db=args.db,
                     strain=args.strain,

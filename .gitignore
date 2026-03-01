@@ -33,3 +33,4 @@ build
 *.njs
 /container/database/blast
 /docs/notebooks/dev_notebooks
+junit.xml

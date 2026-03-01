@@ -1,13 +1,15 @@
 #!/usr/bin/env python
-import dandelion as ddl
 import pytest
+
+from dandelion.base.core import Dandelion
+from dandelion.base.preprocessing import check_contigs
 
 
 @pytest.mark.usefixtures("airr_generic")
 def test_query(airr_generic):
     """test query and update_metadata functions"""
-    vdj = ddl.Dandelion(airr_generic)
-    ddl.pp.check_contigs(vdj)
+    vdj = Dandelion(airr_generic)
+    check_contigs(vdj)
     vdj.update_metadata(retrieve="umi_count", retrieve_mode="split and sum")
     vdj.update_metadata(retrieve="umi_count", retrieve_mode="sum")
     vdj.update_metadata(retrieve="umi_count", retrieve_mode="average")
