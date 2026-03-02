@@ -1,3 +1,5 @@
+import subprocess
+
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -193,3 +195,60 @@ def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
                 continue
             print(f"Downloading {filename} → {outfile}")
             _download_file(url, outfile)
+
+
+def setup_colab_singularity() -> None:  # pragma: no cover
+    """Install and configure Apptainer/Singularity in a Google Colab environment.
+
+    Installs ``apptainer-suid`` from the official PPA, wraps it with
+    ``unshare -r`` so that it operates correctly inside Colab's unprivileged
+    container, and registers the Sylabs remote. Safe to re-run; existing
+    files are backed up rather than overwritten.
+
+    Raises
+    ------
+    subprocess.CalledProcessError
+        If any step of the installation script exits with a non-zero status.
+    """
+
+    bash_script = r"""
+set -e
+
+echo "Installing Apptainer..."
+
+sudo apt update
+sudo apt install -y software-properties-common
+
+if ! grep -q apptainer /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
+    sudo add-apt-repository -y ppa:apptainer/ppa
+    sudo apt update
+fi
+
+sudo apt install -y apptainer-suid
+
+echo "Configuring fakeroot..."
+sudo apptainer config fakeroot --add root || true
+
+echo "Creating singularity wrapper..."
+
+sudo bash -c 'cat <<EOF > /usr/bin/singularity_test
+unshare -r apptainer "$@"
+EOF'
+
+sudo chmod +x /usr/bin/singularity_test
+
+if [ -f /usr/bin/singularity ]; then
+    sudo mv /usr/bin/singularity /usr/bin/singularity_backup || true
+fi
+
+sudo mv /usr/bin/singularity_test /usr/bin/singularity
+
+echo "Adding Sylabs remote..."
+singularity remote add --no-login SylabsCloud cloud.sylabs.io || true
+
+echo "Done."
+"""
+
+    subprocess.run(["bash", "-c", bash_script], check=True)
+
+    print("\n✅ Singularity / Apptainer ready!")
