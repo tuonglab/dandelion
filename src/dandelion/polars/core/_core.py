@@ -3552,9 +3552,20 @@ def load_polars(
     KeyError
         if `sequence_id` not found in input.
     """
+    schema_override = {
+        col: pl.String
+        for col in [
+            "j_call_multimappers",
+            "j_call_sequence_start_multimappers",
+            "j_call_sequence_end_multimappers",
+            "j_call_support_multimappers",
+        ]
+    }
     if obj is not None:
         if os.path.isfile(str(obj)):
-            df = pl.scan_csv(obj, separator="\t")
+            df = pl.scan_csv(
+                obj, separator="\t", schema_overrides=schema_override
+            )
         elif isinstance(obj, pl.LazyFrame):  # Check for LazyFrame
             df = obj
         elif isinstance(obj, pl.DataFrame):  # Check for eager DataFrame
