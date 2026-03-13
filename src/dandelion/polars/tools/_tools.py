@@ -1131,7 +1131,10 @@ def transfer(
                 recipient.obs[x] = pd.Series(vdj._metadata[x])
             if type_check(vdj._metadata, x):
                 col = recipient.obs[x]
-                if hasattr(col, 'cat') and "No_contig" not in col.cat.categories:
+                if (
+                    hasattr(col, "cat")
+                    and "No_contig" not in col.cat.categories
+                ):
                     recipient.obs[x] = col.cat.add_categories("No_contig")
                 recipient.obs[x] = recipient.obs[x].replace(np.nan, "No_contig")
             if recipient.obs[x].dtype == "bool":
@@ -1145,9 +1148,14 @@ def transfer(
                 recipient.obs[ow] = pd.Series(vdj._metadata[ow])
                 if type_check(vdj._metadata, ow):
                     col = recipient.obs[ow]
-                    if hasattr(col, 'cat') and "No_contig" not in col.cat.categories:
+                    if (
+                        hasattr(col, "cat")
+                        and "No_contig" not in col.cat.categories
+                    ):
                         recipient.obs[ow] = col.cat.add_categories("No_contig")
-                    recipient.obs[ow] = recipient.obs[ow].replace(np.nan, "No_contig")
+                    recipient.obs[ow] = recipient.obs[ow].replace(
+                        np.nan, "No_contig"
+                    )
 
     # also check that all the cells in dandelion are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)
