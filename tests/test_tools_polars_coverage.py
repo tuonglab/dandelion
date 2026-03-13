@@ -685,7 +685,9 @@ def test_concat_auto_numbering_polars(vdj_base):
     assert result.n_contigs == vdj.n_contigs * 2
 
 
-def test_concat_mismatched_data_columns(vdj_base, airr_reannotated2, dummy_adata2):
+def test_concat_mismatched_data_columns(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
     """Concat should succeed when data frames have different _data schemas.
 
     Regression test for a failure where pl.concat(..., how='diagonal') on

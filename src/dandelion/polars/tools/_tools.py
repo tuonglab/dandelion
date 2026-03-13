@@ -3120,7 +3120,9 @@ def concat(
             if isinstance(frame, pl.LazyFrame)
             else frame.columns
         )
-        missing_cols = [(n, all_schema[n]) for n in col_order if n not in present]
+        missing_cols = [
+            (n, all_schema[n]) for n in col_order if n not in present
+        ]
         if missing_cols:
             frame = frame.with_columns(
                 [pl.lit(None).cast(dt).alias(n) for n, dt in missing_cols]
