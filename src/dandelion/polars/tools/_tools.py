@@ -3093,8 +3093,48 @@ def concat(
                         pl.col("v_call").alias("v_call_genotyped")
                     )
 
-    # Concatenate the data (Polars DataFrames)
-    arrays_ = [vdj._data for vdj in vdjs_]
+    # Concatenate the data (Polars DataFrames).
+    # Manually align schemas before calling pl.concat so that frames which
+    # already possess all union columns are never passed through
+    # with_columns([]) — an empty node that fails when polars tries to resolve
+    # it against a parquet-backed LazyFrame.  collect_schema() is a no-op
+    # (it reads the plan's output schema without executing any query), so this
+    # remains fully lazy for LazyFrame inputs.
+    all_schema: dict[str, pl.DataType] = {}
+    for vdj in vdjs_:
+        frame_schema = (
+            vdj._data.collect_schema()
+            if isinstance(vdj._data, pl.LazyFrame)
+            else vdj._data.schema
+        )
+        for col_name, col_dtype in frame_schema.items():
+            if col_name not in all_schema:
+                all_schema[col_name] = col_dtype
+
+    col_order = list(all_schema.keys())
+    arrays_ = []
+    for vdj in vdjs_:
+        frame = vdj._data
+        present = set(
+            frame.collect_schema().names()
+            if isinstance(frame, pl.LazyFrame)
+            else frame.columns
+        )
+        missing_cols = [(n, all_schema[n]) for n in col_order if n not in present]
+        if missing_cols:
+            frame = frame.with_columns(
+                [pl.lit(None).cast(dt).alias(n) for n, dt in missing_cols]
+            )
+        arrays_.append(frame.select(col_order))
+
+    # pl.concat requires a uniform type; if any frame is lazy, lazify all
+    # eager DataFrames so the list is homogeneous.
+    any_lazy = any(isinstance(f, pl.LazyFrame) for f in arrays_)
+    if any_lazy:
+        arrays_ = [
+            f if isinstance(f, pl.LazyFrame) else f.lazy() for f in arrays_
+        ]
+
     vdj_concat = DandelionPolars(
         pl.concat(arrays_, how="diagonal"), verbose=False
     )
