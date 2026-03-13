@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import math
-import re
 
 import networkx as nx
 import numpy as np
@@ -13,12 +12,9 @@ import scanpy as sc
 from anndata import AnnData
 from collections import defaultdict, Counter
 from contextlib import contextmanager
-from distance import hamming
-from itertools import product
 from scanpy import logging as logg
 from scipy.sparse import coo_matrix, csr_matrix, eye as speye
 from scipy.sparse.csgraph import connected_components
-from scipy.spatial.distance import pdist, squareform
 
 from tqdm import tqdm
 from typing import Callable, Literal, TYPE_CHECKING
@@ -27,7 +23,7 @@ if TYPE_CHECKING:
     from mudata import MuData
     from awkward import Array
 
-from dandelion.polars.core._core import DandelionPolars
+from dandelion.polars.core._core import DandelionPolars, SCHEMA_OVERRIDES
 from dandelion.utilities._utilities import (
     VCALL,
     TRUES_STR,
@@ -37,11 +33,8 @@ from dandelion.utilities._utilities import (
     VCALLG,
     STRIPALLELENUM,
     EMPTIES,
-    flatten,
     is_categorical,
     type_check,
-    present,
-    check_same_celltype,
     Tree,
 )
 from dandelion.utilities._distances import (
@@ -2918,7 +2911,10 @@ def concat(
             vdjs_.append(tmp)
         elif isinstance(x, pd.DataFrame):
             # Convert pandas to polars
-            tmp = DandelionPolars(pl.from_pandas(x), verbose=False)
+            tmp = DandelionPolars(
+                pl.from_pandas(x, schema_overrides=SCHEMA_OVERRIDES),
+                verbose=False,
+            )
             vdjs_.append(tmp)
         else:
             raise ValueError(

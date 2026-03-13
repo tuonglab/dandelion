@@ -2275,7 +2275,9 @@ class DandelionPolars:
             if isinstance(self._data, pd.DataFrame):
                 # drop index to avoid duplication
                 self._data = self._data.reset_index(drop=True)
-                self._data = pl.from_pandas(self._data)
+                self._data = pl.from_pandas(
+                    self._data, schema_overrides=SCHEMA_OVERRIDES
+                )
                 if self._lazy:
                     self._data = self._data.lazy()
             if self._metadata is not None:
@@ -3612,7 +3614,9 @@ def load_polars(
             df = obj.lazy()
         elif isinstance(obj, pd.DataFrame):
             try:
-                df = pl.from_pandas(obj).lazy()
+                df = pl.from_pandas(
+                    obj, schema_overrides=SCHEMA_OVERRIDES
+                ).lazy()
             except Exception:  # because of mixed dtypes, sanitize first
                 df = _sanitize_data_polars(obj)
         else:
@@ -4265,7 +4269,9 @@ def _check_travdv_polars(
     """Check if locus is TRA/D."""
     # Vectorized approach - works on LazyFrame
     if isinstance(data, pd.DataFrame):
-        data = pl.from_pandas(data.reset_index(drop=True)).lazy()
+        data = pl.from_pandas(
+            data.reset_index(drop=True), schema_overrides=SCHEMA_OVERRIDES
+        ).lazy()
     elif isinstance(data, pl.DataFrame):
         data = data.lazy()
     # convert empty strings to nulls for consistency
@@ -4652,7 +4658,9 @@ def _sanitize_data_polars(
                         # Try to convert to numeric
                         data[col] = pd.to_numeric(data[col], errors="ignore")
 
-        data = pl.from_pandas(data.reset_index(drop=True))
+        data = pl.from_pandas(
+            data.reset_index(drop=True), schema_overrides=SCHEMA_OVERRIDES
+        )
 
     lazy = isinstance(data, pl.LazyFrame)
     df = data.collect(engine="streaming") if lazy else data
