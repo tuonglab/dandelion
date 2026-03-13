@@ -754,9 +754,7 @@ def test_concat_parquet_backed_mismatched_columns(
     find_clones(vdj2)
 
     # Add the extra column before caching so the parquet contains it
-    vdj1._data = vdj1._data.with_columns(
-        pl.lit("IgG").alias("d_source")
-    )
+    vdj1._data = vdj1._data.with_columns(pl.lit("IgG").alias("d_source"))
 
     # Force parquet backing on both objects — exactly what happens after
     # loading from disk (zipddl / h5ddl)
@@ -849,9 +847,7 @@ def test_concat_many_objects_one_missing_column(
     assert "d_source_col" in result_data.columns
 
     # vdj2 rows (suffixes _c and _f) have no d_source_col value
-    vdj2_null_rows = result_data.filter(
-        pl.col("d_source_col").is_null()
-    )
+    vdj2_null_rows = result_data.filter(pl.col("d_source_col").is_null())
     assert len(vdj2_null_rows) == vdj2.n_contigs * 2
 
 
@@ -915,11 +911,11 @@ def test_with_columns_empty_node_in_diagonal_concat_plan(
 
     # ── write two TSV files with identical headers ───────────────────────────
     df_a = airr_reannotated.copy()
-    df_a["d_source"] = "igblast"          # populated in sample A
+    df_a["d_source"] = "igblast"  # populated in sample A
 
     df_b = airr_reannotated2.copy()
     for col in [c for c in df_a.columns if c not in df_b.columns]:
-        df_b[col] = None                  # all-null in sample B
+        df_b[col] = None  # all-null in sample B
     df_b = df_b.reindex(columns=list(df_a.columns))
 
     path_a = tmp_path / "sample_A.tsv"
@@ -932,9 +928,9 @@ def test_with_columns_empty_node_in_diagonal_concat_plan(
     vdj_b = read_10x_airr(str(path_b))
 
     assert "d_source" in vdj_a._data.collect_schema().names()
-    assert "d_source" not in vdj_b._data.collect_schema().names(), (
-        "read_10x_airr must drop the all-null d_source column from sample B"
-    )
+    assert (
+        "d_source" not in vdj_b._data.collect_schema().names()
+    ), "read_10x_airr must drop the all-null d_source column from sample B"
 
     # Simulate what concat's deepcopy does: write _data to a temp parquet file
     vdj_a._cache_data()
@@ -943,9 +939,9 @@ def test_with_columns_empty_node_in_diagonal_concat_plan(
     assert isinstance(vdj_b._data, pl.LazyFrame)
 
     # The unoptimized plan must contain WITH_COLUMNS nodes
-    plan = pl.concat(
-        [vdj_a._data, vdj_b._data], how="diagonal"
-    ).explain(optimized=False)
+    plan = pl.concat([vdj_a._data, vdj_b._data], how="diagonal").explain(
+        optimized=False
+    )
     assert "WITH_COLUMNS" in plan, (
         "Expected WITH_COLUMNS node in the unoptimized diagonal concat plan "
         f"for mismatched parquet-backed frames.\nPlan:\n{plan}"
@@ -967,12 +963,11 @@ def test_with_columns_empty_node_in_diagonal_concat_plan(
     vdj_b2 = read_airr(str(path_b))
 
     assert "d_source" in vdj_a2._data.collect_schema().names()
-    assert "d_source" in vdj_b2._data.collect_schema().names(), (
-        "read_airr must preserve d_source even when it is all-null"
-    )
     assert (
-        set(vdj_a2._data.collect_schema().names())
-        == set(vdj_b2._data.collect_schema().names())
+        "d_source" in vdj_b2._data.collect_schema().names()
+    ), "read_airr must preserve d_source even when it is all-null"
+    assert set(vdj_a2._data.collect_schema().names()) == set(
+        vdj_b2._data.collect_schema().names()
     ), "read_airr must produce identical schemas across samples"
 
     result2 = concat([vdj_a2, vdj_b2])
@@ -1030,8 +1025,6 @@ def test_diagonal_concat_parquet_mismatched_schemas_raises(
     )
 
 
-
-
 def test_concat_from_disk_airr_files_mismatched_columns(
     tmp_path, airr_reannotated, airr_reannotated2
 ):
@@ -1056,13 +1049,13 @@ def test_concat_from_disk_airr_files_mismatched_columns(
     # ── build two TSV files with identical headers but different null patterns ──
     # Both files contain the same columns; only sample A has d_source populated.
     df_a = airr_reannotated.copy()
-    df_a["d_source"] = "igblast"          # populated  → kept by read_10x_airr
+    df_a["d_source"] = "igblast"  # populated  → kept by read_10x_airr
     df_a["sample_id"] = "sample_A"
 
     df_b = airr_reannotated2.copy()
     # Add the same columns so headers match, but leave d_source as NaN
     for col in [c for c in df_a.columns if c not in df_b.columns]:
-        df_b[col] = None                  # all-null   → dropped by read_10x_airr
+        df_b[col] = None  # all-null   → dropped by read_10x_airr
     df_b["sample_id"] = "sample_B"
 
     # Align column order
@@ -1103,7 +1096,7 @@ def test_concat_from_disk_airr_files_mismatched_columns(
 
     schema_a2 = set(vdj_a_airr._data.collect_schema().names())
     schema_b2 = set(vdj_b_airr._data.collect_schema().names())
-    assert schema_a2 == schema_b2          # no mismatch with read_airr
+    assert schema_a2 == schema_b2  # no mismatch with read_airr
     assert "d_source" in schema_b2
 
     result_airr = concat([vdj_a_airr, vdj_b_airr])
@@ -1174,8 +1167,8 @@ def test_concat_dtype_mismatch_multiple_columns(
         pl.lit(1.5).cast(pl.Float64).alias("col_float_first"),
     )
     vdj2._data = vdj2._data.with_columns(
-        pl.lit(1.5).cast(pl.Float64).alias("col_int_first"),   # promoted col
-        pl.lit(1).cast(pl.Int64).alias("col_float_first"),     # demoted col
+        pl.lit(1.5).cast(pl.Float64).alias("col_int_first"),  # promoted col
+        pl.lit(1).cast(pl.Int64).alias("col_float_first"),  # demoted col
     )
 
     result = concat([vdj1, vdj2])
