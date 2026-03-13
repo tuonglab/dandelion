@@ -685,6 +685,57 @@ def test_concat_auto_numbering_polars(vdj_base):
     assert result.n_contigs == vdj.n_contigs * 2
 
 
+def test_concat_mismatched_data_columns(vdj_base, airr_reannotated2, dummy_adata2):
+    """Concat should succeed when data frames have different _data schemas.
+
+    Regression test for a failure where pl.concat(..., how='diagonal') on
+    parquet-backed LazyFrames generates a WITH_COLUMNS:[] node (for the frame
+    that already has all union columns) which Polars cannot resolve.
+
+    The frame that is missing the extra column gets a null-fill expression;
+    the frame that already has it gets an empty with_columns list.  Both paths
+    must complete without error.
+    """
+    vdj1, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # Add an extra column to vdj1._data only (simulates d_source absent in vdj2)
+    vdj1._data = vdj1._data.with_columns(
+        pl.lit("test_src").alias("d_source_extra")
+    )
+    # vdj2 does NOT have d_source_extra
+
+    result = concat([vdj1, vdj2])
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+    assert "d_source_extra" in result_data.columns
+
+    # Rows from vdj1 should carry "test_src"; rows from vdj2 should be null
+    vdj1_ids = set(
+        vdj1._data.select("sequence_id")
+        .collect(engine="streaming")["sequence_id"]
+        .to_list()
+    )
+    vdj1_rows = result_data.filter(pl.col("sequence_id").is_in(list(vdj1_ids)))
+    assert all(v == "test_src" for v in vdj1_rows["d_source_extra"].to_list())
+
+    vdj2_ids = set(
+        vdj2._data.select("sequence_id")
+        .collect(engine="streaming")["sequence_id"]
+        .to_list()
+    )
+    vdj2_rows = result_data.filter(pl.col("sequence_id").is_in(list(vdj2_ids)))
+    assert all(v is None for v in vdj2_rows["d_source_extra"].to_list())
+
+
 # ---------------------------------------------------------------------------
 # Group 9 – generate_network branches
 # ---------------------------------------------------------------------------
