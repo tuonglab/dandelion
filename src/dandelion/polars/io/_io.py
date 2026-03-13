@@ -16,7 +16,11 @@ from scanpy import logging as logg
 from scipy.sparse import csr_matrix
 
 from dandelion.base.io._io import read_h5ddl as _read_h5ddl
-from dandelion.polars.core._core import DandelionPolars, load_polars
+from dandelion.polars.core._core import (
+    DandelionPolars,
+    load_polars,
+    SCHEMA_OVERRIDES,
+)
 from dandelion.utilities._utilities import (
     DEFAULT_PREFIX,
     CELLRANGER,
@@ -233,7 +237,9 @@ def read_h5ddl(
     constructor = {}
 
     # data: pandas → polars LazyFrame
-    constructor["data"] = pl.from_pandas(tmp.data).lazy()
+    constructor["data"] = pl.from_pandas(
+        tmp.data, schema_overrides=SCHEMA_OVERRIDES
+    ).lazy()
 
     # metadata: pandas (index = cell_id barcodes) → polars DataFrame
     # with cell_id as a regular column

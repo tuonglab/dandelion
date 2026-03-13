@@ -56,6 +56,55 @@ from dandelion.utilities._utilities import (
 # Enable string cache for Polars to optimize repeated string operations
 pl.enable_string_cache()
 
+SCHEMA_OVERRIDES = {
+    "j_call_multimappers": pl.String,
+    "j_call_sequence_start_multimappers": pl.String,
+    "j_call_sequence_end_multimappers": pl.String,
+    "j_call_support_multimappers": pl.String,
+    # D-gene blastn columns that can be all-null in some samples
+    "d_identity_blastn": pl.Float64,
+    "d_alignment_length_blastn": pl.Float64,
+    "d_number_of_mismatches_blastn": pl.Float64,
+    "d_number_of_gap_openings_blastn": pl.Float64,
+    "d_sequence_start_blastn": pl.Float64,
+    "d_sequence_end_blastn": pl.Float64,
+    "d_germline_start_blastn": pl.Float64,
+    "d_germline_end_blastn": pl.Float64,
+    "d_support_blastn": pl.Float64,
+    "d_score_blastn": pl.Float64,
+    # might as well do the same for V/D/C blastn columns too for consistency, even if they are less likely to be all-null
+    "v_identity_blastn": pl.Float64,
+    "v_alignment_length_blastn": pl.Float64,
+    "v_number_of_mismatches_blastn": pl.Float64,
+    "v_number_of_gap_openings_blastn": pl.Float64,
+    "v_sequence_start_blastn": pl.Float64,
+    "v_sequence_end_blastn": pl.Float64,
+    "v_germline_start_blastn": pl.Float64,
+    "v_germline_end_blastn": pl.Float64,
+    "v_support_blastn": pl.Float64,
+    "v_score_blastn": pl.Float64,
+    "j_identity_blastn": pl.Float64,
+    "j_alignment_length_blastn": pl.Float64,
+    "j_number_of_mismatches_blastn": pl.Float64,
+    "j_number_of_gap_openings_blastn": pl.Float64,
+    "j_sequence_start_blastn": pl.Float64,
+    "j_sequence_end_blastn": pl.Float64,
+    "j_germline_start_blastn": pl.Float64,
+    "j_germline_end_blastn": pl.Float64,
+    "j_support_blastn": pl.Float64,
+    "j_score_blastn": pl.Float64,
+    "c_identity_blastn": pl.Float64,
+    "c_alignment_length_blastn": pl.Float64,
+    "c_number_of_mismatches_blastn": pl.Float64,
+    "c_number_of_gap_openings_blastn": pl.Float64,
+    "c_sequence_start_blastn": pl.Float64,
+    "c_sequence_end_blastn": pl.Float64,
+    "c_germline_start_blastn": pl.Float64,
+    "c_germline_end_blastn": pl.Float64,
+    "c_support_blastn": pl.Float64,
+    "c_score_blastn": pl.Float64,
+}
+
 
 class DandelionPolars:
     """Dandelion class object."""
@@ -3552,58 +3601,10 @@ def load_polars(
     KeyError
         if `sequence_id` not found in input.
     """
-    schema_override = {
-        "j_call_multimappers": pl.String,
-        "j_call_sequence_start_multimappers": pl.String,
-        "j_call_sequence_end_multimappers": pl.String,
-        "j_call_support_multimappers": pl.String,
-        # D-gene blastn columns that can be all-null in some samples
-        "d_identity_blastn": pl.Float64,
-        "d_alignment_length_blastn": pl.Float64,
-        "d_number_of_mismatches_blastn": pl.Float64,
-        "d_number_of_gap_openings_blastn": pl.Float64,
-        "d_sequence_start_blastn": pl.Float64,
-        "d_sequence_end_blastn": pl.Float64,
-        "d_germline_start_blastn": pl.Float64,
-        "d_germline_end_blastn": pl.Float64,
-        "d_support_blastn": pl.Float64,
-        "d_score_blastn": pl.Float64,
-        # might as well do the same for V/D/C blastn columns too for consistency, even if they are less likely to be all-null
-        "v_identity_blastn": pl.Float64,
-        "v_alignment_length_blastn": pl.Float64,
-        "v_number_of_mismatches_blastn": pl.Float64,
-        "v_number_of_gap_openings_blastn": pl.Float64,
-        "v_sequence_start_blastn": pl.Float64,
-        "v_sequence_end_blastn": pl.Float64,
-        "v_germline_start_blastn": pl.Float64,
-        "v_germline_end_blastn": pl.Float64,
-        "v_support_blastn": pl.Float64,
-        "v_score_blastn": pl.Float64,
-        "j_identity_blastn": pl.Float64,
-        "j_alignment_length_blastn": pl.Float64,
-        "j_number_of_mismatches_blastn": pl.Float64,
-        "j_number_of_gap_openings_blastn": pl.Float64,
-        "j_sequence_start_blastn": pl.Float64,
-        "j_sequence_end_blastn": pl.Float64,
-        "j_germline_start_blastn": pl.Float64,
-        "j_germline_end_blastn": pl.Float64,
-        "j_support_blastn": pl.Float64,
-        "j_score_blastn": pl.Float64,
-        "c_identity_blastn": pl.Float64,
-        "c_alignment_length_blastn": pl.Float64,
-        "c_number_of_mismatches_blastn": pl.Float64,
-        "c_number_of_gap_openings_blastn": pl.Float64,
-        "c_sequence_start_blastn": pl.Float64,
-        "c_sequence_end_blastn": pl.Float64,
-        "c_germline_start_blastn": pl.Float64,
-        "c_germline_end_blastn": pl.Float64,
-        "c_support_blastn": pl.Float64,
-        "c_score_blastn": pl.Float64,
-    }
     if obj is not None:
         if os.path.isfile(str(obj)):
             df = pl.scan_csv(
-                obj, separator="\t", schema_overrides=schema_override
+                obj, separator="\t", schema_overrides=SCHEMA_OVERRIDES
             )
         elif isinstance(obj, pl.LazyFrame):  # Check for LazyFrame
             df = obj
