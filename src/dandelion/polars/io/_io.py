@@ -1081,7 +1081,7 @@ def read_10x_airr(
     """
     data = load_polars(file)  # should return LazyFrame
     # If locus column is missing, derive it using polars vectorized expressions
-    if "locus" not in data.columns:
+    if "locus" not in data.collect_schema():
         # Extract first 3 chars of each gene call, ignore nulls/empties, get unique, join with '|'
         data = data.with_columns(
             [

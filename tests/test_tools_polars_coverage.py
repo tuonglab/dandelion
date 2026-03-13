@@ -738,6 +738,459 @@ def test_concat_mismatched_data_columns(
     assert all(v is None for v in vdj2_rows["d_source_extra"].to_list())
 
 
+def test_concat_parquet_backed_mismatched_columns(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
+    """Concat must work when _data is explicitly parquet-backed before the call.
+
+    Directly mirrors the user scenario: objects are lazy DandelionPolars that
+    have already been cached to parquet (e.g. loaded from .zipddl), so the
+    deepcopy inside concat re-scans an on-disk parquet file.  One object is
+    missing a column that all others have.
+    """
+    vdj1, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # Add the extra column before caching so the parquet contains it
+    vdj1._data = vdj1._data.with_columns(
+        pl.lit("IgG").alias("d_source")
+    )
+
+    # Force parquet backing on both objects — exactly what happens after
+    # loading from disk (zipddl / h5ddl)
+    vdj1._cache_data()
+    vdj2._cache_data()
+
+    # Confirm both are parquet-backed LazyFrames
+    assert isinstance(vdj1._data, pl.LazyFrame)
+    assert isinstance(vdj2._data, pl.LazyFrame)
+
+    result = concat([vdj1, vdj2])
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+    assert "d_source" in result_data.columns
+
+
+def test_concat_first_object_missing_column(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
+    """Concat works when the FIRST object in the list is the one missing a column.
+
+    The WITH_COLUMNS:[] issue could affect any frame that has all union columns,
+    so this verifies the symmetric case where missing/complete positions are swapped.
+    """
+    vdj1, _ = vdj_base  # vdj1 will be missing the extra column
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # Extra column lives only on vdj2
+    vdj2._data = vdj2._data.with_columns(
+        pl.lit("blastn").alias("d_source_extra")
+    )
+    vdj2._cache_data()
+    vdj1._cache_data()
+
+    result = concat([vdj1, vdj2])
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+    assert "d_source_extra" in result_data.columns
+
+
+def test_concat_many_objects_one_missing_column(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
+    """Concat a list of 6 objects where only the 3rd is missing a column.
+
+    Mirrors the user's 8-sample case: many objects share a column that one
+    object lacks.  The fix must handle all the frames-with-all-columns without
+    emitting empty WITH_COLUMNS nodes.
+    """
+    vdj1, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # Build 6 objects: vdj1 copies (suffixed) + vdj2 copies (suffixed)
+    # vdj1 copies will have d_source_col; vdj2 copies will not
+    vdj1._data = vdj1._data.with_columns(
+        pl.lit("igblast").alias("d_source_col")
+    )
+    vdj1._cache_data()
+    vdj2._cache_data()
+
+    # Suffixes make every cell/sequence ID unique across calls
+    result = concat(
+        [vdj1, vdj1, vdj2, vdj1, vdj1, vdj2],
+        suffixes=["_a", "_b", "_c", "_d", "_e", "_f"],
+    )
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs * 4 + vdj2.n_contigs * 2
+
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+    assert "d_source_col" in result_data.columns
+
+    # vdj2 rows (suffixes _c and _f) have no d_source_col value
+    vdj2_null_rows = result_data.filter(
+        pl.col("d_source_col").is_null()
+    )
+    assert len(vdj2_null_rows) == vdj2.n_contigs * 2
+
+
+def test_concat_multiple_objects_different_missing_columns(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
+    """Each object is missing a *different* extra column the others have.
+
+    Exercises the case where the union schema is larger than any single
+    frame's schema, so every frame gets at least one null-fill expression
+    — none should generate an empty WITH_COLUMNS node.
+    """
+    vdj1, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # vdj1 has col_A; vdj2 has col_B — both are missing the other's column
+    vdj1._data = vdj1._data.with_columns(pl.lit("a_val").alias("col_A"))
+    vdj2._data = vdj2._data.with_columns(pl.lit("b_val").alias("col_B"))
+    vdj1._cache_data()
+    vdj2._cache_data()
+
+    result = concat([vdj1, vdj2])
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+    assert "col_A" in result_data.columns
+    assert "col_B" in result_data.columns
+
+
+def test_with_columns_empty_node_in_diagonal_concat_plan(
+    tmp_path, airr_reannotated, airr_reannotated2
+):
+    """Explicitly tests the WITH_COLUMNS:[] failure triggered by read_10x_airr.
+
+    read_10x_airr drops all-null columns independently per file.  When those
+    objects are deep-copied inside concat, each _data becomes a
+    pl.scan_parquet LazyFrame.  Calling pl.concat(how='diagonal') on parquet-
+    backed LazyFrames with mismatched schemas generates a WITH_COLUMNS:[]
+    node for every frame that already has all union columns — a node that
+    fails during plan resolution on affected Polars builds.
+
+    This test is split into two parts:
+
+    Part A  (xfail strict=False) — the raw broken path
+      Directly collects pl.concat(how='diagonal') on mismatched parquet-backed
+      frames, bypassing our fix.  XFAIL on Polars builds where the bug fires;
+      XPASS (still green) on builds that tolerate WITH_COLUMNS:[].
+
+    Part B  (always runs) — the fix
+      Confirms ddl.tl.concat pre-aligns schemas and always succeeds, and that
+      read_airr avoids the mismatch entirely.
+    """
+    from dandelion.polars.io._io import read_airr, read_10x_airr
+
+    # ── write two TSV files with identical headers ───────────────────────────
+    df_a = airr_reannotated.copy()
+    df_a["d_source"] = "igblast"          # populated in sample A
+
+    df_b = airr_reannotated2.copy()
+    for col in [c for c in df_a.columns if c not in df_b.columns]:
+        df_b[col] = None                  # all-null in sample B
+    df_b = df_b.reindex(columns=list(df_a.columns))
+
+    path_a = tmp_path / "sample_A.tsv"
+    path_b = tmp_path / "sample_B.tsv"
+    df_a.to_csv(path_a, sep="\t", index=False)
+    df_b.to_csv(path_b, sep="\t", index=False)
+
+    # ── read_10x_airr drops all-null columns → schema mismatch ──────────────
+    vdj_a = read_10x_airr(str(path_a))
+    vdj_b = read_10x_airr(str(path_b))
+
+    assert "d_source" in vdj_a._data.collect_schema().names()
+    assert "d_source" not in vdj_b._data.collect_schema().names(), (
+        "read_10x_airr must drop the all-null d_source column from sample B"
+    )
+
+    # Simulate what concat's deepcopy does: write _data to a temp parquet file
+    vdj_a._cache_data()
+    vdj_b._cache_data()
+    assert isinstance(vdj_a._data, pl.LazyFrame)
+    assert isinstance(vdj_b._data, pl.LazyFrame)
+
+    # The unoptimized plan must contain WITH_COLUMNS nodes
+    plan = pl.concat(
+        [vdj_a._data, vdj_b._data], how="diagonal"
+    ).explain(optimized=False)
+    assert "WITH_COLUMNS" in plan, (
+        "Expected WITH_COLUMNS node in the unoptimized diagonal concat plan "
+        f"for mismatched parquet-backed frames.\nPlan:\n{plan}"
+    )
+
+    # ── Part B: fix always passes ────────────────────────────────────────────
+    # ddl.tl.concat pre-aligns schemas before calling pl.concat(how='diagonal')
+    result = concat([vdj_a, vdj_b])
+    assert result.n_contigs == vdj_a.n_contigs + vdj_b.n_contigs
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+    assert "d_source" in result_data.columns
+
+    # read_airr avoids the mismatch entirely — all columns preserved
+    vdj_a2 = read_airr(str(path_a))
+    vdj_b2 = read_airr(str(path_b))
+
+    assert "d_source" in vdj_a2._data.collect_schema().names()
+    assert "d_source" in vdj_b2._data.collect_schema().names(), (
+        "read_airr must preserve d_source even when it is all-null"
+    )
+    assert (
+        set(vdj_a2._data.collect_schema().names())
+        == set(vdj_b2._data.collect_schema().names())
+    ), "read_airr must produce identical schemas across samples"
+
+    result2 = concat([vdj_a2, vdj_b2])
+    assert result2.n_contigs == vdj_a2.n_contigs + vdj_b2.n_contigs
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "WITH_COLUMNS:[] failure during pl.concat(how='diagonal').collect() "
+        "on parquet-backed LazyFrames is Polars-version-specific. "
+        "XFAIL on affected builds (the reported bug); "
+        "XPASS on builds that handle the empty node gracefully."
+    ),
+)
+def test_diagonal_concat_parquet_mismatched_schemas_raises(
+    tmp_path, airr_reannotated, airr_reannotated2
+):
+    """Part A — the raw broken path, without ddl.tl.concat's fix.
+
+    Directly calls pl.concat(how='diagonal').collect() on parquet-backed
+    LazyFrames whose schemas differ because read_10x_airr dropped all-null
+    columns.  Expected to raise on Polars builds where WITH_COLUMNS:[]
+    causes a plan-resolution failure.
+    """
+    from dandelion.polars.io._io import read_10x_airr
+
+    df_a = airr_reannotated.copy()
+    df_a["d_source"] = "igblast"
+
+    df_b = airr_reannotated2.copy()
+    for col in [c for c in df_a.columns if c not in df_b.columns]:
+        df_b[col] = None
+    df_b = df_b.reindex(columns=list(df_a.columns))
+
+    path_a = tmp_path / "sample_A.tsv"
+    path_b = tmp_path / "sample_B.tsv"
+    df_a.to_csv(path_a, sep="\t", index=False)
+    df_b.to_csv(path_b, sep="\t", index=False)
+
+    vdj_a = read_10x_airr(str(path_a))
+    vdj_b = read_10x_airr(str(path_b))
+
+    # d_source must be absent from sample B (all-null → dropped)
+    assert "d_source" not in vdj_b._data.collect_schema().names()
+
+    # Force parquet backing — exactly what concat's deepcopy does
+    vdj_a._cache_data()
+    vdj_b._cache_data()
+
+    # This raises on affected Polars builds; xfail catches it.
+    # If it does not raise, xfail(strict=False) marks it XPASS (still green).
+    pl.concat([vdj_a._data, vdj_b._data], how="diagonal").collect(
+        engine="streaming"
+    )
+
+
+
+
+def test_concat_from_disk_airr_files_mismatched_columns(
+    tmp_path, airr_reannotated, airr_reannotated2
+):
+    """Concat DandelionPolars objects loaded from AIRR TSV files on disk where
+    some files have columns that are entirely absent (or all-null) in others.
+
+    This reproduces the exact user workflow:
+
+        vdj = ddl.read_10x_airr(filepath)   # drops all-null columns per file
+        vdj_list.append(vdj)
+        concat(vdj_list)                     # schemas now differ → WITH_COLUMNS:[]
+
+    read_10x_airr drops any column that is entirely null in a given file.
+    Because different samples have different all-null columns (e.g. d_source is
+    null in sample B but populated in sample A), objects end up with different
+    _data schemas even though the TSV headers are identical.  The fix in concat
+    (schema pre-alignment) must handle this case; read_airr avoids it entirely
+    by preserving all columns.
+    """
+    from dandelion.polars.io._io import read_airr, read_10x_airr
+
+    # ── build two TSV files with identical headers but different null patterns ──
+    # Both files contain the same columns; only sample A has d_source populated.
+    df_a = airr_reannotated.copy()
+    df_a["d_source"] = "igblast"          # populated  → kept by read_10x_airr
+    df_a["sample_id"] = "sample_A"
+
+    df_b = airr_reannotated2.copy()
+    # Add the same columns so headers match, but leave d_source as NaN
+    for col in [c for c in df_a.columns if c not in df_b.columns]:
+        df_b[col] = None                  # all-null   → dropped by read_10x_airr
+    df_b["sample_id"] = "sample_B"
+
+    # Align column order
+    all_cols = list(df_a.columns)
+    df_b = df_b.reindex(columns=all_cols)
+
+    path_a = tmp_path / "sample_A.tsv"
+    path_b = tmp_path / "sample_B.tsv"
+    df_a.to_csv(path_a, sep="\t", index=False)
+    df_b.to_csv(path_b, sep="\t", index=False)
+
+    # ── read_10x_airr drops all-null columns → mismatched schemas ──
+    vdj_a_10x = read_10x_airr(str(path_a))
+    vdj_b_10x = read_10x_airr(str(path_b))
+
+    schema_a = set(vdj_a_10x._data.collect_schema().names())
+    schema_b = set(vdj_b_10x._data.collect_schema().names())
+    # d_source must be absent from sample_B after read_10x_airr drops it
+    assert "d_source" in schema_a
+    assert "d_source" not in schema_b
+    # schemas differ — this is the trigger for the concat bug
+    assert schema_a != schema_b
+
+    # concat must still succeed despite the schema mismatch (our fix)
+    result_10x = concat([vdj_a_10x, vdj_b_10x])
+    assert result_10x is not None
+    assert result_10x.n_contigs == vdj_a_10x.n_contigs + vdj_b_10x.n_contigs
+    result_10x_data = (
+        result_10x._data.collect(engine="streaming")
+        if isinstance(result_10x._data, pl.LazyFrame)
+        else result_10x._data
+    )
+    assert "d_source" in result_10x_data.columns
+
+    # ── read_airr preserves all columns → identical schemas ──
+    vdj_a_airr = read_airr(str(path_a))
+    vdj_b_airr = read_airr(str(path_b))
+
+    schema_a2 = set(vdj_a_airr._data.collect_schema().names())
+    schema_b2 = set(vdj_b_airr._data.collect_schema().names())
+    assert schema_a2 == schema_b2          # no mismatch with read_airr
+    assert "d_source" in schema_b2
+
+    result_airr = concat([vdj_a_airr, vdj_b_airr])
+    assert result_airr is not None
+    assert result_airr.n_contigs == vdj_a_airr.n_contigs + vdj_b_airr.n_contigs
+
+
+def test_concat_dtype_mismatch_numeric_promotion(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
+    """Concat objects where the same column has Int64 in one and Float64 in another.
+
+    This reproduces the user's real error where columns like j_call_multiplicity,
+    c_sequence_start, c_sequence_end, c_score have conflicting Int64/Float64 types
+    across samples.  The fix must promote the conflicting column to Float64 (the
+    higher-rank numeric supertype) and cast the Int64 frame before concat.
+    """
+    vdj1, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # Simulate Int64 in vdj1, Float64 in vdj2 for the same column
+    vdj1._data = vdj1._data.with_columns(
+        pl.lit(1).cast(pl.Int64).alias("score_col")
+    )
+    vdj2._data = vdj2._data.with_columns(
+        pl.lit(1.5).cast(pl.Float64).alias("score_col")
+    )
+
+    # Confirm the mismatch is in place
+    assert vdj1._data.collect_schema()["score_col"] == pl.Int64
+    assert vdj2._data.collect_schema()["score_col"] == pl.Float64
+
+    result = concat([vdj1, vdj2])
+    assert result is not None
+    assert result.n_contigs == vdj1.n_contigs + vdj2.n_contigs
+
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+
+    # Float64 should win (higher promotion rank than Int64)
+    assert result_data.schema["score_col"] == pl.Float64
+
+    # Both rows should have a value (not null)
+    assert result_data["score_col"].null_count() == 0
+
+
+def test_concat_dtype_mismatch_multiple_columns(
+    vdj_base, airr_reannotated2, dummy_adata2
+):
+    """Multiple columns with conflicting dtypes across objects — all promoted.
+
+    Mirrors the user's actual case: j_call_multiplicity, c_sequence_start,
+    c_sequence_end, c_score all had Int64/Float64 mismatches.
+    """
+    vdj1, _ = vdj_base
+    vdj2 = DandelionPolars(airr_reannotated2)
+    vdj2, _ = check_contigs(vdj2, dummy_adata2)
+    find_clones(vdj2)
+
+    # Add four columns with flipped Int64/Float64 dtypes between the two objects
+    vdj1._data = vdj1._data.with_columns(
+        pl.lit(1).cast(pl.Int64).alias("col_int_first"),
+        pl.lit(1.5).cast(pl.Float64).alias("col_float_first"),
+    )
+    vdj2._data = vdj2._data.with_columns(
+        pl.lit(1.5).cast(pl.Float64).alias("col_int_first"),   # promoted col
+        pl.lit(1).cast(pl.Int64).alias("col_float_first"),     # demoted col
+    )
+
+    result = concat([vdj1, vdj2])
+    result_data = (
+        result._data.collect(engine="streaming")
+        if isinstance(result._data, pl.LazyFrame)
+        else result._data
+    )
+
+    # Both columns should resolve to Float64 (the higher-rank type)
+    assert result_data.schema["col_int_first"] == pl.Float64
+    assert result_data.schema["col_float_first"] == pl.Float64
+    assert result_data.height == vdj1.n_contigs + vdj2.n_contigs
+
+
 # ---------------------------------------------------------------------------
 # Group 9 – generate_network branches
 # ---------------------------------------------------------------------------

@@ -2805,6 +2805,36 @@ def _create_mudata(
     return mudata.MuData({key[1]: adata})
 
 
+def _dtype_supertype(dt1: pl.DataType, dt2: pl.DataType) -> pl.DataType:
+    """Return the lowest common numeric supertype of two Polars dtypes.
+
+    For numeric type pairs (int/float with different widths or signedness vs
+    floating-point) this follows a simple promotion ladder so that concat never
+    sees mismatched types for the same column.  For non-numeric mismatches we
+    fall back to ``pl.String`` so the concat at least does not crash.
+    """
+    if dt1 == dt2:
+        return dt1
+    # Promotion rank: higher rank wins.  Floats beat ints; wider beats narrower.
+    _RANK: dict[pl.DataType, int] = {
+        pl.Float64: 100,
+        pl.Float32: 90,
+        pl.Int64: 80,
+        pl.UInt64: 75,
+        pl.Int32: 60,
+        pl.UInt32: 55,
+        pl.Int16: 40,
+        pl.UInt16: 35,
+        pl.Int8: 20,
+        pl.UInt8: 15,
+    }
+    r1, r2 = _RANK.get(dt1), _RANK.get(dt2)
+    if r1 is not None and r2 is not None:
+        return dt1 if r1 >= r2 else dt2
+    # Non-numeric mismatch — cast to String as a safe fallback.
+    return pl.String
+
+
 def concat(
     arrays: (
         list[DandelionPolars | pl.DataFrame | pl.LazyFrame | pd.DataFrame]
@@ -3110,23 +3140,33 @@ def concat(
         for col_name, col_dtype in frame_schema.items():
             if col_name not in all_schema:
                 all_schema[col_name] = col_dtype
+            elif all_schema[col_name] != col_dtype:
+                # Promote to the lowest common supertype so that pl.concat
+                # never sees mismatched dtypes for the same column.
+                all_schema[col_name] = _dtype_supertype(
+                    all_schema[col_name], col_dtype
+                )
 
     col_order = list(all_schema.keys())
     arrays_ = []
     for vdj in vdjs_:
         frame = vdj._data
-        present = set(
-            frame.collect_schema().names()
+        present_schema = dict(
+            frame.collect_schema()
             if isinstance(frame, pl.LazyFrame)
-            else frame.columns
+            else frame.schema
         )
-        missing_cols = [
-            (n, all_schema[n]) for n in col_order if n not in present
-        ]
-        if missing_cols:
-            frame = frame.with_columns(
-                [pl.lit(None).cast(dt).alias(n) for n, dt in missing_cols]
-            )
+        fix_exprs: list[pl.Expr] = []
+        for n in col_order:
+            target_dt = all_schema[n]
+            if n not in present_schema:
+                # Column absent — add a typed null.
+                fix_exprs.append(pl.lit(None).cast(target_dt).alias(n))
+            elif present_schema[n] != target_dt:
+                # Column present but wrong dtype — cast to the resolved type.
+                fix_exprs.append(pl.col(n).cast(target_dt))
+        if fix_exprs:
+            frame = frame.with_columns(fix_exprs)
         arrays_.append(frame.select(col_order))
 
     # pl.concat requires a uniform type; if any frame is lazy, lazify all
