@@ -8,11 +8,11 @@ from dandelion.polars.preprocessing._preprocessing import (
     reannotate_genes,
     reassign_alleles,
 )
-from dandelion.external.immcantation.polars.shazam_polars import (
+from dandelion.external.immcantation.polars.shazam import (
     calculate_threshold,
     quantify_mutations,
 )
-from dandelion.external.immcantation.polars.changeo_polars import (
+from dandelion.external.immcantation.polars.changeo import (
     create_germlines,
 )
 from dandelion.external.scanpy import recipe_scanpy_qc

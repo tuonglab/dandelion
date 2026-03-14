@@ -33,7 +33,7 @@ from time import sleep
 from tqdm import tqdm
 from typing import Literal
 
-from dandelion.external.immcantation.polars.changeo_polars import (
+from dandelion.external.immcantation.polars.changeo import (
     assigngenes_igblast,
     makedb_igblast,
     parsedb_heavy,
