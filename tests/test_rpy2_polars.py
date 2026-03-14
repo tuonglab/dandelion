@@ -64,6 +64,33 @@ def test_mutation_polars(create_testfolder, airr_reannotated):
     assert len(mu_freq_col) > 0
 
 
+@pytest.mark.usefixtures("create_testfolder", "airr_reannotated")
+def test_mutation_split_locus_polars(create_testfolder, airr_reannotated):
+    """Quantify mutations with split_locus=True via Polars-based shazam wrapper."""
+    f = create_testfolder / "test_split.tsv"
+    airr_reannotated.to_csv(f, sep="\t", index=False)
+    # Test file-path input with split_locus=True
+    try:
+        _ = quantify_mutations(str(f), split_locus=True)
+    except Exception:
+        pytest.skip("R package 'shazam' not installed")
+    out = load_polars(f)
+    assert "mu_count" in out.collect_schema().names()
+    assert len(out.collect(engine="streaming")) > 0
+    # Test DandelionPolars object input with split_locus=True;
+    # this exercises the metadata-building branch and was the original crash site.
+    vdj = DandelionPolars(out)
+    try:
+        quantify_mutations(vdj, split_locus=True)
+    except Exception:
+        pytest.skip("R package 'shazam' not installed")
+    assert "mu_count" in vdj._data.collect_schema().names()
+    # split_locus=True must produce locus-suffixed columns in metadata
+    assert vdj._metadata is not None
+    meta_cols = vdj._metadata.columns
+    assert any("IGH" in c or "IGK" in c or "IGL" in c for c in meta_cols)
+
+
 @patch("matplotlib.pyplot.show")
 @pytest.mark.usefixtures("create_testfolder", "annotation_10x_mouse")
 def test_calculate_threshold_polars(

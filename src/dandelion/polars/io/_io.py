@@ -237,8 +237,17 @@ def read_h5ddl(
     constructor = {}
 
     # data: pandas → polars LazyFrame
+    # HDF5 stores missing float values as empty strings; replace before cast.
+    data_pd = tmp.data
+    for col in data_pd.columns:
+        if (
+            col in SCHEMA_OVERRIDES
+            and SCHEMA_OVERRIDES[col] == pl.Float64
+            and data_pd[col].dtype == object
+        ):
+            data_pd[col] = data_pd[col].replace("", None)
     constructor["data"] = pl.from_pandas(
-        tmp.data, schema_overrides=SCHEMA_OVERRIDES
+        data_pd, schema_overrides=SCHEMA_OVERRIDES
     ).lazy()
 
     # metadata: pandas (index = cell_id barcodes) → polars DataFrame

@@ -165,7 +165,7 @@ def quantify_mutations(
         )
         results_h = safe_rpy2py(results_h)
         results_l = safe_rpy2py(results_l)
-        pd_df = pd.concat([results_h, results_l])
+        pd_df = pd.concat([results_h, results_l], ignore_index=True)
 
     # Identify new columns produced by R
     pd_df.set_index("sequence_id", inplace=True, drop=False)
@@ -194,6 +194,14 @@ def quantify_mutations(
                     else x
                 )
             )
+            # pd.concat (split_locus=True) can produce object columns with
+            # mixed str/int values when dtypes differ across the two frames.
+            # PyArrow rejects these, so coerce to str when mixing is detected.
+            types_seen = {type(v) for v in pd_df[col].dropna()}
+            if len(types_seen) > 1 and str in types_seen:
+                pd_df[col] = pd_df[col].apply(
+                    lambda x: str(x) if x is not None else x
+                )
     r_out_pl = pl.from_pandas(pd_df, schema_overrides=SCHEMA_OVERRIDES)
 
     if isinstance(data, DandelionPolars):
@@ -233,7 +241,7 @@ def quantify_mutations(
             if len(metadatas) > 0:
                 metadata_ = functools.reduce(
                     lambda left, right: left.join(
-                        right, on="cell_id", how="outer"
+                        right, on="cell_id", how="full", coalesce=True
                     ),
                     metadatas,
                 )
