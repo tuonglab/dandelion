@@ -30,6 +30,7 @@ from dandelion.polars.core._core import (
     load_polars,
     _sanitize_data_polars,
     write_airr,
+    SCHEMA_OVERRIDES,
 )
 
 
@@ -193,7 +194,7 @@ def quantify_mutations(
                     else x
                 )
             )
-    r_out_pl = pl.from_pandas(pd_df)
+    r_out_pl = pl.from_pandas(pd_df, schema_overrides=SCHEMA_OVERRIDES)
 
     if isinstance(data, DandelionPolars):
         # Append new columns to data._data via sequence_id join
