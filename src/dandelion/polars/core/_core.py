@@ -90,7 +90,7 @@ SCHEMA_OVERRIDES = {
     },
     # J-only multiplicity/multimapper columns
     "j_call_multimappers": pl.String,
-    "j_call_multiplicity": pl.Int64,
+    "j_call_multiplicity": pl.Float64,
     "j_call_sequence_start_multimappers": pl.String,
     "j_call_sequence_end_multimappers": pl.String,
     "j_call_support_multimappers": pl.String,
