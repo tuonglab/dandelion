@@ -5,6 +5,7 @@ import polars as pl
 from typing import Literal
 
 from dandelion.polars.core._core import (
+    SCHEMA_OVERRIDES,
     DandelionPolars,
     _sanitize_data_polars,
 )
@@ -162,7 +163,7 @@ def identical_clones(
             )
 
     # Convert back to polars
-    df_polars = pl.from_pandas(df)
+    df_polars = pl.from_pandas(df, schema_overrides=SCHEMA_OVERRIDES)
     vdj._data = df_polars
 
     vdj.update_metadata(clone_key=clone_key)
@@ -333,7 +334,7 @@ def hierarchical_clones(
             )
 
     # Convert back to polars
-    df_polars = pl.from_pandas(df)
+    df_polars = pl.from_pandas(df, schema_overrides=SCHEMA_OVERRIDES)
     vdj._data = df_polars
 
     vdj.update_metadata(clone_key=clone_id)
@@ -519,7 +520,7 @@ def spectral_clones(
             )
 
     # Convert back to polars
-    df_polars = pl.from_pandas(df)
+    df_polars = pl.from_pandas(df, schema_overrides=SCHEMA_OVERRIDES)
     vdj._data = df_polars
 
     vdj.update_metadata(clone_key=clone_id)

@@ -56,53 +56,44 @@ from dandelion.utilities._utilities import (
 # Enable string cache for Polars to optimize repeated string operations
 pl.enable_string_cache()
 
+_FLOAT_SUFFIXES = [
+    "identity",
+    "alignment_length",
+    "number_of_mismatches",
+    "number_of_gap_openings",
+    "sequence_start",
+    "sequence_end",
+    "germline_start",
+    "germline_end",
+    "support",
+    "score",
+]
+
+# Suffixes that only exist without _blastn
+_STRING_SUFFIXES = ["source"]
+
+_GENES = ["v", "d", "j", "c"]
+
 SCHEMA_OVERRIDES = {
+    # All v/d/j/c float columns, both with and without _blastn suffix
+    **{
+        f"{gene}_{suffix}{ext}": pl.Float64
+        for gene in _GENES
+        for suffix in _FLOAT_SUFFIXES
+        for ext in ["", "_blastn"]
+    },
+    # All v/d/j/c string columns (no _blastn variant)
+    **{
+        f"{gene}_{suffix}": pl.String
+        for gene in _GENES
+        for suffix in _STRING_SUFFIXES
+    },
+    # J-only multiplicity/multimapper columns
     "j_call_multimappers": pl.String,
+    "j_call_multiplicity": pl.Int64,
     "j_call_sequence_start_multimappers": pl.String,
     "j_call_sequence_end_multimappers": pl.String,
     "j_call_support_multimappers": pl.String,
-    # D-gene blastn columns that can be all-null in some samples
-    "d_identity_blastn": pl.Float64,
-    "d_alignment_length_blastn": pl.Float64,
-    "d_number_of_mismatches_blastn": pl.Float64,
-    "d_number_of_gap_openings_blastn": pl.Float64,
-    "d_sequence_start_blastn": pl.Float64,
-    "d_sequence_end_blastn": pl.Float64,
-    "d_germline_start_blastn": pl.Float64,
-    "d_germline_end_blastn": pl.Float64,
-    "d_support_blastn": pl.Float64,
-    "d_score_blastn": pl.Float64,
-    # might as well do the same for V/D/C blastn columns too for consistency, even if they are less likely to be all-null
-    "v_identity_blastn": pl.Float64,
-    "v_alignment_length_blastn": pl.Float64,
-    "v_number_of_mismatches_blastn": pl.Float64,
-    "v_number_of_gap_openings_blastn": pl.Float64,
-    "v_sequence_start_blastn": pl.Float64,
-    "v_sequence_end_blastn": pl.Float64,
-    "v_germline_start_blastn": pl.Float64,
-    "v_germline_end_blastn": pl.Float64,
-    "v_support_blastn": pl.Float64,
-    "v_score_blastn": pl.Float64,
-    "j_identity_blastn": pl.Float64,
-    "j_alignment_length_blastn": pl.Float64,
-    "j_number_of_mismatches_blastn": pl.Float64,
-    "j_number_of_gap_openings_blastn": pl.Float64,
-    "j_sequence_start_blastn": pl.Float64,
-    "j_sequence_end_blastn": pl.Float64,
-    "j_germline_start_blastn": pl.Float64,
-    "j_germline_end_blastn": pl.Float64,
-    "j_support_blastn": pl.Float64,
-    "j_score_blastn": pl.Float64,
-    "c_identity_blastn": pl.Float64,
-    "c_alignment_length_blastn": pl.Float64,
-    "c_number_of_mismatches_blastn": pl.Float64,
-    "c_number_of_gap_openings_blastn": pl.Float64,
-    "c_sequence_start_blastn": pl.Float64,
-    "c_sequence_end_blastn": pl.Float64,
-    "c_germline_start_blastn": pl.Float64,
-    "c_germline_end_blastn": pl.Float64,
-    "c_support_blastn": pl.Float64,
-    "c_score_blastn": pl.Float64,
 }
 
 
@@ -3609,9 +3600,21 @@ def load_polars(
                 obj, separator="\t", schema_overrides=SCHEMA_OVERRIDES
             )
         elif isinstance(obj, pl.LazyFrame):  # Check for LazyFrame
-            df = obj
+            df = obj.with_columns(
+                [
+                    pl.col(c).cast(t)
+                    for c, t in SCHEMA_OVERRIDES.items()
+                    if c in obj.collect_schema()
+                ]
+            )
         elif isinstance(obj, pl.DataFrame):  # Check for eager DataFrame
-            df = obj.lazy()
+            df = obj.with_columns(
+                [
+                    pl.col(c).cast(t)
+                    for c, t in SCHEMA_OVERRIDES.items()
+                    if c in obj.columns
+                ]
+            ).lazy()
         elif isinstance(obj, pd.DataFrame):
             try:
                 df = pl.from_pandas(

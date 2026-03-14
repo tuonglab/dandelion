@@ -558,7 +558,7 @@ def read_10x_vdj(
     # Handle DataFrame inputs (pandas or polars)
     if isinstance(data, pd.DataFrame):
         logg.info("Converting pandas DataFrame to polars DataFrame")
-        res = pl.from_pandas(data)
+        res = pl.from_pandas(data, schema_overrides=SCHEMA_OVERRIDES)
         res = parse_annotation_polars(res)
     elif isinstance(data, pl.LazyFrame):
         logg.info("Converting polars LazyFrame to polars DataFrame")
