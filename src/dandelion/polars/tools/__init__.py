@@ -30,7 +30,7 @@ from dandelion.polars.tools._trajectory import (
     vdj_pseudobulk,
 )
 
-from dandelion.external.immcantation.polars.changeo_polars import define_clones
+from dandelion.external.immcantation.polars.changeo import define_clones
 
 __all__ = [
     "clone_centrality",
