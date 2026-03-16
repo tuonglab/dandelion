@@ -323,7 +323,7 @@ Polars
 
 changeo
 ^^^^^^^
-.. module:: dandelion.external.immcantation.polars.changeo_polars
+.. module:: dandelion.external.immcantation.polars.changeo
 
 .. autosummary::
    :toctree: .
@@ -336,7 +336,7 @@ changeo
 
 shazam
 ^^^^^^
-.. module:: dandelion.external.immcantation.polars.shazam_polars
+.. module:: dandelion.external.immcantation.polars.shazam
 
 .. autosummary::
    :toctree: .
@@ -346,7 +346,7 @@ shazam
 
 scoper
 ^^^^^^
-.. module:: dandelion.external.immcantation.polars.scoper_polars
+.. module:: dandelion.external.immcantation.polars.scoper
 
 .. autosummary::
    :toctree: .
