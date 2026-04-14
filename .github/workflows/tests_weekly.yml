@@ -74,7 +74,7 @@ jobs:
         if: matrix.config.os == 'ubuntu-latest'
         shell: bash -l {0}
         run: |
-          micromamba install -y -n dandelion -c conda-forge -c bioconda r-shazam r-alakazam r-tigger r-scoper r-optparse
+          micromamba install -y -n dandelion -c conda-forge -c bioconda r-base=4.4 r-shazam r-alakazam r-tigger r-scoper r-optparse
           micromamba clean --all --yes
 
       - name: Install and test if R dependencies are installed properly
