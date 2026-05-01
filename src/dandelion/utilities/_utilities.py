@@ -33,9 +33,9 @@ if ZARR_V3:
     def create_zarr_dataset(group, *args, **kwargs):
         # Zarr v3 uses create_array() instead of create_dataset()
         # When data is provided, shape and dtype are inferred - don't pass them
-        if 'data' in kwargs and kwargs['data'] is not None:
-            kwargs.pop('shape', None)
-            kwargs.pop('dtype', None)
+        if "data" in kwargs and kwargs["data"] is not None:
+            kwargs.pop("shape", None)
+            kwargs.pop("dtype", None)
         return group.create_array(*args, **kwargs)
 
 else:  # pragma: no cover
