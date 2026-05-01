@@ -6,13 +6,13 @@
 
    README.rst
 
-Singularity
-===========
+Tutorial
+========
 
 .. toctree::
    :hidden:
    :maxdepth: 1
-   :caption: Singularity:
+   :caption: Tutorial:
 
    notebooks/Q1-singularity-preprocessing.ipynb
    notebooks/Q2-object-prep.ipynb
