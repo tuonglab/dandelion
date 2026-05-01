@@ -14,17 +14,18 @@ Singularity
    :maxdepth: 1
    :caption: Singularity:
 
-   notebooks/base/Q1-singularity-preprocessing.ipynb
-   notebooks/base/Q2-object-prep.ipynb
-   notebooks/base/Q3-analysis.ipynb
-   notebooks/base/Q4-singularity-changeo.ipynb
-   notebooks/base/Q5-pseudobulk.ipynb
+   notebooks/Q1-singularity-preprocessing.ipynb
+   notebooks/Q2-object-prep.ipynb
+   notebooks/Q3-analysis.ipynb
+   notebooks/Q4-singularity-changeo.ipynb
+   notebooks/Q5-pseudobulk.ipynb
 
 
 Base Backend: Notebooks
 =======================
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Advanced Guide (Base):
 
@@ -43,6 +44,7 @@ Polars Backend: Notebooks
 ==========================
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Advanced Guide (Polars):
 
