@@ -31,7 +31,7 @@ if ZARR_V3:
         return root.create_array(name, **kwargs)
 
     def create_zarr_dataset(group, *args, **kwargs):
-        return group.create_dataset(*args, **kwargs)
+        return group.create_array(*args, **kwargs)
 
 else:  # pragma: no cover
     from zarr import DirectoryStore, ZipStore
