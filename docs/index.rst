@@ -48,7 +48,6 @@ Polars Backend: Notebooks
    :maxdepth: 1
    :caption: Advanced Guide (Polars):
 
-   notebooks/polars/0_dandelion_polars_primer.ipynb
    notebooks/polars/1_dandelion_preprocessing-10x_data_polars.ipynb
    notebooks/polars/1b_dandelion_noreannotation-10x_data_polars.ipynb
    notebooks/polars/1c_dandelion_scirpy_polars.ipynb
@@ -56,7 +55,8 @@ Polars Backend: Notebooks
    notebooks/polars/3_dandelion_findingclones-10x_data_polars.ipynb
    notebooks/polars/4_dandelion_visualization-10x_data_polars.ipynb
    notebooks/polars/5_dandelion_diversity_and_mutation-10x_data_polars.ipynb
-
+   notebooks/polars/0_dandelion_polars_primer.ipynb
+   
 .. toctree::
    :maxdepth: 1
    :caption: API:
