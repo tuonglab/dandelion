@@ -3651,9 +3651,11 @@ def load_polars(
 
         if "duplicate_count" in df.collect_schema():
             if "umi_count" not in df.collect_schema():
-                df = df.rename({"duplicate_count": "umi_count"}).collect(
-                    engine="streaming"
-                ).lazy()
+                df = (
+                    df.rename({"duplicate_count": "umi_count"})
+                    .collect(engine="streaming")
+                    .lazy()
+                )
 
         if as_pandas:
             df = df.collect(engine="streaming").to_pandas()

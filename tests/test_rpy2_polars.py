@@ -109,7 +109,9 @@ def test_mutation_split_locus_polars(create_testfolder, airr_reannotated):
         pytest.skip("R package 'shazam' not installed")
     schema_names = vdj._data.collect_schema().names()
     assert "mu_count" in schema_names
-    assert any(c.startswith("mu_count") and c.endswith("_rerun") for c in schema_names)
+    assert any(
+        c.startswith("mu_count") and c.endswith("_rerun") for c in schema_names
+    )
 
 
 @patch("matplotlib.pyplot.show")
