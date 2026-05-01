@@ -36,6 +36,11 @@ if ZARR_V3:
         if "data" in kwargs and kwargs["data"] is not None:
             kwargs.pop("shape", None)
             kwargs.pop("dtype", None)
+        # Zarr v3 requires chunk sizes >= 1
+        if "chunks" in kwargs and kwargs["chunks"] is not None:
+            chunks = kwargs["chunks"]
+            if isinstance(chunks, tuple):
+                kwargs["chunks"] = tuple(max(1, c) for c in chunks)
         return group.create_array(*args, **kwargs)
 
 else:  # pragma: no cover
