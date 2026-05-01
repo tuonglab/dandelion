@@ -2242,8 +2242,8 @@ def vj_usage_pca(
 
 
 def vdj_sample(
-    vdj: DandelionPolars,
-    size: int,
+    vdj_data: DandelionPolars,
+    size: int | None = None,
     adata: AnnData | MuData | None = None,
     p: list[float] | np.ndarray[float] | None = None,
     force_replace: bool = False,
@@ -2254,7 +2254,7 @@ def vdj_sample(
 
     Parameters
     ----------
-    vdj : Dandelion
+    vdj_data : DandelionPolars
         Dandelion object containing VDJ data.
     size : int
         Desired size for resampling.
@@ -2272,6 +2272,11 @@ def vdj_sample(
     tuple[DandelionPolars, AnnData] | DandelionPolars
         Resampled Dandelion and AnnData objects if adata is provided, otherwise only Dandelion.
     """
+    if size is None:
+        raise TypeError("vdj_sample requires `size` to be provided.")
+
+    vdj = vdj_data
+
     logg.info("Resampling to {} cells.".format(str(size)))
 
     rng = np.random.default_rng(random_state)
@@ -2283,8 +2288,21 @@ def vdj_sample(
 
         # Normalize probabilities if provided
         if p is not None:
-            p_array = np.asarray(p)
-            p_array = p_array / p_array.sum()
+            p_array = np.asarray(p, dtype=float)
+            if p_array.ndim != 1 or p_array.shape[0] != n_cells:
+                raise ValueError(
+                    "`p` must be a 1D array-like with one value per cell in metadata."
+                )
+            # Treat missing/non-finite probabilities as zero weight.
+            p_array[~np.isfinite(p_array)] = 0.0
+            if np.any(p_array < 0):
+                raise ValueError("`p` must not contain negative probabilities.")
+            p_sum = p_array.sum()
+            if p_sum <= 0:
+                raise ValueError(
+                    "`p` sums to 0 after cleaning missing values; provide at least one positive probability."
+                )
+            p_array = p_array / p_sum
         else:
             p_array = None
 

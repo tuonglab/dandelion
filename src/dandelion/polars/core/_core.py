@@ -3466,7 +3466,10 @@ class DandelionPolars:
         out_fasta = folder / f"{filename_prefix}_contig.fasta"
         out_anno_path = folder / f"{filename_prefix}_contig_annotations.csv"
 
-        seqs = self._data[sequence_key].to_dict()
+        data_df = self._data.collect()
+        seqs = {}
+        for i, seq in enumerate(data_df[sequence_key].to_list()):
+            seqs[f"seq_{i}"] = seq
         write_fasta(seqs, out_fasta=out_fasta)
 
         # also create the contig_annotations.csv
@@ -3522,10 +3525,10 @@ class DandelionPolars:
             "TRUE": "True",
             "FALSE": "False",
         }
-        for _, r in self._data.iterrows():
+        for r in data_df.iter_rows(named=True):
             info = []
             for v in column_map.values():
-                if v in r.index:
+                if v in r:
                     info.append(r[v])
                 elif v in ["is_cell", "high_confidence"]:
                     info.append("True")
@@ -3650,7 +3653,7 @@ def load_polars(
             if "umi_count" not in df.collect_schema():
                 df = df.rename({"duplicate_count": "umi_count"}).collect(
                     engine="streaming"
-                )
+                ).lazy()
 
         if as_pandas:
             df = df.collect(engine="streaming").to_pandas()

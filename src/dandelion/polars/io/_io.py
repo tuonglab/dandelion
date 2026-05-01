@@ -1123,6 +1123,8 @@ def read_10x_airr(
             ]
         )
     # Drop columns that are all missing
+    if isinstance(data, pl.DataFrame):
+        data = data.lazy()
     cols_to_drop = [
         col
         for col in data.collect_schema()

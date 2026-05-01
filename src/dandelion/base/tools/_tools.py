@@ -1781,8 +1781,8 @@ def check_chains(dat_vdj: pd.DataFrame, dat_vj: pd.DataFrame) -> pd.DataFrame:
 
 
 def vdj_sample(
-    vdj: Dandelion,
-    size: int,
+    vdj_data: Dandelion,
+    size: int | None = None,
     adata: AnnData | MuData | None = None,
     p: list[float] | np.ndarray[float] | None = None,
     force_replace: bool = False,
@@ -1793,7 +1793,7 @@ def vdj_sample(
 
     Parameters
     ----------
-    vdj : Dandelion
+    vdj_data : Dandelion
         Dandelion object containing VDJ data.
     size : int
         Desired size for resampling.
@@ -1812,6 +1812,11 @@ def vdj_sample(
     tuple[Dandelion, AnnData] | Dandelion
         Resampled Dandelion and AnnData objects if adata is provided, otherwise only Dandelion.
     """
+    if size is None:
+        raise TypeError("vdj_sample requires `size` to be provided.")
+
+    vdj = vdj_data
+
     logg.info("Resampling to {} cells.".format(str(size)))
     if adata is None:
         replace = True if size > vdj._metadata.shape[0] else False

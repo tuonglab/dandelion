@@ -43,6 +43,8 @@ def quantify_mutations(
     mutation_definition: str | None = None,
     frequency: bool = False,
     combine: bool = True,
+    existing_columns: Literal["overwrite", "suffix"] = "overwrite",
+    existing_column_suffix: str = "_new",
     **kwargs,
 ) -> pl.DataFrame | None:
     """
@@ -68,6 +70,13 @@ def quantify_mutations(
         whether to return the results a frequency or counts.
     combine : bool, optional
         whether to return the results for replacement and silent mutations separately.
+    existing_columns : Literal["overwrite", "suffix"], optional
+        how to handle mutation output columns that already exist in input data.
+        - "overwrite": replace existing columns with freshly computed values.
+        - "suffix": preserve existing columns and append new values with
+          ``existing_column_suffix``.
+    existing_column_suffix : str, optional
+        suffix used when ``existing_columns='suffix'``.
     **kwargs
         passed to shazam::observedMutations.
 
@@ -93,6 +102,15 @@ def quantify_mutations(
         dat = load_polars(data._data)
     else:
         dat = load_polars(data)
+
+    if existing_columns not in {"overwrite", "suffix"}:
+        raise ValueError(
+            "existing_columns must be one of {'overwrite', 'suffix'}."
+        )
+    if existing_columns == "suffix" and existing_column_suffix == "":
+        raise ValueError(
+            "existing_column_suffix cannot be empty when existing_columns='suffix'."
+        )
 
     warnings.filterwarnings("ignore")
 
@@ -209,6 +227,26 @@ def quantify_mutations(
         base_df = data._data
         if isinstance(base_df, pl.LazyFrame):
             base_df = base_df.collect(engine="streaming")
+        overlap = [c for c in cols_to_return if c in base_df.columns]
+        rename_map: dict[str, str] = {}
+        if overlap:
+            if existing_columns == "overwrite":
+                base_df = base_df.drop(overlap)
+            else:
+                for col in overlap:
+                    candidate = f"{col}{existing_column_suffix}"
+                    while (
+                        candidate in base_df.columns
+                        or candidate in cols_to_return
+                        or candidate in rename_map.values()
+                    ):
+                        candidate = f"{candidate}{existing_column_suffix}"
+                    rename_map[col] = candidate
+
+        if rename_map:
+            r_out_pl = r_out_pl.rename(rename_map)
+            cols_to_return = [rename_map.get(c, c) for c in cols_to_return]
+
         add_df = r_out_pl.select(["sequence_id"] + cols_to_return)
         data._data = base_df.join(add_df, on="sequence_id", how="left")
 
@@ -248,7 +286,44 @@ def quantify_mutations(
             else:
                 metadata_ = pl.DataFrame({"cell_id": []})
 
-        data._metadata = metadata_
+        existing_metadata = data._metadata
+        if existing_metadata is None:
+            data._metadata = metadata_
+        else:
+            if isinstance(existing_metadata, pl.LazyFrame):
+                existing_metadata = existing_metadata.collect(
+                    engine="streaming"
+                )
+            if "cell_id" not in existing_metadata.columns:
+                data._metadata = metadata_
+            else:
+                meta_cols = [c for c in metadata_.columns if c != "cell_id"]
+                overlap_meta = [
+                    c for c in meta_cols if c in existing_metadata.columns
+                ]
+                rename_meta: dict[str, str] = {}
+                if overlap_meta:
+                    if existing_columns == "overwrite":
+                        existing_metadata = existing_metadata.drop(overlap_meta)
+                    else:
+                        for col in overlap_meta:
+                            candidate = f"{col}{existing_column_suffix}"
+                            while (
+                                candidate in existing_metadata.columns
+                                or candidate in metadata_.columns
+                                or candidate in rename_meta.values()
+                            ):
+                                candidate = (
+                                    f"{candidate}{existing_column_suffix}"
+                                )
+                            rename_meta[col] = candidate
+
+                if rename_meta:
+                    metadata_ = metadata_.rename(rename_meta)
+
+                data._metadata = existing_metadata.join(
+                    metadata_, on="cell_id", how="full", coalesce=True
+                )
         logg.info(
             " finished",
             time=start,
@@ -261,12 +336,26 @@ def quantify_mutations(
     else:
         # Merge results back into Polars DataFrame and return/save
         base_df = dat_
-        # Drop existing mutation columns if they exist to avoid conflicts
-        existing_cols_to_drop = [
-            c for c in cols_to_return if c in base_df.columns
-        ]
-        if existing_cols_to_drop:
-            base_df = base_df.drop(existing_cols_to_drop)
+        overlap = [c for c in cols_to_return if c in base_df.columns]
+        rename_map = {}
+        if overlap:
+            if existing_columns == "overwrite":
+                base_df = base_df.drop(overlap)
+            else:
+                for col in overlap:
+                    candidate = f"{col}{existing_column_suffix}"
+                    while (
+                        candidate in base_df.columns
+                        or candidate in cols_to_return
+                        or candidate in rename_map.values()
+                    ):
+                        candidate = f"{candidate}{existing_column_suffix}"
+                    rename_map[col] = candidate
+
+        if rename_map:
+            r_out_pl = r_out_pl.rename(rename_map)
+            cols_to_return = [rename_map.get(c, c) for c in cols_to_return]
+
         add_df = r_out_pl.select(["sequence_id"] + cols_to_return)
         out_df = base_df.join(add_df, on="sequence_id", how="left")
         if isinstance(data, (pl.DataFrame, pl.LazyFrame)):

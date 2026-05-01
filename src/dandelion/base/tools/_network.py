@@ -231,7 +231,7 @@ def generate_network(
         if sample is not None:
             if adata is not None:
                 vdj, adata = vdj_sample(
-                    vdj=vdj,
+                    vdj_data=vdj,
                     size=sample,
                     adata=adata,
                     force_replace=force_replace,
@@ -239,7 +239,7 @@ def generate_network(
                 )
             else:
                 vdj = vdj_sample(
-                    vdj=vdj,
+                    vdj_data=vdj,
                     size=sample,
                     force_replace=force_replace,
                     random_state=random_state,

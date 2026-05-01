@@ -90,6 +90,27 @@ def test_mutation_split_locus_polars(create_testfolder, airr_reannotated):
     meta_cols = vdj._metadata.columns
     assert any("IGH" in c or "IGK" in c or "IGL" in c for c in meta_cols)
 
+    # Re-running with overwrite should not create Polars join suffix columns
+    try:
+        quantify_mutations(vdj, split_locus=True, existing_columns="overwrite")
+    except Exception:
+        pytest.skip("R package 'shazam' not installed")
+    assert "mu_count_right" not in vdj._data.collect_schema().names()
+
+    # Re-running with suffix should preserve originals and append suffixed outputs
+    try:
+        quantify_mutations(
+            vdj,
+            split_locus=True,
+            existing_columns="suffix",
+            existing_column_suffix="_rerun",
+        )
+    except Exception:
+        pytest.skip("R package 'shazam' not installed")
+    schema_names = vdj._data.collect_schema().names()
+    assert "mu_count" in schema_names
+    assert any(c.startswith("mu_count") and c.endswith("_rerun") for c in schema_names)
+
 
 @patch("matplotlib.pyplot.show")
 @pytest.mark.usefixtures("create_testfolder", "annotation_10x_mouse")
