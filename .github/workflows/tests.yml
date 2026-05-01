@@ -152,6 +152,8 @@ jobs:
           pip install -e ".[scirpy,scrublet,palantir,dask,polars,tests]"
           # install pertpy from github
           pip install git+https://www.github.com/scverse/pertpy.git
+          # pin jax to be <0.10 otherwise pertpy fails https://github.com/scverse/pertpy/issues/948
+          pip install "jax<0.10"
           # ensure filelock is installed
           pip install filelock
           # also ensure rpy2 is installed
@@ -172,24 +174,25 @@ jobs:
           coverage report
 
       - name: Upload coverage to Codecov
-        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version == '3.13' && github.repository == 'tuonglab/dandelion'
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
+          '3.13' && github.repository == 'tuonglab/dandelion'
         uses: codecov/codecov-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           directory: ./coverage/reports/
-          env_vars: ${{ format('OS={0},PYTHON={1}', matrix.config.os, matrix.config.python-version) }}
-          flags: ${{ matrix.config.os }}-${{ matrix.config.python-version }}-${{ matrix.config.backend || 'auto' }}
+          env_vars: ${{ format('OS={0},PYTHON={1}', matrix.config.os,
+            matrix.config.python-version) }}
+          flags: ${{ matrix.config.os }}-${{ matrix.config.python-version }}-${{
+            matrix.config.backend || 'auto' }}
           name: codecov-umbrella
           fail_ci_if_error: false
           path_to_write_report: ./coverage/codecov_report.txt
           verbose: true
 
       - name: Upload test results to Codecov
-        if: matrix.config.os == 'ubuntu-latest'
-          && matrix.config.python-version == '3.13'
-          && github.repository == 'tuonglab/dandelion'
-          && !cancelled()
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
+          '3.13' && github.repository == 'tuonglab/dandelion' && !cancelled()
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

@@ -128,6 +128,8 @@ jobs:
           pip install -e ".[scirpy,scrublet,palantir,dask,polars,tests]"
           # install pertpy from github
           pip install git+https://www.github.com/scverse/pertpy.git
+          # pin jax to be <0.10 otherwise pertpy fails https://github.com/scverse/pertpy/issues/948
+          pip install "jax<0.10"
           # ensure filelock is installed
           pip install filelock
           # also ensure rpy2 is installed
