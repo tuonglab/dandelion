@@ -14,6 +14,22 @@ import os
 _BACKEND = os.environ.get("DANDELION_BACKEND", "auto").lower()
 
 
+def _set_backend(mode: str) -> None:
+    """Set the active backend. Use 'polars' or 'base' ('pandas')."""
+    global _BACKEND
+    normalized = "pandas" if mode.lower() in ("base", "pandas") else "polars"
+    _BACKEND = normalized
+
+
+def get_backend() -> str:
+    """Return the active backend name ('polars' or 'pandas')."""
+    return _BACKEND
+
+
+def _use_polars() -> bool:
+    return _BACKEND != "pandas"
+
+
 def import_backend_class(module: str, class_name: str):
     """
     Try to import class from dandelion.polars first, fallback to dandelion.base.
@@ -23,7 +39,7 @@ def import_backend_class(module: str, class_name: str):
     Returns:
         type: Imported class or function
     """
-    if _BACKEND != "pandas":
+    if _use_polars():
         mod = importlib.import_module(f"dandelion.polars.{module}")
     else:
         mod = importlib.import_module(f"dandelion.base.{module}")
@@ -38,6 +54,6 @@ def import_backend_module(module: str):
     Returns:
         module: Imported module
     """
-    if _BACKEND != "pandas":
+    if _use_polars():
         return importlib.import_module(f"dandelion.polars.{module}")
     return importlib.import_module(f"dandelion.base.{module}")

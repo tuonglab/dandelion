@@ -254,6 +254,14 @@ Tutorial
    setup_dandelion_tutorial_tcr
    setup_dandelion_tutorial_trajectory
 
+Set Backend
+===========
+.. module:: dandelion
+
+.. autosummary::
+   :toctree: .
+
+   set_backend
 
 Logging
 =======

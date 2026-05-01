@@ -34,3 +34,5 @@ build
 /container/database/blast
 /docs/notebooks/dev_notebooks
 junit.xml
+docs/notebooks/base/dandelion_tutorial/
+docs/notebooks/polars/dandelion_tutorial/
