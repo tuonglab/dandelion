@@ -25,7 +25,6 @@ Base Backend: Notebooks
 =======================
 
 .. toctree::
-   :hidden:
    :maxdepth: 1
    :caption: Advanced Guide (Base):
 
@@ -44,7 +43,6 @@ Polars Backend: Notebooks
 ==========================
 
 .. toctree::
-   :hidden:
    :maxdepth: 1
    :caption: Advanced Guide (Polars):
 
