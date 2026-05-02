@@ -109,16 +109,22 @@ def setup_vdj_pseudobulk(
     if mode is not None:
         if productive_vdj:
             adata = adata[
-                adata.obs["productive_" + mode + "_VDJ"].str.startswith("T")
+                adata.obs["productive_" + mode + "_VDJ"]
+                .str.startswith("T")
+                .fillna(False)
             ].copy()
         if productive_vj:
             adata = adata[
-                adata.obs["productive_" + mode + "_VJ"].str.startswith("T")
+                adata.obs["productive_" + mode + "_VJ"]
+                .str.startswith("T")
+                .fillna(False)
             ].copy()
     else:
         if productive_cols is not None:
             for col in productive_cols:
-                adata = adata[adata.obs[col].str.startswith("T")].copy()
+                adata = adata[
+                    adata.obs[col].str.startswith("T").fillna(False)
+                ].copy()
 
     if any([re.search("_VDJ_main|_VJ_main", i) for i in adata.obs]):
         if check_vdj_mapping is not None:

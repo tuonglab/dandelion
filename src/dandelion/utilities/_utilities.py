@@ -1286,16 +1286,18 @@ def format_isotype1(metadata: pd.DataFrame) -> list[str]:
         List of formatted isotype strings; co-expressed IgM+IgD becomes
         ``"IgM/IgD"`` and any other multi-isotype entry becomes ``"Multi"``.
     """
-    isotype_status = []
-    for i in metadata["isotype"]:
-        if pd.isna(i):
-            isotype_status.append(None)
-        elif (i == "IgM|IgD") or (i == "IgD|IgM"):
-            isotype_status.append("IgM/IgD")
-        elif "|" in i:
-            isotype_status.append("Multi")
-        else:
-            isotype_status.append(i)
+    isotype_status = [
+        (
+            None
+            if i is None
+            else "IgM/IgD"
+            if (i == "IgM|IgD") or (i == "IgD|IgM")
+            else "Multi"
+            if "|" in i
+            else i
+        )
+        for i in metadata["isotype"]
+    ]
     return isotype_status
 
 
@@ -1315,7 +1317,11 @@ def format_isotype2(metadata: pd.DataFrame) -> list[str]:
         ``"Extra pair"`` status are relabelled ``"Multi"``.
     """
     isotype_status = [
-        (x if "exception" in y else ("Multi" if y == "Extra pair" else x))
+        (
+            x
+            if y is None or "exception" in y
+            else ("Multi" if y == "Extra pair" else x)
+        )
         for x, y in zip(metadata["isotype_status"], metadata["chain_status"])
     ]
     return isotype_status
