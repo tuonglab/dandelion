@@ -950,13 +950,14 @@ class Dandelion:
                                                 ]
                                                 if y.split(",")[0][:4]
                                                 in conversion_dict
-                                                else "None"
+                                                else None
                                             )
                                             for y in k.split("|")
                                         ],
                                         p.split("|"),
                                     )
                                     if pp in TRUES + EMPTIES_STR
+                                    and z is not None
                                 ]
                             )
                         )
@@ -970,15 +971,22 @@ class Dandelion:
                                             conversion_dict[y.split(",")[0][:4]]
                                             if y.split(",")[0][:4]
                                             in conversion_dict
-                                            else "None"
+                                            else None
                                         )
                                         for y in k.split("|")
+                                        if (
+                                            conversion_dict.get(
+                                                y.split(",")[0][:4], None
+                                            )
+                                            is not None
+                                        )
                                     ]
                                 ]
                             )
                         )
                 else:
-                    isotype.append("None")
+                    isotype.append(None)
+            isotype = [x if x != "" else None for x in isotype]
             tmp_metadata["isotype"] = isotype
             tmp_metadata["isotype_status"] = format_isotype1(tmp_metadata)
 
@@ -1014,14 +1022,16 @@ class Dandelion:
         tmp_metadata["isotype_status"] = format_isotype2(tmp_metadata)
 
         if "isotype" in tmp_metadata:
-            if all(tmp_metadata["isotype"] == "None"):
+            if tmp_metadata["isotype"].isna().all():
                 tmp_metadata.drop(
                     ["isotype", "isotype_status"], axis=1, inplace=True
                 )
         for rc in reqcols:
-            tmp_metadata[rc] = tmp_metadata[rc].replace("", "None")
+            tmp_metadata[rc] = tmp_metadata[rc].replace(["", "None"], None)
         if clonekey in init_dict:
-            tmp_metadata[clonekey] = tmp_metadata[clonekey].replace("", "None")
+            tmp_metadata[clonekey] = tmp_metadata[clonekey].replace(
+                ["", "None"], None
+            )
 
         tmp_metadata = movecol(
             tmp_metadata,

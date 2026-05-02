@@ -28,6 +28,24 @@ from dandelion.utilities._utilities import (
 )
 
 
+def _resolve_distance_store_path(zarr_path: Path | str | None) -> str:
+    """Resolve output Zarr store path for distance matrix.
+
+    Rules:
+    - If ``zarr_path`` is ``None``, use ``distance_matrix.zarr`` in cwd.
+    - If ``zarr_path`` ends with ``.zarr``, use it directly as the store path.
+    - Otherwise, treat ``zarr_path`` as a parent directory and create
+      ``<zarr_path>/distance_matrix.zarr``.
+    """
+    if zarr_path is None:
+        return "distance_matrix.zarr"
+
+    base = os.fspath(zarr_path).rstrip("/\\")
+    if base.lower().endswith(".zarr"):
+        return base
+    return os.path.join(base, "distance_matrix.zarr")
+
+
 def calculate_distance_matrix_zarr(
     dat_seq: pd.DataFrame,
     metric: Metric,
@@ -110,8 +128,7 @@ def calculate_distance_matrix_zarr(
         raise ImportError(
             "Please install dask with the complete set of dependencies: pip install 'dask[complete]'"
         )
-    if zarr_path is None:
-        zarr_path = "distance_matrix.zarr"
+    zarr_store_path = _resolve_distance_store_path(zarr_path)
 
     n = dat_seq.shape[0]
 
@@ -146,7 +163,7 @@ def calculate_distance_matrix_zarr(
     )
 
     # Create temporary Zarr array
-    store = LocalStore(zarr_path)
+    store = LocalStore(zarr_store_path)
     root = open_zarr_group(store=store, mode="w")
 
     # create temp Zarr array without compression for writing first
@@ -167,7 +184,7 @@ def calculate_distance_matrix_zarr(
     z_array.attrs["columns"] = list(dat_seq.columns)
 
     if verbose:
-        logg.info(f"\nCreated Zarr array at: {zarr_path}")
+        logg.info(f"\nCreated Zarr array at: {zarr_store_path}")
 
     # Setup Dask client
     client = _setup_dask_client(n_cpus=n_cpus, memory_limit_gb=memory_limit_gb)
@@ -209,7 +226,7 @@ def calculate_distance_matrix_zarr(
             try:
                 actual_size = sum(
                     f.stat().st_size
-                    for f in Path(zarr_path).rglob("*")
+                    for f in Path(zarr_store_path).rglob("*")
                     if f.is_file()
                 )
                 logg.info(

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import functools
 import multiprocessing
 import re
 import time
 
+import dask.array as da
 import networkx as nx
 import numpy as np
 import pandas as pd
 import polars as pl
 
 from collections import defaultdict
-from joblib import Parallel, delayed
 from pathlib import Path
 from polyleven import levenshtein
 from scanpy import logging as logg
@@ -36,10 +35,34 @@ from dandelion.utilities._distances import (
     prepare_sequences_with_separator,
     resolve_metric,
 )
-from dandelion.utilities._utilities import (
-    Tree,
-    FALSES,
-)
+from dandelion.utilities._utilities import FALSES
+
+
+def _load_lazy_distance_from_zarr(zarr_path: Path | str):
+    """Load lazy distance matrix from a user/path-compatible Zarr location."""
+    import dask.array as da
+
+    base = str(zarr_path).rstrip("/\\")
+    if base.lower().endswith(".zarr"):
+        candidates = [f"{base}/distance_matrix", base]
+    else:
+        candidates = [
+            f"{base}/distance_matrix.zarr/distance_matrix",
+            f"{base}/distance_matrix.zarr",
+            f"{base}/distance_matrix",
+        ]
+
+    last_error = None
+    for candidate in candidates:
+        try:
+            return da.from_zarr(candidate)
+        except Exception as exc:
+            last_error = exc
+
+    raise ValueError(
+        f"Could not load lazy distance matrix from zarr_path={zarr_path}. "
+        f"Tried: {candidates}"
+    ) from last_error
 
 
 def _merge_overlapping_clones(
@@ -158,6 +181,7 @@ def generate_network(
     ] = "mod_fr2",
     singleton_mass: float = 0.5,
     expanded_only: bool = False,
+    use_existing_distance: bool = True,
     use_existing_graph: bool = True,
     n_cpus: int = 1,
     sequential_chain: bool = False,
@@ -215,6 +239,8 @@ def generate_network(
         Default 0.5. Only used with 'mod_fr_bh' and 'mod_fr_bh_gpu'.
     expanded_only : bool, optional
         whether or not to only compute layout on expanded clonotypes.
+    use_existing_distance : bool, optional
+        whether or not to use the pre-computed distance matrix in `vdj.distances` if it exists. If False, distances will be re-computed even if they already exist.
     use_existing_graph : bool, optional
         whether or not to just compute the layout using the existing graph if it exists in the object.
     n_cpus : int, optional
@@ -373,6 +399,9 @@ def generate_network(
             .with_row_index("_row_pos")
             .collect(engine="streaming")
         ).select(["cell_id", pl.col("_row_pos").cast(pl.Int64).alias("pos")])
+        cell_to_pos = dict(
+            zip(pos_map["cell_id"].to_list(), pos_map["pos"].to_list())
+        )
 
         if compute_graph or compute_layout or distance_mode == "clone":
             # Get clone membership as DataFrame and merge overlapping clones
@@ -380,7 +409,11 @@ def generate_network(
             membership = _merge_overlapping_clones(clone_df, clone_key)
 
         # Check if pre-computed distances are available
-        if hasattr(vdj, "distances") and vdj.distances is not None:
+        if (
+            use_existing_distance
+            and hasattr(vdj, "distances")
+            and vdj.distances is not None
+        ):
             logg.info("Using pre-computed distances from .distances\n")
             total_dist = vdj.distances
             if isinstance(total_dist, np.ndarray):
@@ -433,18 +466,8 @@ def generate_network(
                         compress=compress,
                         verbose=verbose,
                     )
-                    # Create a Dask view of the on-disk distances
-                    import dask.array as da
-
                     zpath = zarr_tmp if zarr_path is None else zarr_path
-                    try:
-                        total_dist = da.from_zarr(
-                            str(zpath) + "/distance_matrix.zarr/distance_matrix"
-                        )
-                    except Exception:
-                        total_dist = da.from_zarr(
-                            str(zpath) + "/distance_matrix.zarr"
-                        )
+                    total_dist = _load_lazy_distance_from_zarr(zpath)
                 else:
                     if sequential_chain:
                         total_dist = calculate_distance_matrix_original(
@@ -501,18 +524,8 @@ def generate_network(
                         compress=compress,
                         verbose=verbose,
                     )
-                    # Create a Dask view of the on-disk distances
-                    import dask.array as da
-
                     zpath = zarr_tmp if zarr_path is None else zarr_path
-                    try:
-                        total_dist = da.from_zarr(
-                            str(zpath) + "/distance_matrix.zarr/distance_matrix"
-                        )
-                    except Exception:
-                        total_dist = da.from_zarr(
-                            str(zpath) + "/distance_matrix.zarr"
-                        )
+                    total_dist = _load_lazy_distance_from_zarr(zpath)
                 else:
                     if sequential_chain:
                         total_dist = calculate_distance_matrix_original_full(
@@ -532,7 +545,9 @@ def generate_network(
                             verbose=verbose,
                         )
         if compute_graph:
-            # Normalize metadata to Polars DataFrame if lazy
+            # ===================================================================
+            # NORMALIZE METADATA
+            # ===================================================================
             if isinstance(vdj._metadata, pl.LazyFrame):
                 meta_df = vdj._metadata.collect(engine="streaming")
             elif isinstance(vdj._metadata, pl.DataFrame):
@@ -540,89 +555,172 @@ def generate_network(
             else:
                 meta_df = pl.from_pandas(vdj._metadata)
 
-            # Vectorized split and overlap detection
-            meta_df_split = meta_df.with_columns(
+            # ===================================================================
+            # SPLIT CLONE KEY AND DETECT OVERLAPS
+            # ===================================================================
+            meta_with_order = meta_df.with_row_index("_cell_order")
+            meta_df_split = meta_with_order.with_columns(
                 pl.col(str(clone_key)).str.split("|").alias("_clone_list")
-            ).with_columns(
-                pl.col("_clone_list").list.len().gt(1).alias("_is_overlap")
             )
 
-            # Explode and add positions via join (avoids slow Python dict lookup)
+            # Explode to one row per clone_id, join positions
             meta_exploded = (
                 meta_df_split.select(["cell_id", "_clone_list"])
                 .explode("_clone_list")
                 .filter(pl.col("_clone_list") != "None")
-                .rename({"_clone_list": "clone_id"})
+                .rename({"_clone_list": clone_key})
                 .join(pos_map, on="cell_id", how="left")
             )
 
-            # Get unique overlap groups with their cells
-            overlap_groups = (
-                meta_df_split.filter(pl.col("_is_overlap"))
-                .select(["cell_id", "_clone_list"])
-                .with_columns(
+            # ===================================================================
+            # BUILD OVERLAP GROUPS
+            # Each overlap group = sorted, pipe-joined string of all clone ids
+            # that co-occur in at least one cell.  This matches the original's
+            # `"|".join(ol)` key built from `overlap` lists.
+            # ===================================================================
+            # Group labels for zero-distance handling.
+            overlap_cells = (
+                meta_df_split.with_columns(
                     pl.col("_clone_list")
                     .list.eval(pl.element().filter(pl.element() != "None"))
                     .alias("_overlap_group")
                 )
-                .group_by("_overlap_group", maintain_order=True)
-                .agg(pl.col("cell_id").alias("cells_in_group"))
-            )
-
-            # For each overlap group, get the positions by joining with meta_exploded
-            # Use partial to bind meta_exploded to the helper function
-            get_positions_fn = functools.partial(
-                _get_positions_for_group, meta_exploded=meta_exploded
-            )
-
-            # Add positions
-            overlap_groups = overlap_groups.with_columns(
-                [
-                    pl.col("cells_in_group")
-                    .map_elements(
-                        get_positions_fn, return_dtype=pl.List(pl.Int64)
-                    )
-                    .alias("_overlap_positions"),
-                    pl.col("_overlap_group").alias("_full_group"),
-                ]
-            )
-
-            # Explode to get one row per clone_id
-            _overlap_info = (
-                overlap_groups.explode("_overlap_group")
-                .rename({"_overlap_group": "clone_id"})
-                .group_by("clone_id")
-                .agg(
+                .filter(pl.col("_overlap_group").list.len() > 1)
+                .select(
                     [
-                        pl.col("_full_group").alias("_overlap_keys"),
-                        pl.col("_overlap_positions").alias(
-                            "_overlap_positions_list"
-                        ),
+                        "_cell_order",
+                        pl.col("_overlap_group")
+                        .list.join("|")
+                        .alias("group_key"),
+                        "_overlap_group",
                     ]
                 )
             )
 
-            # Join onto meta_exploded
+            # Map clone_id -> canonical overlap group key
+            # (a clone may appear in multiple cells; we need the UNION of all
+            #  cells that belong to every clone in the group)
+            clone_to_group = (
+                overlap_cells.explode("_overlap_group")
+                .rename({"_overlap_group": clone_key})
+                .select([clone_key, "group_key"])
+                .unique()
+            )
+
+            # Attach group_key to every exploded row
             meta_exploded = meta_exploded.join(
-                _overlap_info, on="clone_id", how="left"
+                clone_to_group, on=clone_key, how="left"
+            )
+            # For non-overlap clones group_key is null; fill with clone_id
+            meta_exploded = meta_exploded.with_columns(
+                pl.when(pl.col("group_key").is_null())
+                .then(pl.col(clone_key))
+                .otherwise(pl.col("group_key"))
+                .alias("group_key")
             )
 
             # ===================================================================
-            # CREATE TWO SEPARATE GROUPINGS: MST vs ZERO-DISTANCE
+            # MST construction
             # ===================================================================
-
-            # 1. MST GROUPS: For overlaps, use one representative clone's cells (last one)
-            meta_for_mst = meta_exploded.with_columns(
-                pl.when(pl.col("_overlap_keys").is_not_null())
-                .then(pl.col("_overlap_keys").list.first().list.join("|"))
-                .otherwise(pl.col("clone_id"))
-                .alias("mst_key")
+            clone_rows = (
+                meta_df_split.select(["_cell_order", "cell_id", "_clone_list"])
+                .explode("_clone_list")
+                .filter(pl.col("_clone_list") != "None")
+                .rename({"_clone_list": clone_key})
+                .with_row_index("_clone_seen_order")
+            )
+            clone_members = clone_rows.group_by(
+                clone_key, maintain_order=True
+            ).agg(
+                [
+                    pl.col("cell_id").alias("cell_ids"),
+                    pl.col("_clone_seen_order")
+                    .min()
+                    .alias("_first_clone_seen_order"),
+                ]
+            )
+            overlap_group_clone_map = (
+                overlap_cells.select(["group_key", "_overlap_group"])
+                .explode("_overlap_group")
+                .rename({"_overlap_group": clone_key})
             )
 
-            mst_groups = (
-                meta_for_mst.group_by(
-                    ["mst_key", "clone_id"]
-                )  # Keep clones separate initially
+            overlap_clone_ids = overlap_group_clone_map.select(
+                clone_key
+            ).unique()
+
+            overlap_candidates = overlap_group_clone_map.join(
+                clone_members, on=clone_key, how="left"
+            )
+
+            overlap_union_cells = (
+                overlap_candidates.select(["group_key", "cell_ids"])
+                .explode("cell_ids")
+                .group_by("group_key", maintain_order=True)
+                .agg(pl.col("cell_ids").unique().alias("_union_cell_ids"))
+            )
+
+            overlap_winner_rank = overlap_candidates.group_by(
+                "group_key", maintain_order=True
+            ).agg(pl.col("_first_clone_seen_order").max().alias("_winner_rank"))
+
+            overlap_group_summary = (
+                overlap_union_cells.join(
+                    overlap_winner_rank, on="group_key", how="inner"
+                )
+                .with_columns(
+                    pl.col("_union_cell_ids").list.len().alias("_union_size")
+                )
+                .filter(pl.col("_union_size") > 1)
+            )
+
+            overlap_mst_groups = (
+                overlap_candidates.join(
+                    overlap_group_summary.select(["group_key", "_winner_rank"]),
+                    on="group_key",
+                    how="inner",
+                )
+                .filter(
+                    pl.col("_first_clone_seen_order") == pl.col("_winner_rank")
+                )
+                .group_by("group_key", maintain_order=True)
+                .agg(
+                    [
+                        pl.first("cell_ids").alias("cell_ids"),
+                        pl.first("_winner_rank").alias("_group_order"),
+                    ]
+                )
+            )
+
+            non_overlap_mst_groups = (
+                clone_members.join(overlap_clone_ids, on=clone_key, how="anti")
+                .filter(pl.col("cell_ids").list.len() > 1)
+                .select(
+                    [
+                        pl.col(clone_key).alias("group_key"),
+                        pl.col("cell_ids"),
+                        pl.col("_first_clone_seen_order").alias("_group_order"),
+                    ]
+                )
+            )
+
+            mst_groups_df = (
+                pl.concat(
+                    [overlap_mst_groups, non_overlap_mst_groups],
+                    how="vertical_relaxed",
+                )
+                .sort("_group_order")
+                .select(["group_key", "cell_ids"])
+            )
+
+            # ===================================================================
+            # ZERO-DISTANCE GROUPS
+            # Same union logic; kept separate because the edge-filtering differs.
+            # ===================================================================
+            zero_groups_df = (
+                meta_exploded.select(["group_key", "cell_id", "pos"])
+                .unique(subset=["group_key", "cell_id"])
+                .group_by("group_key")
                 .agg(
                     [
                         pl.col("cell_id").alias("cell_ids"),
@@ -632,142 +730,47 @@ def generate_network(
                 .filter(pl.col("positions").list.len() >= 2)
             )
 
-            # For each mst_key, take last clone (mimics overwrite behavior)
-            mst_groups = (
-                mst_groups.group_by("mst_key")
-                .agg(
-                    [
-                        pl.col("cell_ids").last().alias("cell_ids"),
-                        pl.col("positions").last().alias("positions"),
-                    ]
-                )
-                .rename({"mst_key": "group_key"})
-            )
-
-            # 2. ZERO-DISTANCE GROUPS: For overlaps, use UNION of all cells
-            meta_for_zero = meta_exploded.filter(
-                pl.col("_overlap_keys").is_not_null()
-            )
-            meta_no_overlap_zero = meta_exploded.filter(
-                pl.col("_overlap_keys").is_null()
-            )
-
-            if len(meta_for_zero) > 0:
-                zero_overlap_exploded = (
-                    meta_for_zero.explode("_overlap_keys")
-                    .with_columns(
-                        pl.col("_overlap_keys").list.join("|").alias("zero_key")
-                    )
-                    .select(["cell_id", "pos", "zero_key"])
-                )
-
-                zero_overlap_groups = (
-                    zero_overlap_exploded.group_by("zero_key")
-                    .agg(
-                        [
-                            pl.col("cell_id").unique().alias("cell_ids"),
-                            pl.col("pos").unique().alias("positions"),
-                        ]
-                    )
-                    .filter(pl.col("positions").list.len() >= 2)
-                    .rename({"zero_key": "group_key"})
-                )
-            else:
-                zero_overlap_groups = pl.DataFrame(
-                    schema={
-                        "group_key": pl.String,
-                        "cell_ids": pl.List(pl.String),
-                        "positions": pl.List(pl.Int64),
-                    }
-                )
-
-            if len(meta_no_overlap_zero) > 0:
-                zero_no_overlap_groups = (
-                    meta_no_overlap_zero.group_by("clone_id")
-                    .agg(
-                        [
-                            pl.col("cell_id").alias("cell_ids"),
-                            pl.col("pos").alias("positions"),
-                        ]
-                    )
-                    .filter(pl.col("positions").list.len() >= 2)
-                    .rename({"clone_id": "group_key"})
-                )
-            else:
-                zero_no_overlap_groups = pl.DataFrame(
-                    schema={
-                        "group_key": pl.String,
-                        "cell_ids": pl.List(pl.String),
-                        "positions": pl.List(pl.Int64),
-                    }
-                )
-
-            zero_groups = pl.concat(
-                [zero_overlap_groups, zero_no_overlap_groups]
-            )
-
             # ===================================================================
             # MST COMPUTATION
             # ===================================================================
-            # Use partial to bind total_dist and lazy to the helper function
-            create_mst_fn = functools.partial(
-                _create_mst_edges, total_dist=total_dist, lazy=lazy
-            )
-
-            mst_groups = mst_groups.with_columns(
-                pl.struct(["positions", "cell_ids"])
-                .map_elements(
-                    lambda x: create_mst_fn(
-                        positions=x["positions"],
-                        cell_ids=x["cell_ids"],
-                    ),
-                    return_dtype=pl.Object,
+            mst_edge_dict = {}
+            for row in mst_groups_df.iter_rows(named=True):
+                ids = row["cell_ids"]
+                pos = [cell_to_pos[i] for i in ids]
+                edges = _create_mst_edges(
+                    total_dist=total_dist,
+                    positions=pos,
+                    cell_ids=ids,
+                    lazy=lazy,
                 )
-                .alias("mst_edges")
-            ).filter(pl.col("mst_edges").is_not_null())
+                if edges is not None:
+                    mst_edge_dict[row["group_key"]] = edges
 
             # ===================================================================
             # ZERO-DISTANCE EDGES
             # ===================================================================
-            # Use partial to bind total_dist and lazy to the helper function
-            find_zero_fn = functools.partial(
-                _find_zero_dist_edges, total_dist=total_dist, lazy=lazy
-            )
-
-            zero_groups = zero_groups.with_columns(
-                pl.struct(["positions", "cell_ids"])
-                .map_elements(
-                    lambda x: find_zero_fn(
-                        positions=x["positions"],
-                        cell_ids=x["cell_ids"],
-                    ),
-                    return_dtype=pl.Object,
-                )
-                .alias("zero_edges")
-            )
-
-            # ===================================================================
-            # COLLECT EDGES BY KEY
-            # ===================================================================
-            mst_edge_dict = dict(
-                zip(
-                    mst_groups["group_key"].to_list(),
-                    mst_groups["mst_edges"].to_list(),
-                )
-            )
-
             zero_edge_dict = {}
-            for row in zero_groups.iter_rows(named=True):
-                if row["zero_edges"] is not None:
-                    zero_edge_dict[row["group_key"]] = row["zero_edges"]
+            for row in zero_groups_df.iter_rows(named=True):
+                edges = _find_zero_dist_edges(
+                    total_dist=total_dist,
+                    positions=row["positions"],
+                    cell_ids=row["cell_ids"],
+                    lazy=lazy,
+                )
+                if edges is not None:
+                    zero_edge_dict[row["group_key"]] = edges
 
             # ===================================================================
             # MERGE MST AND ZERO-DISTANCE EDGES
+            #
+            # Index MUST be the canonical "min_cell_id|max_cell_id" string so
+            # combine_first aligns on edge identity, not row position.
+            # This matches the original's set_edge_list_index / _add_sorted_index
+            # behaviour.
             # ===================================================================
             try:
-                # Concat all MST edges
                 if mst_edge_dict:
-                    edge_listx = _add_sorted_index(
+                    edge_listx = _make_canonical_index(
                         pd.concat(
                             list(mst_edge_dict.values()), ignore_index=True
                         )
@@ -777,41 +780,36 @@ def generate_network(
                         columns=["source", "target", "weight"]
                     )
 
-                # Concat all zero-distance edges
                 if zero_edge_dict:
-                    tmp_edge_listx = _add_sorted_index(
+                    tmp_edge_listx = _make_canonical_index(
                         pd.concat(
                             list(zero_edge_dict.values()), ignore_index=True
                         )
                     )
+                    tmp_edge_listx = tmp_edge_listx[
+                        tmp_edge_listx["weight"] == 0
+                    ]
                 else:
                     tmp_edge_listx = pd.DataFrame(
                         columns=["source", "target", "weight"]
                     )
 
-                # Combine: MST edges take priority
+                # MST edges take priority (combine_first fills NaN from tmp)
                 edge_list_final = edge_listx.combine_first(tmp_edge_listx)
 
-                # Vectorized weight lookup from total_dist
+                # ---------------------------------------------------------------
+                # WEIGHT LOOKUP
+                # Re-read actual distances from total_dist for every edge.
+                # Build cell_id -> position map from deduplicated meta_exploded.
+                # ---------------------------------------------------------------
                 if len(edge_list_final) > 0:
+                    # Deduplicate cell_id -> pos (a cell always has one position)
                     sources = edge_list_final["source"].tolist()
                     targets = edge_list_final["target"].tolist()
-
-                    # Build reverse lookup: cell_id -> position
-                    cell_to_pos = (
-                        meta_exploded.select(["cell_id", "pos"])
-                        .unique()
-                        .to_dict(as_series=False)
-                    )
-                    cell_to_pos = dict(
-                        zip(cell_to_pos["cell_id"], cell_to_pos["pos"])
-                    )
-
                     src_pos = np.array([cell_to_pos[s] for s in sources])
                     tgt_pos = np.array([cell_to_pos[t] for t in targets])
 
                     if lazy:
-                        # Dask: extract pairs individually
                         actual_weights = da.stack(
                             [
                                 total_dist[src_pos[i], tgt_pos[i]]
@@ -820,17 +818,32 @@ def generate_network(
                         ).compute()
                     else:
                         actual_weights = total_dist[src_pos, tgt_pos]
-                        # CSR indexing returns np.matrix; flatten to 1-D array
                         if hasattr(actual_weights, "A1"):
                             actual_weights = actual_weights.A1
 
+                    # Apply weight offset correction matching original's
+                    # csgraph_from_dense(total_dist + 1) / weight - 1 pattern:
+                    # _create_mst_edges should already return corrected weights,
+                    # but if total_dist itself carries the +1 offset uncomment:
+                    # actual_weights = actual_weights - 1
+                    # np.clip(actual_weights, 0, None, out=actual_weights)
+
+                    # Only overwrite MST edge weights; zero-distance edges must
+                    # stay at 0 (matching original's weight == 0 filter).
+                    is_zero_edge = edge_list_final.index.isin(
+                        tmp_edge_listx.index
+                    )
                     edge_list_final["weight"] = actual_weights
+                    edge_list_final.loc[is_zero_edge, "weight"] = 0
+
                     edge_list_final = edge_list_final.reset_index(drop=True)
 
             except Exception:
                 edge_list_final = None
 
-            # final layout + graph creation (unchanged)
+            # ===================================================================
+            # FINAL LAYOUT + GRAPH CREATION
+            # ===================================================================
             g, g_, lyt, lyt_ = generate_layout(
                 vertices=meta_df["cell_id"].to_list(),
                 edges=edge_list_final,
@@ -953,32 +966,11 @@ def _create_mst_edges(
     cell_ids: list[str],
     lazy: bool = False,
 ) -> pd.DataFrame | None:
-    """
-    Create minimum spanning tree edges for a group.
-
-    Parameters
-    ----------
-    total_dist : np.ndarray
-        Distance matrix
-    positions : list[int]
-        Positions to slice from the distance matrix
-    cell_ids : list[str]
-        Cell IDs corresponding to positions
-    lazy : bool
-        Whether using lazy/Dask arrays
-
-    Returns
-    -------
-    pd.DataFrame | None
-        DataFrame with source, target, weight columns, or None if insufficient data
-    """
     if len(positions) < 2:
         return None
 
     if lazy:
-        from dandelion.polars.tools._lazydistances import (
-            dask_safe_slice_square,
-        )
+        from dandelion.polars.tools._lazydistances import dask_safe_slice_square
 
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
@@ -989,19 +981,34 @@ def _create_mst_edges(
     if submat.shape[0] < 2 or submat.shape[1] < 2:
         return None
 
-    # Compute MST directly using scipy
-    values = submat.astype(float)
-    shifted = values + 1.0
-    np.fill_diagonal(shifted, 0.0)
+    shifted = submat.astype(float) + 1.0
+    shifted[np.isnan(shifted)] = 0.0
 
-    mst_sparse = scipy_mst(shifted)
+    n = shifted.shape[0]
+    iu, ju = np.triu_indices(n, k=1)
+    w = shifted[iu, ju]
+    keep = w > 0
+    iu, ju, w = iu[keep], ju[keep], w[keep]
+    if w.size == 0:
+        return None
+
+    # Deterministic tie-breaking matching the reference edge construction order.
+    rank = np.arange(w.size, dtype=float)
+    eps = 1e-9
+    w_pert = w + eps * rank
+
+    rows = np.concatenate([iu, ju])
+    cols = np.concatenate([ju, iu])
+    data = np.concatenate([w_pert, w_pert])
+    mat = csr_matrix((data, (rows, cols)), shape=(n, n))
+
+    mst_sparse = scipy_mst(mat)
     coo = mst_sparse.tocoo()
-
     if coo.nnz == 0:
         return None
 
-    # Undo the +1 shift, clamp at 0
-    weights = np.maximum(coo.data - 1.0, 0.0)
+    true_shifted = shifted[coo.row, coo.col]
+    weights = np.maximum(true_shifted - 1.0, 0.0)
 
     return pd.DataFrame(
         {
@@ -1018,33 +1025,11 @@ def _find_zero_dist_edges(
     cell_ids: list[str],
     lazy: bool = False,
 ) -> pd.DataFrame | None:
-    """
-    Find edges with zero distance between cells.
-
-    Parameters
-    ----------
-    total_dist : np.ndarray
-        Distance matrix
-    positions : list[int]
-        Positions to slice from the distance matrix
-    cell_ids : list[str]
-        Cell IDs corresponding to positions
-    lazy : bool
-        Whether using lazy/Dask arrays
-
-    Returns
-    -------
-    pd.DataFrame | None
-        DataFrame with source, target, weight columns (weight=0), or None if no zero distances
-    """
     if len(positions) < 2:
         return None
 
-    # Slice the distance matrix
     if lazy:
-        from dandelion.polars.tools._lazydistances import (
-            dask_safe_slice_square,
-        )
+        from dandelion.polars.tools._lazydistances import dask_safe_slice_square
 
         submat = dask_safe_slice_square(total_dist, positions).compute()
     else:
@@ -1052,11 +1037,9 @@ def _find_zero_dist_edges(
         if hasattr(submat, "toarray"):
             submat = submat.toarray()
 
-    # Find all pairs in lower triangle with distance == 0
     n = len(cell_ids)
     row_idx, col_idx = np.tril_indices(n, k=-1)
     mask = submat[row_idx, col_idx] == 0
-
     if not mask.any():
         return None
 
@@ -1067,6 +1050,15 @@ def _find_zero_dist_edges(
             "weight": 0.0,
         }
     )
+
+
+def _make_canonical_index(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    idx = ["|".join(sorted([s, t])) for s, t in zip(df["source"], df["target"])]
+    df = df.copy()
+    df.index = idx
+    return df
 
 
 def _add_sorted_index(df: pd.DataFrame) -> pd.DataFrame:

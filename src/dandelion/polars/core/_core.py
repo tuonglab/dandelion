@@ -564,13 +564,14 @@ class DandelionPolars:
                 # pandas DataFrame
                 original_cells = self._metadata.head(dist_size).index.to_list()
 
-            keep_set = set(cell_ids.to_list())
+            keep_lookup = set(cell_ids.to_list())
             keep = np.array(
-                [i for i, c in enumerate(original_cells) if c in keep_set]
+                [i for i, c in enumerate(original_cells) if c in keep_lookup]
             )
             _distances = self.distances[keep, :][:, keep]
             if isinstance(_distances, csr_matrix):
-                _distances._index_names = list(keep_set)
+                # Preserve matrix row/col ordering for downstream name-based remapping.
+                _distances._index_names = [original_cells[i] for i in keep]
         else:
             _distances = None
 
@@ -3370,20 +3371,36 @@ class DandelionPolars:
             graph_grp = root.create_group("graph", overwrite=True)
             for i, g in enumerate(self.graph):
                 with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_h5:
-                    # Convert NetworkX graph to CSR adjacency
-                    G_df = nx.to_pandas_adjacency(g, nonedge=np.nan)
-                    G_x = csr_matrix(G_df.to_numpy())
+                    # Store as explicit edge list so 0-weight edges are preserved.
+                    # The adjacency→CSR approach silently drops zero-weight edges.
+                    nodes = list(g.nodes())
+                    node_to_idx = {n: idx for idx, n in enumerate(nodes)}
+                    edges = list(g.edges(data=True))
+                    if edges:
+                        srcs = np.array(
+                            [node_to_idx[u] for u, v, _ in edges],
+                            dtype=np.int64,
+                        )
+                        tgts = np.array(
+                            [node_to_idx[v] for u, v, _ in edges],
+                            dtype=np.int64,
+                        )
+                        wgts = np.array(
+                            [d.get("weight", 1.0) for _, _, d in edges],
+                            dtype=np.float64,
+                        )
+                    else:
+                        srcs = np.array([], dtype=np.int64)
+                        tgts = np.array([], dtype=np.int64)
+                        wgts = np.array([], dtype=np.float64)
                     with h5py.File(tmp_h5.name, "w") as hf:
-                        hf.create_dataset("data", data=G_x.data)
-                        hf.create_dataset("indices", data=G_x.indices)
-                        hf.create_dataset("indptr", data=G_x.indptr)
-                        hf.create_dataset("shape", data=G_x.shape)
+                        hf.create_dataset("sources", data=srcs)
+                        hf.create_dataset("targets", data=tgts)
+                        hf.create_dataset("weights", data=wgts)
                         hf.create_dataset(
-                            "columns", data=np.array(G_df.columns, dtype="S")
+                            "nodes", data=np.array(nodes, dtype="S")
                         )
-                        hf.create_dataset(
-                            "index", data=np.array(G_df.index, dtype="S")
-                        )
+                        hf.attrs["format"] = "edgelist"
                     tmp_h5.seek(0)
                     arr = np.frombuffer(tmp_h5.read(), dtype=np.uint8)
                     create_zarr_dataset(

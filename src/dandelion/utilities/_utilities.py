@@ -1286,14 +1286,16 @@ def format_isotype1(metadata: pd.DataFrame) -> list[str]:
         List of formatted isotype strings; co-expressed IgM+IgD becomes
         ``"IgM/IgD"`` and any other multi-isotype entry becomes ``"Multi"``.
     """
-    isotype_status = [
-        (
-            "IgM/IgD"
-            if (i == "IgM|IgD") or (i == "IgD|IgM")
-            else "Multi" if "|" in i else i
-        )
-        for i in metadata["isotype"]
-    ]
+    isotype_status = []
+    for i in metadata["isotype"]:
+        if pd.isna(i):
+            isotype_status.append(None)
+        elif (i == "IgM|IgD") or (i == "IgD|IgM"):
+            isotype_status.append("IgM/IgD")
+        elif "|" in i:
+            isotype_status.append("Multi")
+        else:
+            isotype_status.append(i)
     return isotype_status
 
 

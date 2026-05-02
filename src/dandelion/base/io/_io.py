@@ -27,6 +27,33 @@ from dandelion.utilities._utilities import (
 )
 
 
+def _load_distance_zarr(distance_zarr: Path | str):
+    """Load lazy distance array from a user/path-compatible Zarr location."""
+    import dask.array as da
+
+    base = str(distance_zarr).rstrip("/\\")
+    if base.lower().endswith(".zarr"):
+        candidates = [f"{base}/distance_matrix", base]
+    else:
+        candidates = [
+            f"{base}/distance_matrix.zarr/distance_matrix",
+            f"{base}/distance_matrix.zarr",
+            f"{base}/distance_matrix",
+        ]
+
+    last_error = None
+    for candidate in candidates:
+        try:
+            return da.from_zarr(candidate)
+        except Exception as exc:
+            last_error = exc
+
+    raise ValueError(
+        f"Could not load distances from distance_zarr={distance_zarr}. "
+        f"Tried: {candidates}"
+    ) from last_error
+
+
 def decode(df):
     """Decode byte strings in a DataFrame."""
     for col in df:
@@ -94,11 +121,7 @@ def read_h5ddl(
             distances._index_names = metadata.index
         except KeyError:
             if distance_zarr is not None:  # pragma: no cover
-                import dask.array as da
-
-                distances = da.from_zarr(
-                    str(distance_zarr) + "/distance_matrix"
-                )
+                distances = _load_distance_zarr(distance_zarr)
 
         try:
             layout0 = _read_h5_dict(filename, group="layout/layout_0")
@@ -138,11 +161,7 @@ def read_h5ddl(
             distances._index_names = metadata.index
         except KeyError:
             if distance_zarr is not None:
-                import dask.array as da
-
-                distances = da.from_zarr(
-                    str(distance_zarr) + "/distance_matrix"
-                )
+                distances = _load_distance_zarr(distance_zarr)
 
         try:
             layout0 = _read_h5_dict(filename, group="layout/layout_0")

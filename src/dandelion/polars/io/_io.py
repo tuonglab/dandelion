@@ -136,9 +136,7 @@ def read_zipddl(
             with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_h5:
                 tmp_h5.write(arr.tobytes())
                 tmp_h5.flush()
-                # Use your helper
-                df = _read_h5_csr_matrix_zarr(tmp_h5.name, as_df=True)
-                g = _create_graph(df, adjust_adjacency=0, fillna=0)
+                g = _load_graph_from_h5(tmp_h5.name)
                 graphs.append(g)
         constructor["graph"] = tuple(graphs)
 
@@ -267,6 +265,52 @@ def read_h5ddl(
         constructor["germline"] = tmp.germline
 
     return DandelionPolars(**constructor, verbose=verbose)
+
+
+def _load_graph_from_h5(filename: Path | str) -> nx.Graph:
+    """
+    Load a NetworkX graph from an H5 file.
+
+    Supports both the new edge-list format (format attr = 'edgelist') and the
+    legacy CSR-adjacency format for backward compatibility. The legacy format
+    silently drops 0-weight edges (a known bug), so new files use the edge-list
+    format instead.
+    """
+    with h5py.File(filename, "r") as f:
+        fmt = f.attrs.get("format", "csr_adjacency")
+
+        if fmt == "edgelist":
+            nodes = [
+                x.decode("utf-8") if isinstance(x, bytes) else x
+                for x in f["nodes"][:]
+            ]
+            srcs = f["sources"][:]
+            tgts = f["targets"][:]
+            wgts = f["weights"][:]
+
+        else:
+            # Legacy CSR-adjacency format — zero-weight edges may be missing.
+            data = f["data"][:]
+            indices = f["indices"][:]
+            indptr = f["indptr"][:]
+            shape = tuple(f["shape"][:])
+            columns = [
+                x.decode("utf-8") if isinstance(x, bytes) else x
+                for x in f["columns"][:]
+            ]
+            nodes = columns
+            loaded = csr_matrix((data, indices, indptr), shape=shape)
+            coo = loaded.tocoo()
+            srcs = coo.row
+            tgts = coo.col
+            wgts = coo.data
+
+    g = nx.Graph()
+    g.add_nodes_from(nodes)
+    for s, t, w in zip(srcs, tgts, wgts):
+        if s != t:
+            g.add_edge(nodes[s], nodes[t], weight=float(w))
+    return g
 
 
 def _read_h5_csr_matrix_zarr(

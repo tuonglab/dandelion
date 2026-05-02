@@ -334,14 +334,35 @@ def transfer(
         recipient = adata
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
+
+        def _aligned_metadata_col(col_name: str) -> pd.Series:
+            col = pd.Series(vdj._metadata[col_name]).reindex(
+                recipient.obs_names
+            )
+            # Keep missing values null, but use AnnData/h5ad-safe dtypes.
+            if pd.api.types.is_numeric_dtype(col.dtype):
+                return pd.to_numeric(col, errors="coerce")
+
+            non_null = col.dropna()
+            if len(non_null) > 0:
+                numeric_candidate = pd.to_numeric(non_null, errors="coerce")
+                if numeric_candidate.notna().all():
+                    return pd.to_numeric(col, errors="coerce")
+
+            # Avoid pandas StringDtype (nullable StringArray), which anndata
+            # may reject unless allow_write_nullable_strings=True.
+            out = col.astype(object).where(pd.notna(col), np.nan)
+            return out.map(lambda v: str(v) if pd.notna(v) else np.nan)
+
         for x in vdj._metadata.columns:
+            assigned = False
             if x not in recipient.obs.columns:
-                recipient.obs[x] = pd.Series(vdj._metadata[x])
+                recipient.obs[x] = _aligned_metadata_col(x)
+                assigned = True
             elif overwrite is True:
-                recipient.obs[x] = pd.Series(vdj._metadata[x])
-            if type_check(vdj._metadata, x):
-                recipient.obs[x] = recipient.obs[x].replace(np.nan, "No_contig")
-            if recipient.obs[x].dtype == "bool":
+                recipient.obs[x] = _aligned_metadata_col(x)
+                assigned = True
+            if assigned and recipient.obs[x].dtype == "bool":
                 recipient.obs[x] = recipient.obs[x].astype(str)
 
         # explicit overwrite list/string handling (matches original)
@@ -349,11 +370,9 @@ def transfer(
             if not isinstance(overwrite, list):
                 overwrite = [overwrite]
             for ow in overwrite:
-                recipient.obs[ow] = pd.Series(vdj._metadata[ow])
-                if type_check(vdj._metadata, ow):
-                    recipient.obs[ow] = recipient.obs[ow].replace(
-                        np.nan, "No_contig"
-                    )
+                recipient.obs[ow] = _aligned_metadata_col(ow)
+                if recipient.obs[ow].dtype == "bool":
+                    recipient.obs[ow] = recipient.obs[ow].astype(str)
 
     # also check that all the cells in vdj are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)
