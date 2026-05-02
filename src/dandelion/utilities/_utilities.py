@@ -1290,11 +1290,11 @@ def format_isotype1(metadata: pd.DataFrame) -> list[str]:
         (
             None
             if i is None
-            else "IgM/IgD"
-            if (i == "IgM|IgD") or (i == "IgD|IgM")
-            else "Multi"
-            if "|" in i
-            else i
+            else (
+                "IgM/IgD"
+                if (i == "IgM|IgD") or (i == "IgD|IgM")
+                else "Multi" if "|" in i else i
+            )
         )
         for i in metadata["isotype"]
     ]
