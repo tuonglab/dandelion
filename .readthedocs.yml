@@ -30,3 +30,4 @@ python:
       extra_requirements:
         - docs
         - polars
+        - dask
