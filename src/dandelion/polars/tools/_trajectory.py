@@ -290,11 +290,7 @@ def setup_vdj_pseudobulk(
         else:
             if productive_cols is not None:
                 for col in productive_cols:
-                    mask_col = (
-                        adata_.obs[col]
-                        .str.startswith("T")
-                        .fillna(False)
-                    )
+                    mask_col = adata_.obs[col].str.startswith("T").fillna(False)
                     adata_ = adata_[mask_col].copy()
 
         if any([re.search("_VDJ_main|_VJ_main", i) for i in adata_.obs]):
