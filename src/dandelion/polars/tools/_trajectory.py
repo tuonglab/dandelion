@@ -276,15 +276,15 @@ def setup_vdj_pseudobulk(
             if productive_vdj:
                 mask_vdj = (
                     adata_.obs["productive_" + mode + "_VDJ"]
-                    .str.startswith("T", na=False)
-                    .astype(bool)
+                    .str.startswith("T")
+                    .fillna(False)
                 )
                 adata_ = adata_[mask_vdj].copy()
             if productive_vj:
                 mask_vj = (
                     adata_.obs["productive_" + mode + "_VJ"]
-                    .str.startswith("T", na=False)
-                    .astype(bool)
+                    .str.startswith("T")
+                    .fillna(False)
                 )
                 adata_ = adata_[mask_vj].copy()
         else:
@@ -292,8 +292,8 @@ def setup_vdj_pseudobulk(
                 for col in productive_cols:
                     mask_col = (
                         adata_.obs[col]
-                        .str.startswith("T", na=False)
-                        .astype(bool)
+                        .str.startswith("T")
+                        .fillna(False)
                     )
                     adata_ = adata_[mask_col].copy()
 
