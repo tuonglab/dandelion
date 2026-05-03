@@ -2627,14 +2627,22 @@ def return_none_call(call: str) -> str:
 
 
 def clean_clone_list(clone_series: pd.Series) -> pd.Series:
-    """Replace empty clones with 'None', remove duplicates, sort consistently."""
+    """Remove empty/None clone tokens, deduplicate and sort; keep empty entries as None."""
     clone_series = clone_series.replace("", None)
     clone_series = clone_series.str.split("|").apply(
-        lambda x: [c for c in x if c not in ["None", None]] or [None]
+        lambda x: (
+            [c for c in x if c not in ["None", None]]
+            if isinstance(x, list)
+            else []
+        )
     )
     clone_series = clone_series.apply(
-        lambda x: "|".join(
-            sorted(set(x), key=cmp_to_key(lambda a, b: (a > b) - (a < b)))
+        lambda x: (
+            "|".join(
+                sorted(set(x), key=cmp_to_key(lambda a, b: (a > b) - (a < b)))
+            )
+            if x
+            else None
         )
     )
     return clone_series
@@ -2701,8 +2709,10 @@ def _add_clone_info(tmp_metadata: pd.DataFrame, clonekey: str) -> pd.DataFrame:
     tmp_metadata[clonekey + "_rank"] = (
         tmp_metadata[clonekey]
         .apply(
-            lambda entry: "|".join(
-                size_dict.get(p, p) for p in entry.split("|")
+            lambda entry: (
+                "|".join(size_dict.get(p, p) for p in entry.split("|"))
+                if isinstance(entry, str)
+                else None
             )
         )
         .astype("category")
