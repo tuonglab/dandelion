@@ -997,16 +997,18 @@ class Dandelion:
                     for c in tmp_metadata:
                         if x in c:
                             tmp_metadata[c] = [
-                                "|".join(
-                                    [
-                                        ",".join(list(set(yy.split(","))))
-                                        for yy in list(
-                                            [
+                                (
+                                    "|".join(
+                                        [
+                                            ",".join(list(set(yy.split(","))))
+                                            for yy in [
                                                 re.sub("[*][0-9][0-9]", "", tx)
                                                 for tx in t.split("|")
                                             ]
-                                        )
-                                    ]
+                                        ]
+                                    )
+                                    if isinstance(t, str)
+                                    else None
                                 )
                                 for t in tmp_metadata[c]
                             ]
@@ -1051,8 +1053,8 @@ class Dandelion:
             tmpxregstat[x] = [
                 (
                     "chimeric"
-                    if re.search("chimeric", y)
-                    else "Multi" if "|" in y else y
+                    if isinstance(y, str) and re.search("chimeric", y)
+                    else "Multi" if isinstance(y, str) and "|" in y else y
                 )
                 for y in tmpxregstat[x]
             ]
@@ -1518,20 +1520,24 @@ class Dandelion:
                         for c in ret_metadata:
                             if k in c:
                                 ret_metadata[c] = [
-                                    "|".join(
-                                        [
-                                            "|".join(list(set(yy.split(","))))
-                                            for yy in list(
-                                                {
-                                                    re.sub(
-                                                        "[*][0-9][0-9]",
-                                                        "",
-                                                        tx,
-                                                    )
-                                                    for tx in t.split("|")
-                                                }
-                                            )
-                                        ]
+                                    (
+                                        "|".join(
+                                            [
+                                                "|".join(list(set(yy.split(","))))
+                                                for yy in list(
+                                                    {
+                                                        re.sub(
+                                                            "[*][0-9][0-9]",
+                                                            "",
+                                                            tx,
+                                                        )
+                                                        for tx in t.split("|")
+                                                    }
+                                                )
+                                            ]
+                                        )
+                                        if isinstance(t, str)
+                                        else None
                                     )
                                     for t in ret_metadata[c]
                                 ]
@@ -2116,9 +2122,9 @@ class Query:
                     try:
                         out[x] = pd.to_numeric(out[x])
                     except:
-                        out[x] = out[x].fillna("None")
+                        out[x] = out[x].where(pd.notna(out[x]), None)
             else:
-                out = out.fillna("None")
+                out = out.where(pd.notna(out), None)
         return out
 
     def retrieve_celltype(
@@ -2576,9 +2582,9 @@ class Query:
                     try:
                         out[x] = pd.to_numeric(out[x])
                     except:
-                        out[x] = out[x].fillna("None")
+                        out[x] = out[x].where(pd.notna(out[x]), None)
             else:
-                out = out.fillna("None")
+                out = out.where(pd.notna(out), None)
         return out
 
 
@@ -2615,14 +2621,14 @@ def _normalize_indices(
 
 def return_none_call(call: str) -> str:
     """Return None if not present."""
-    return call.split("|")[0] if not call in ["None", ""] else "None"
+    return call.split("|")[0] if not call in ["None", "", None] else None
 
 
 def clean_clone_list(clone_series: pd.Series) -> pd.Series:
     """Replace empty clones with 'None', remove duplicates, sort consistently."""
-    clone_series = clone_series.replace("", "None")
+    clone_series = clone_series.replace("", None)
     clone_series = clone_series.str.split("|").apply(
-        lambda x: [c for c in x if c != "None"] or ["None"]
+        lambda x: [c for c in x if c not in ["None", None]] or [None]
     )
     clone_series = clone_series.apply(
         lambda x: "|".join(
@@ -2637,6 +2643,7 @@ def flatten_and_count(tmp_metadata: pd.DataFrame, clonekey: str) -> pd.Series:
     tmp = tmp_metadata[clonekey].str.split("|", expand=True).stack()
     clone_counts = tmp.value_counts()
     clone_counts = clone_counts.drop("None", errors="ignore")
+    clone_counts = clone_counts.drop(None, errors="ignore")
     return clone_counts
 
 
@@ -2676,7 +2683,9 @@ def assign_clone_numbers(clone_counts: pd.Series) -> dict:
             for i, clone in enumerate(clones, start=1):
                 size_dict[clone] = f"{r}_{i}"
         for i, clone in enumerate(other_clones, start=1):
-            size_dict[clone] = f"other_{i}" if clone != "None" else "None"
+            size_dict[clone] = (
+                f"other_{i}" if clone not in ["None", None] else None
+            )
     return size_dict
 
 
