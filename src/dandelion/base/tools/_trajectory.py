@@ -24,7 +24,9 @@ def _filter_cells(
     offending cells or masks the matched values with a uniform value of `col+"_missing"`.
     """
     # find filter pattern hits in our column of interest
-    mask = adata.obs[col].str.contains(filter_pattern)
+    mask = (
+        adata.obs[col].astype("string").str.contains(filter_pattern, na=False)
+    )
     if remove_missing:
         # remove the cells
         adata = adata[~mask].copy()
