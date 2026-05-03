@@ -31,7 +31,17 @@ if ZARR_V3:
         return root.create_array(name, **kwargs)
 
     def create_zarr_dataset(group, *args, **kwargs):
-        return group.create_dataset(*args, **kwargs)
+        # Zarr v3 uses create_array() instead of create_dataset()
+        # When data is provided, shape and dtype are inferred - don't pass them
+        if "data" in kwargs and kwargs["data"] is not None:
+            kwargs.pop("shape", None)
+            kwargs.pop("dtype", None)
+        # Zarr v3 requires chunk sizes >= 1
+        if "chunks" in kwargs and kwargs["chunks"] is not None:
+            chunks = kwargs["chunks"]
+            if isinstance(chunks, tuple):
+                kwargs["chunks"] = tuple(max(1, c) for c in chunks)
+        return group.create_array(*args, **kwargs)
 
 else:  # pragma: no cover
     from zarr import DirectoryStore, ZipStore
@@ -1278,9 +1288,13 @@ def format_isotype1(metadata: pd.DataFrame) -> list[str]:
     """
     isotype_status = [
         (
-            "IgM/IgD"
-            if (i == "IgM|IgD") or (i == "IgD|IgM")
-            else "Multi" if "|" in i else i
+            None
+            if i is None
+            else (
+                "IgM/IgD"
+                if (i == "IgM|IgD") or (i == "IgD|IgM")
+                else "Multi" if "|" in i else i
+            )
         )
         for i in metadata["isotype"]
     ]
@@ -1303,7 +1317,11 @@ def format_isotype2(metadata: pd.DataFrame) -> list[str]:
         ``"Extra pair"`` status are relabelled ``"Multi"``.
     """
     isotype_status = [
-        (x if "exception" in y else ("Multi" if y == "Extra pair" else x))
+        (
+            x
+            if y is None or "exception" in y
+            else ("Multi" if y == "Extra pair" else x)
+        )
         for x, y in zip(metadata["isotype_status"], metadata["chain_status"])
     ]
     return isotype_status
@@ -1336,6 +1354,12 @@ def format_locus(
     pd.Series
         Series of locus call strings indexed by cell barcode.
     """
+
+    def _pipe_split(value) -> list[str]:
+        if isinstance(value, str):
+            return value.split("|")
+        return []
+
     locus_1 = dict(metadata["locus" + suffix_vdj])
     locus_2 = dict(metadata["locus" + suffix_vj])
     constant_1 = dict(metadata["isotype_status"])
@@ -1349,15 +1373,18 @@ def format_locus(
 
     locus_dict = {}
     for i in metadata.index:
+        locus1_split = _pipe_split(locus_1[i])
+        locus2_split = _pipe_split(locus_2[i])
+        prod1_split = _pipe_split(prod_1[i])
+        prod2_split = _pipe_split(prod_2[i])
+
         if productive_only:
             loc1 = {
                 e: l
                 for e, l in enumerate(
                     [
                         ll
-                        for ll, p in zip(
-                            locus_1[i].split("|"), prod_1[i].split("|")
-                        )
+                        for ll, p in zip(locus1_split, prod1_split)
                         if p in TRUES
                     ]
                 )
@@ -1367,20 +1394,14 @@ def format_locus(
                 for e, l in enumerate(
                     [
                         ll
-                        for ll, p in zip(
-                            locus_2[i].split("|"), prod_2[i].split("|")
-                        )
+                        for ll, p in zip(locus2_split, prod2_split)
                         if p in TRUES
                     ]
                 )
             }
         else:
-            loc1 = {
-                e: l for e, l in enumerate([ll for ll in locus_1[i].split("|")])
-            }
-            loc2 = {
-                e: l for e, l in enumerate([ll for ll in locus_2[i].split("|")])
-            }
+            loc1 = {e: l for e, l in enumerate([ll for ll in locus1_split])}
+            loc2 = {e: l for e, l in enumerate([ll for ll in locus2_split])}
         loc1x, loc2x = [], []
         if not all([px == "None" for px in loc1.values()]):
             loc1xx = list(loc1.values())
@@ -1412,23 +1433,23 @@ def format_locus(
                 if len(loc1x) > 1:
                     if constant_1[i] == "IgM/IgD":
                         # for BCR e.g. IgM/IgD, also check that the v/d/j calls are the same
-                        v1 = v_call_1[i].split("|")
-                        d1 = d_call_1[i].split("|")
-                        j1 = j_call_1[i].split("|")
+                        v1 = _pipe_split(v_call_1[i])
+                        d1 = _pipe_split(d_call_1[i])
+                        j1 = _pipe_split(j_call_1[i])
                         if productive_only:
                             v1 = [
                                 vv
-                                for vv, pp in zip(v1, prod_1[i].split("|"))
+                                for vv, pp in zip(v1, prod1_split)
                                 if pp in TRUES
                             ]
                             d1 = [
                                 dd
-                                for dd, pp in zip(d1, prod_1[i].split("|"))
+                                for dd, pp in zip(d1, prod1_split)
                                 if pp in TRUES
                             ]
                             j1 = [
                                 jj
-                                for jj, pp in zip(j1, prod_1[i].split("|"))
+                                for jj, pp in zip(j1, prod1_split)
                                 if pp in TRUES
                             ]
                         same_vdj = True

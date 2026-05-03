@@ -6,6 +6,9 @@
 
    README.rst
 
+Tutorial
+========
+
 .. toctree::
    :hidden:
    :maxdepth: 1
@@ -17,21 +20,42 @@
    notebooks/Q4-singularity-changeo.ipynb
    notebooks/Q5-pseudobulk.ipynb
 
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Advanced Guide:
 
-   notebooks/1_dandelion_preprocessing-10x_data.ipynb
-   notebooks/1b_dandelion_noreannotation-10x_data.ipynb
-   notebooks/1c_dandelion_scirpy.ipynb
-   notebooks/2_dandelion_filtering-10x_data.ipynb
-   notebooks/3_dandelion_findingclones-10x_data.ipynb
-   notebooks/4_dandelion_visualization-10x_data.ipynb
-   notebooks/5_dandelion_diversity_and_mutation-10x_data.ipynb
-   notebooks/7_dandelion_TCR_data_10x_data.ipynb
-   notebooks/8-pseudobulk-trajectory.ipynb
-   notebooks/0_dandelion_primer.ipynb
+Base Backend: Notebooks
+=======================
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Advanced Guide (Base):
+
+   notebooks/base/1_dandelion_preprocessing-10x_data.ipynb
+   notebooks/base/1b_dandelion_noreannotation-10x_data.ipynb
+   notebooks/base/1c_dandelion_scirpy.ipynb
+   notebooks/base/2_dandelion_filtering-10x_data.ipynb
+   notebooks/base/3_dandelion_findingclones-10x_data.ipynb
+   notebooks/base/4_dandelion_visualization-10x_data.ipynb
+   notebooks/base/5_dandelion_diversity_and_mutation-10x_data.ipynb
+   notebooks/base/7_dandelion_TCR_data_10x_data.ipynb
+   notebooks/base/8-pseudobulk-trajectory.ipynb
+   notebooks/base/0_dandelion_primer.ipynb
+
+Polars Backend: Notebooks
+==========================
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Advanced Guide (Polars):
+
+   notebooks/polars/1_dandelion_preprocessing-10x_data_polars.ipynb
+   notebooks/polars/1b_dandelion_noreannotation-10x_data_polars.ipynb
+   notebooks/polars/1c_dandelion_scirpy_polars.ipynb
+   notebooks/polars/2_dandelion_filtering-10x_data_polars.ipynb
+   notebooks/polars/3_dandelion_findingclones-10x_data_polars.ipynb
+   notebooks/polars/4_dandelion_visualization-10x_data_polars.ipynb
+   notebooks/polars/5_dandelion_diversity_and_mutation-10x_data_polars.ipynb
+   notebooks/polars/7_dandelion_TCR_data_10x_data_polars.ipynb
+   notebooks/polars/8-pseudobulk-trajectory-polars.ipynb
+   notebooks/polars/0_dandelion_polars_primer.ipynb
 
 .. toctree::
    :maxdepth: 1

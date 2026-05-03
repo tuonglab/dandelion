@@ -950,13 +950,14 @@ class Dandelion:
                                                 ]
                                                 if y.split(",")[0][:4]
                                                 in conversion_dict
-                                                else "None"
+                                                else None
                                             )
                                             for y in k.split("|")
                                         ],
                                         p.split("|"),
                                     )
                                     if pp in TRUES + EMPTIES_STR
+                                    and z is not None
                                 ]
                             )
                         )
@@ -970,15 +971,22 @@ class Dandelion:
                                             conversion_dict[y.split(",")[0][:4]]
                                             if y.split(",")[0][:4]
                                             in conversion_dict
-                                            else "None"
+                                            else None
                                         )
                                         for y in k.split("|")
+                                        if (
+                                            conversion_dict.get(
+                                                y.split(",")[0][:4], None
+                                            )
+                                            is not None
+                                        )
                                     ]
                                 ]
                             )
                         )
                 else:
-                    isotype.append("None")
+                    isotype.append(None)
+            isotype = [x if x != "" else None for x in isotype]
             tmp_metadata["isotype"] = isotype
             tmp_metadata["isotype_status"] = format_isotype1(tmp_metadata)
 
@@ -989,16 +997,18 @@ class Dandelion:
                     for c in tmp_metadata:
                         if x in c:
                             tmp_metadata[c] = [
-                                "|".join(
-                                    [
-                                        ",".join(list(set(yy.split(","))))
-                                        for yy in list(
-                                            [
+                                (
+                                    "|".join(
+                                        [
+                                            ",".join(list(set(yy.split(","))))
+                                            for yy in [
                                                 re.sub("[*][0-9][0-9]", "", tx)
                                                 for tx in t.split("|")
                                             ]
-                                        )
-                                    ]
+                                        ]
+                                    )
+                                    if isinstance(t, str)
+                                    else None
                                 )
                                 for t in tmp_metadata[c]
                             ]
@@ -1014,14 +1024,16 @@ class Dandelion:
         tmp_metadata["isotype_status"] = format_isotype2(tmp_metadata)
 
         if "isotype" in tmp_metadata:
-            if all(tmp_metadata["isotype"] == "None"):
+            if tmp_metadata["isotype"].isna().all():
                 tmp_metadata.drop(
                     ["isotype", "isotype_status"], axis=1, inplace=True
                 )
         for rc in reqcols:
-            tmp_metadata[rc] = tmp_metadata[rc].replace("", "None")
+            tmp_metadata[rc] = tmp_metadata[rc].replace(["", "None"], None)
         if clonekey in init_dict:
-            tmp_metadata[clonekey] = tmp_metadata[clonekey].replace("", "None")
+            tmp_metadata[clonekey] = tmp_metadata[clonekey].replace(
+                ["", "None"], None
+            )
 
         tmp_metadata = movecol(
             tmp_metadata,
@@ -1041,8 +1053,8 @@ class Dandelion:
             tmpxregstat[x] = [
                 (
                     "chimeric"
-                    if re.search("chimeric", y)
-                    else "Multi" if "|" in y else y
+                    if isinstance(y, str) and re.search("chimeric", y)
+                    else "Multi" if isinstance(y, str) and "|" in y else y
                 )
                 for y in tmpxregstat[x]
             ]
@@ -1508,20 +1520,26 @@ class Dandelion:
                         for c in ret_metadata:
                             if k in c:
                                 ret_metadata[c] = [
-                                    "|".join(
-                                        [
-                                            "|".join(list(set(yy.split(","))))
-                                            for yy in list(
-                                                {
-                                                    re.sub(
-                                                        "[*][0-9][0-9]",
-                                                        "",
-                                                        tx,
-                                                    )
-                                                    for tx in t.split("|")
-                                                }
-                                            )
-                                        ]
+                                    (
+                                        "|".join(
+                                            [
+                                                "|".join(
+                                                    list(set(yy.split(",")))
+                                                )
+                                                for yy in list(
+                                                    {
+                                                        re.sub(
+                                                            "[*][0-9][0-9]",
+                                                            "",
+                                                            tx,
+                                                        )
+                                                        for tx in t.split("|")
+                                                    }
+                                                )
+                                            ]
+                                        )
+                                        if isinstance(t, str)
+                                        else None
                                     )
                                     for t in ret_metadata[c]
                                 ]
@@ -2106,9 +2124,9 @@ class Query:
                     try:
                         out[x] = pd.to_numeric(out[x])
                     except:
-                        out[x] = out[x].fillna("None")
+                        out[x] = out[x].where(pd.notna(out[x]), None)
             else:
-                out = out.fillna("None")
+                out = out.where(pd.notna(out), None)
         return out
 
     def retrieve_celltype(
@@ -2566,9 +2584,9 @@ class Query:
                     try:
                         out[x] = pd.to_numeric(out[x])
                     except:
-                        out[x] = out[x].fillna("None")
+                        out[x] = out[x].where(pd.notna(out[x]), None)
             else:
-                out = out.fillna("None")
+                out = out.where(pd.notna(out), None)
         return out
 
 
@@ -2605,18 +2623,26 @@ def _normalize_indices(
 
 def return_none_call(call: str) -> str:
     """Return None if not present."""
-    return call.split("|")[0] if not call in ["None", ""] else "None"
+    return call.split("|")[0] if not call in ["None", "", None] else None
 
 
 def clean_clone_list(clone_series: pd.Series) -> pd.Series:
-    """Replace empty clones with 'None', remove duplicates, sort consistently."""
-    clone_series = clone_series.replace("", "None")
+    """Remove empty/None clone tokens, deduplicate and sort; keep empty entries as None."""
+    clone_series = clone_series.replace("", None)
     clone_series = clone_series.str.split("|").apply(
-        lambda x: [c for c in x if c != "None"] or ["None"]
+        lambda x: (
+            [c for c in x if c not in ["None", None]]
+            if isinstance(x, list)
+            else []
+        )
     )
     clone_series = clone_series.apply(
-        lambda x: "|".join(
-            sorted(set(x), key=cmp_to_key(lambda a, b: (a > b) - (a < b)))
+        lambda x: (
+            "|".join(
+                sorted(set(x), key=cmp_to_key(lambda a, b: (a > b) - (a < b)))
+            )
+            if x
+            else None
         )
     )
     return clone_series
@@ -2626,7 +2652,8 @@ def flatten_and_count(tmp_metadata: pd.DataFrame, clonekey: str) -> pd.Series:
     """Return a Series of clone counts for all unique clones."""
     tmp = tmp_metadata[clonekey].str.split("|", expand=True).stack()
     clone_counts = tmp.value_counts()
-    clone_counts = clone_counts.drop("None", errors="ignore")
+    # Filter out None and "None" string values from the index
+    clone_counts = clone_counts[~clone_counts.index.isin([None, "None"])]
     return clone_counts
 
 
@@ -2666,7 +2693,9 @@ def assign_clone_numbers(clone_counts: pd.Series) -> dict:
             for i, clone in enumerate(clones, start=1):
                 size_dict[clone] = f"{r}_{i}"
         for i, clone in enumerate(other_clones, start=1):
-            size_dict[clone] = f"other_{i}" if clone != "None" else "None"
+            size_dict[clone] = (
+                f"other_{i}" if clone not in ["None", None] else None
+            )
     return size_dict
 
 
@@ -2680,8 +2709,10 @@ def _add_clone_info(tmp_metadata: pd.DataFrame, clonekey: str) -> pd.DataFrame:
     tmp_metadata[clonekey + "_rank"] = (
         tmp_metadata[clonekey]
         .apply(
-            lambda entry: "|".join(
-                size_dict.get(p, p) for p in entry.split("|")
+            lambda entry: (
+                "|".join(size_dict.get(p, p) for p in entry.split("|"))
+                if isinstance(entry, str)
+                else None
             )
         )
         .astype("category")

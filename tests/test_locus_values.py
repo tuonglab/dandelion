@@ -1,7 +1,29 @@
+import pandas as pd
 import polars as pl
 
 from dandelion.polars.io import read_10x_vdj as read_10x_vdj_polars
 from dandelion.base.io import read_10x_vdj
+from dandelion.utilities._utilities import format_locus
+
+
+def test_format_locus_handles_missing_values():
+    """format_locus should not crash when VDJ locus/productive fields are missing."""
+    metadata = pd.DataFrame(
+        {
+            "locus_VDJ": [None],
+            "locus_VJ": ["TRA"],
+            "isotype_status": [None],
+            "productive_VDJ": [None],
+            "productive_VJ": ["T"],
+            "v_call_VDJ": [None],
+            "j_call_VDJ": [None],
+            "d_call_VDJ": [None],
+        },
+        index=["cell1"],
+    )
+
+    out = format_locus(metadata, vcall="v_call", productive_only=True)
+    assert out["cell1"] == "Orphan TRA"
 
 
 def test_locus_values_before_filter(annotation_10x_mouse):

@@ -500,7 +500,7 @@ def gini_indices(
     clonekey = clone_key if clone_key is not None else "clone_id"
 
     # --- Prepare data and filter groups
-    data, _, groups, min_size = _prepare_diversity_groups(
+    data, metadata_df, groups, min_size = _prepare_diversity_groups(
         data, group_by, min_size
     )
     # filter the vdj object as well
@@ -508,14 +508,18 @@ def gini_indices(
         # convert to eager first
         original_backend = data._backend
         original_lazy = data._lazy
-        if original_backend == "polars":
+        if original_backend == "polars" or isinstance(
+            data._metadata, (pl.DataFrame, pl.LazyFrame)
+        ):
             data.to_pandas()
-        data = data[data._metadata[group_by].isin(groups)]
+        valid_cells = metadata_df.index.tolist()
+        data = data[valid_cells]
 
     res1, res2, cluster_raw, vertex_raw = {}, {}, {}, {}
     for g in groups:
         # clone size distribution
-        ddl_dat = data[data._metadata[group_by] == g].copy()
+        group_cells = metadata_df.index[metadata_df[group_by] == g].tolist()
+        ddl_dat = data[group_cells].copy()
 
         # --- parallel bootstrap
         iterator = tqdm(
@@ -1151,5 +1155,13 @@ def _meta_conversion_helper(vdj: DandelionPolars) -> pd.DataFrame:
         metadata = metadata.to_pandas()
     elif isinstance(metadata, pl.LazyFrame):
         metadata = metadata.collect(engine="streaming").to_pandas()
-    metadata.set_index("cell_id", inplace=True)
+    if not isinstance(metadata, pd.DataFrame):
+        metadata = pd.DataFrame(metadata)
+    metadata = metadata.copy()
+    if "cell_id" in metadata.columns:
+        metadata["cell_id"] = metadata["cell_id"].astype(str)
+        metadata.set_index("cell_id", inplace=True)
+    else:
+        metadata.index = metadata.index.astype(str)
+        metadata.index.name = "cell_id"
     return metadata

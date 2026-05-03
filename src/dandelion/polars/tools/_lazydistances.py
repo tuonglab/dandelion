@@ -37,6 +37,25 @@ from dandelion.utilities._utilities import (
 )
 
 
+def _resolve_distance_store_path(zarr_path: str | None) -> str:
+    """Resolve output Zarr store path for distance matrix.
+
+    Rules:
+    - If ``zarr_path`` is ``None``, create a temporary directory and store at
+        ``<tmp>/distance_matrix.zarr``.
+    - If ``zarr_path`` ends with ``.zarr``, use it directly as the store path.
+    - Otherwise, treat ``zarr_path`` as a parent directory and create
+        ``<zarr_path>/distance_matrix.zarr``.
+    """
+    if zarr_path is None:
+        return os.path.join(tempfile.mkdtemp(), "distance_matrix.zarr")
+
+    base = os.fspath(zarr_path).rstrip("/\\")
+    if base.lower().endswith(".zarr"):
+        return base
+    return os.path.join(base, "distance_matrix.zarr")
+
+
 def calculate_distance_matrix_zarr(
     dat_seq: pl.DataFrame,
     metric: Metric,
@@ -174,18 +193,16 @@ def calculate_distance_matrix_zarr(
             f"Auto-determined chunk size: {chunk_size} (for {m} sequences)"
         )
 
-    if verbose:
-        logg.info(f"\nCreated Zarr array at: {zarr_path}")
-
     # Setup Dask client
     client = _setup_dask_client(n_cpus=n_cpus, memory_limit_gb=memory_limit_gb)
 
-    # Resolve output path, support alias `zarr_path`
-    if zarr_path is None:
-        zarr_path = zarr_path if zarr_path is not None else tempfile.mkdtemp()
+    # Resolve output path
+    zarr_store_path = _resolve_distance_store_path(zarr_path)
+    if verbose:
+        logg.info(f"\nCreated Zarr array at: {zarr_store_path}")
 
     comp = BloscCodec(cname="zstd", clevel=3, shuffle="bitshuffle")
-    store = LocalStore(zarr_path + "/distance_matrix.zarr")
+    store = LocalStore(zarr_store_path)
     root = open_zarr_group(store, mode="w")
     z_array = create_zarr_array(
         root,
@@ -237,7 +254,7 @@ def calculate_distance_matrix_zarr(
         # Process chunks using client.submit for better efficiency with large numbers of tasks
         # This avoids nested delayed objects which cause graph bloat
         futures = []
-        zarr_path_str = zarr_path + "/distance_matrix.zarr"
+        zarr_path_str = zarr_store_path
 
         for i in range(len(chunk_sizes)):
             for j in range(i, len(chunk_sizes)):

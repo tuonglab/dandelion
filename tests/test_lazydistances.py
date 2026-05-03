@@ -379,3 +379,6 @@ def test_lazydistances_zarr_path_created(sample_sequence_data):
         # Check that zarr array was created
         assert hasattr(result, "shape")
         assert result.shape == (10, 10)
+        # If user passes a .zarr path directly, do not nest another .zarr store.
+        assert zarr_path.exists()
+        assert not (zarr_path / "distance_matrix.zarr").exists()

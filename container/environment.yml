@@ -9,6 +9,7 @@ dependencies:
   - scikit-learn
   - statsmodels
   - numba
+  - dask
   - polars
   - pyarrow
   - python-igraph

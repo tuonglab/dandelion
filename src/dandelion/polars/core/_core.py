@@ -3282,7 +3282,8 @@ class DandelionPolars:
                     )
 
                 # Create destination dataset and copy
-                dst = arrays_grp.create_dataset(
+                dst = create_zarr_dataset(
+                    arrays_grp,
                     "distances",
                     shape=src_arr.shape,
                     dtype=src_arr.dtype,
@@ -3304,7 +3305,8 @@ class DandelionPolars:
                     pass
             elif isinstance(arr, csr_matrix):
                 # Save CSR matrix as separate arrays
-                arrays_grp.create_dataset(
+                create_zarr_dataset(
+                    arrays_grp,
                     name="distances_data",
                     shape=arr.data.shape,
                     dtype=arr.data.dtype,
@@ -3313,7 +3315,8 @@ class DandelionPolars:
                     overwrite=True,
                     compressors=[comp] if compress else None,
                 )
-                arrays_grp.create_dataset(
+                create_zarr_dataset(
+                    arrays_grp,
                     "distances_indices",
                     shape=arr.indices.shape,
                     dtype=arr.indices.dtype,
@@ -3322,7 +3325,8 @@ class DandelionPolars:
                     overwrite=True,
                     compressors=[comp] if compress else None,
                 )
-                arrays_grp.create_dataset(
+                create_zarr_dataset(
+                    arrays_grp,
                     "distances_indptr",
                     shape=arr.indptr.shape,
                     dtype=arr.indptr.dtype,
@@ -3331,7 +3335,8 @@ class DandelionPolars:
                     overwrite=True,
                     compressors=[comp] if compress else None,
                 )
-                arrays_grp.create_dataset(
+                create_zarr_dataset(
+                    arrays_grp,
                     "distances_shape",
                     shape=(len(arr.shape),),
                     dtype=np.int64,
@@ -3350,7 +3355,8 @@ class DandelionPolars:
                     # Skip writing for external zarr mode
                     pass
                 else:
-                    arrays_grp.create_dataset(
+                    create_zarr_dataset(
+                        arrays_grp,
                         "distances",
                         shape=arr.shape,
                         dtype=arr.dtype,
@@ -3380,7 +3386,8 @@ class DandelionPolars:
                         )
                     tmp_h5.seek(0)
                     arr = np.frombuffer(tmp_h5.read(), dtype=np.uint8)
-                    graph_grp.create_dataset(
+                    create_zarr_dataset(
+                        graph_grp,
                         f"graph_{i}.h5",
                         shape=arr.shape,
                         dtype=arr.dtype,
@@ -3398,7 +3405,8 @@ class DandelionPolars:
                             hf.create_dataset(k, data=v)
                     tmp_h5.seek(0)
                     arr = np.frombuffer(tmp_h5.read(), dtype=np.uint8)
-                    layout_grp.create_dataset(
+                    create_zarr_dataset(
+                        layout_grp,
                         f"layout_{i}.h5",
                         shape=arr.shape,
                         dtype=arr.dtype,
@@ -3418,7 +3426,8 @@ class DandelionPolars:
                         hf.create_dataset(k, data=v)
                 tmp_h5.seek(0)
                 arr = np.frombuffer(tmp_h5.read(), dtype=np.uint8)
-                germline_grp.create_dataset(
+                create_zarr_dataset(
+                    germline_grp,
                     "germline.h5",
                     shape=arr.shape,
                     dtype=arr.dtype,
@@ -3466,7 +3475,17 @@ class DandelionPolars:
         out_fasta = folder / f"{filename_prefix}_contig.fasta"
         out_anno_path = folder / f"{filename_prefix}_contig_annotations.csv"
 
-        seqs = self._data[sequence_key].to_dict()
+        # Handle both Polars LazyFrame and DataFrame, as well as pandas DataFrame
+        if isinstance(self._data, pl.LazyFrame):
+            data_df = self._data.collect()
+        elif isinstance(self._data, pl.DataFrame):
+            data_df = self._data
+        else:
+            # pandas DataFrame - convert to Polars
+            data_df = pl.from_pandas(self._data)
+        seqs = {}
+        for i, seq in enumerate(data_df[sequence_key].to_list()):
+            seqs[f"seq_{i}"] = seq
         write_fasta(seqs, out_fasta=out_fasta)
 
         # also create the contig_annotations.csv
@@ -3522,10 +3541,10 @@ class DandelionPolars:
             "TRUE": "True",
             "FALSE": "False",
         }
-        for _, r in self._data.iterrows():
+        for r in data_df.iter_rows(named=True):
             info = []
             for v in column_map.values():
-                if v in r.index:
+                if v in r:
                     info.append(r[v])
                 elif v in ["is_cell", "high_confidence"]:
                     info.append("True")
@@ -3648,8 +3667,10 @@ def load_polars(
 
         if "duplicate_count" in df.collect_schema():
             if "umi_count" not in df.collect_schema():
-                df = df.rename({"duplicate_count": "umi_count"}).collect(
-                    engine="streaming"
+                df = (
+                    df.rename({"duplicate_count": "umi_count"})
+                    .collect(engine="streaming")
+                    .lazy()
                 )
 
         if as_pandas:

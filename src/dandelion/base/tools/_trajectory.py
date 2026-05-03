@@ -24,10 +24,13 @@ def _filter_cells(
     offending cells or masks the matched values with a uniform value of `col+"_missing"`.
     """
     # find filter pattern hits in our column of interest
-    mask = adata.obs[col].str.contains(filter_pattern)
+    mask = (
+        adata.obs[col].astype("string").str.contains(filter_pattern, na=False)
+    )
+    mask_arr = mask.to_numpy(dtype=bool)
     if remove_missing:
         # remove the cells
-        adata = adata[~mask].copy()
+        adata = adata[~mask_arr].copy()
     else:
         # uniformly mask the filter pattern hits
         adata.obs.loc[mask, col] = col + "_missing"
@@ -108,17 +111,31 @@ def setup_vdj_pseudobulk(
     # keep ony relevant cells (ones with a pair of chains) based on productive column
     if mode is not None:
         if productive_vdj:
-            adata = adata[
-                adata.obs["productive_" + mode + "_VDJ"].str.startswith("T")
-            ].copy()
+            mask_vdj = (
+                adata.obs["productive_" + mode + "_VDJ"]
+                .astype("string")
+                .str.startswith("T", na=False)
+                .to_numpy(dtype=bool)
+            )
+            adata = adata[mask_vdj].copy()
         if productive_vj:
-            adata = adata[
-                adata.obs["productive_" + mode + "_VJ"].str.startswith("T")
-            ].copy()
+            mask_vj = (
+                adata.obs["productive_" + mode + "_VJ"]
+                .astype("string")
+                .str.startswith("T", na=False)
+                .to_numpy(dtype=bool)
+            )
+            adata = adata[mask_vj].copy()
     else:
         if productive_cols is not None:
             for col in productive_cols:
-                adata = adata[adata.obs[col].str.startswith("T")].copy()
+                mask_col = (
+                    adata.obs[col]
+                    .astype("string")
+                    .str.startswith("T", na=False)
+                    .to_numpy(dtype=bool)
+                )
+                adata = adata[mask_col].copy()
 
     if any([re.search("_VDJ_main|_VJ_main", i) for i in adata.obs]):
         if check_vdj_mapping is not None:

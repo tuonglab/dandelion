@@ -34,7 +34,6 @@ from dandelion.utilities._utilities import (
     STRIPALLELENUM,
     EMPTIES,
     is_categorical,
-    type_check,
     Tree,
 )
 from dandelion.utilities._distances import (
@@ -56,7 +55,7 @@ def find_clones(
     by_alleles: bool = False,
     key_added: str | None = None,
     recalculate_length: bool = True,
-    store_distances: bool = False,
+    store_distances: bool = True,
     verbose: bool = True,
 ) -> DandelionPolars:
     """
@@ -94,7 +93,7 @@ def find_clones(
         whether or not to re-calculate junction length, rather than rely on parsed assignment (which occasionally is
         wrong). Default is True
     store_distances : bool, optional
-        whether or not to store the distance matrix as a sparse matrix in `vdj.distances`. Default is False.
+        whether or not to store the distance matrix as a sparse matrix in `vdj.distances`. Default is True.
     verbose : bool, optional
         whether or not to print progress.
 
@@ -845,22 +844,18 @@ def _group_sequences(
                 ]
             )
 
-    # Handle length calculation
-    if same_length:
-        length_col = key + "_length"
-        if length_col not in df.collect_schema():
-            recalculate_length = True
-
-        # Calculate or use existing length
-        if recalculate_length:
-            df = df.with_columns(
-                pl.when(pl.col(key).is_null())
-                .then(pl.lit(0))
-                .otherwise(pl.col(key).cast(pl.String).str.len_bytes())
-                .alias(f"_{key}_length")
-            )
-        else:
-            df = df.with_columns(pl.col(length_col).alias(f"_{key}_length"))
+    # Prepare length column independently of same_vj/same_length.
+    # Downstream code expects `_{key}_length` to exist for aggregation.
+    length_col = key + "_length"
+    if recalculate_length or (length_col not in df.collect_schema()):
+        df = df.with_columns(
+            pl.when(pl.col(key).is_null())
+            .then(pl.lit(0))
+            .otherwise(pl.col(key).cast(pl.String).str.len_bytes())
+            .alias(f"_{key}_length")
+        )
+    else:
+        df = df.with_columns(pl.col(length_col).alias(f"_{key}_length"))
 
     # Filter out rows with null or empty junction (empty strings can't be clustered by distance)
     filter_conditions = [
@@ -1118,19 +1113,18 @@ def transfer(
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
         for x in vdj._metadata.columns:
+            assigned = False
             if x not in recipient.obs.columns:
-                recipient.obs[x] = pd.Series(vdj._metadata[x])
+                recipient.obs[x] = pd.Series(vdj._metadata[x]).reindex(
+                    recipient.obs_names
+                )
+                assigned = True
             elif overwrite is True:
-                recipient.obs[x] = pd.Series(vdj._metadata[x])
-            if type_check(vdj._metadata, x):
-                col = recipient.obs[x]
-                if (
-                    hasattr(col, "cat")
-                    and "No_contig" not in col.cat.categories
-                ):
-                    recipient.obs[x] = col.cat.add_categories("No_contig")
-                recipient.obs[x] = recipient.obs[x].replace(np.nan, "No_contig")
-            if recipient.obs[x].dtype == "bool":
+                recipient.obs[x] = pd.Series(vdj._metadata[x]).reindex(
+                    recipient.obs_names
+                )
+                assigned = True
+            if assigned and recipient.obs[x].dtype == "bool":
                 recipient.obs[x] = recipient.obs[x].astype(str)
 
         # explicit overwrite list/string handling (matches original)
@@ -1138,17 +1132,11 @@ def transfer(
             if not isinstance(overwrite, list):
                 overwrite = [overwrite]
             for ow in overwrite:
-                recipient.obs[ow] = pd.Series(vdj._metadata[ow])
-                if type_check(vdj._metadata, ow):
-                    col = recipient.obs[ow]
-                    if (
-                        hasattr(col, "cat")
-                        and "No_contig" not in col.cat.categories
-                    ):
-                        recipient.obs[ow] = col.cat.add_categories("No_contig")
-                    recipient.obs[ow] = recipient.obs[ow].replace(
-                        np.nan, "No_contig"
-                    )
+                recipient.obs[ow] = pd.Series(vdj._metadata[ow]).reindex(
+                    recipient.obs_names
+                )
+                if recipient.obs[ow].dtype == "bool":
+                    recipient.obs[ow] = recipient.obs[ow].astype(str)
 
     # also check that all the cells in dandelion are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)
@@ -1212,6 +1200,16 @@ def transfer(
         main_idx = 1 if main_view == "expanded" else 0
         if main_idx not in graph_connectivities:
             main_idx = next(iter(graph_connectivities.keys()))
+
+    if main_idx not in graph_connectivities:
+        if main_view == "full":
+            raise ValueError(
+                "main_view='full' requested but `vdj.distances` is not available. "
+                "Run clone finding with `store_distances=True` first."
+            )
+        raise ValueError(
+            "No VDJ graph/distance information available to transfer."
+        )
 
     if obsp:
         # --- 4) Update recipient.obsp (active view only) ---
@@ -2242,8 +2240,8 @@ def vj_usage_pca(
 
 
 def vdj_sample(
-    vdj: DandelionPolars,
-    size: int,
+    vdj_data: DandelionPolars,
+    size: int | None = None,
     adata: AnnData | MuData | None = None,
     p: list[float] | np.ndarray[float] | None = None,
     force_replace: bool = False,
@@ -2254,7 +2252,7 @@ def vdj_sample(
 
     Parameters
     ----------
-    vdj : Dandelion
+    vdj_data : DandelionPolars
         Dandelion object containing VDJ data.
     size : int
         Desired size for resampling.
@@ -2272,6 +2270,11 @@ def vdj_sample(
     tuple[DandelionPolars, AnnData] | DandelionPolars
         Resampled Dandelion and AnnData objects if adata is provided, otherwise only Dandelion.
     """
+    if size is None:
+        raise TypeError("vdj_sample requires `size` to be provided.")
+
+    vdj = vdj_data
+
     logg.info("Resampling to {} cells.".format(str(size)))
 
     rng = np.random.default_rng(random_state)
@@ -2283,8 +2286,21 @@ def vdj_sample(
 
         # Normalize probabilities if provided
         if p is not None:
-            p_array = np.asarray(p)
-            p_array = p_array / p_array.sum()
+            p_array = np.asarray(p, dtype=float)
+            if p_array.ndim != 1 or p_array.shape[0] != n_cells:
+                raise ValueError(
+                    "`p` must be a 1D array-like with one value per cell in metadata."
+                )
+            # Treat missing/non-finite probabilities as zero weight.
+            p_array[~np.isfinite(p_array)] = 0.0
+            if np.any(p_array < 0):
+                raise ValueError("`p` must not contain negative probabilities.")
+            p_sum = p_array.sum()
+            if p_sum <= 0:
+                raise ValueError(
+                    "`p` sums to 0 after cleaning missing values; provide at least one positive probability."
+                )
+            p_array = p_array / p_sum
         else:
             p_array = None
 

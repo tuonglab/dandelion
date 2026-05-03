@@ -231,7 +231,7 @@ def generate_network(
         if sample is not None:
             if adata is not None:
                 vdj, adata = vdj_sample(
-                    vdj=vdj,
+                    vdj_data=vdj,
                     size=sample,
                     adata=adata,
                     force_replace=force_replace,
@@ -239,7 +239,7 @@ def generate_network(
                 )
             else:
                 vdj = vdj_sample(
-                    vdj=vdj,
+                    vdj_data=vdj,
                     size=sample,
                     force_replace=force_replace,
                     random_state=random_state,
@@ -361,23 +361,22 @@ def generate_network(
             cluster_dist = {}
             overlap = []
             for i in vdj._metadata.index:
-                if len(vdj._metadata.loc[i, str(clone_key)].split("|")) > 1:
+                cx_ = vdj._metadata.loc[i, str(clone_key)]
+                if cx_ is None or cx_ == "None":
+                    continue
+                if len(cx_.split("|")) > 1:
                     overlap.append(
                         [
                             c
-                            for c in vdj._metadata.loc[i, str(clone_key)].split(
-                                "|"
-                            )
-                            if c != "None"
+                            for c in cx_.split("|")
+                            if c is not None and c != "None"
                         ]
                     )
-                    for c in vdj._metadata.loc[i, str(clone_key)].split("|"):
-                        if c != "None":
+                    for c in cx_.split("|"):
+                        if c is not None and c != "None":
                             tmp_clusterdist[c][i].value = 1
                 else:
-                    cx = vdj._metadata.loc[i, str(clone_key)]
-                    if cx != "None":
-                        tmp_clusterdist[cx][i].value = 1
+                    tmp_clusterdist[cx_][i].value = 1
             tmp_clusterdist2 = {}
             for x in tmp_clusterdist:
                 tmp_clusterdist2[x] = list(tmp_clusterdist[x])
@@ -457,13 +456,17 @@ def generate_network(
                     edge_list[c].loc[edge_list[c]["weight"] < 0, "weight"] = 0
 
             clone_ref = dict(vdj._metadata[clone_key])
-            clone_ref = {k: r for k, r in clone_ref.items() if r != "None"}
+            clone_ref = {
+                k: r
+                for k, r in clone_ref.items()
+                if r is not None and r != "None"
+            }
             tmp_clone_tree = Tree()
             for x in vdj._metadata.index:
                 if x in clone_ref:
                     if "|" in clone_ref[x]:
                         for x_ in clone_ref[x].split("|"):
-                            if x_ != "None":
+                            if x_ is not None and x_ != "None":
                                 tmp_clone_tree[x_][x].value = 1
                     else:
                         tmp_clone_tree[clone_ref[x]][x].value = 1
