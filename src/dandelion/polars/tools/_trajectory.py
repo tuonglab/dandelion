@@ -184,9 +184,7 @@ def _filter_cells(
     """
     # find filter pattern hits in our column of interest
     mask = (
-        adata.obs[col]
-        .astype("string")
-        .str.contains(filter_pattern, na=False)
+        adata.obs[col].astype("string").str.contains(filter_pattern, na=False)
     )
     mask_arr = mask.to_numpy(dtype=bool)
     if remove_missing:
