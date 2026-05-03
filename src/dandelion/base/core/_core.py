@@ -1523,7 +1523,9 @@ class Dandelion:
                                     (
                                         "|".join(
                                             [
-                                                "|".join(list(set(yy.split(","))))
+                                                "|".join(
+                                                    list(set(yy.split(",")))
+                                                )
                                                 for yy in list(
                                                     {
                                                         re.sub(

@@ -1382,13 +1382,21 @@ def format_locus(
             loc1 = {
                 e: l
                 for e, l in enumerate(
-                    [ll for ll, p in zip(locus1_split, prod1_split) if p in TRUES]
+                    [
+                        ll
+                        for ll, p in zip(locus1_split, prod1_split)
+                        if p in TRUES
+                    ]
                 )
             }
             loc2 = {
                 e: l
                 for e, l in enumerate(
-                    [ll for ll, p in zip(locus2_split, prod2_split) if p in TRUES]
+                    [
+                        ll
+                        for ll, p in zip(locus2_split, prod2_split)
+                        if p in TRUES
+                    ]
                 )
             }
         else:
