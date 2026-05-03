@@ -887,13 +887,24 @@ def parse_annotation(data: pd.DataFrame) -> defaultdict:
     for _, row in data.iterrows():
         contig = Contig(row, swap_dict).contig["sequence_id"]
         out[contig] = Contig(row, swap_dict).contig
-        if out[contig]["locus"] in ["None", "none", None, np.nan, ""]:
+        if pd.isna(out[contig]["locus"]) or out[contig]["locus"] in [
+            "None",
+            "none",
+            "",
+        ]:
             calls = []
             for call in ["v_call", "d_call", "j_call", "c_call"]:
-                if out[contig][call] not in ["None", "none", None, np.nan, ""]:
+                if pd.notna(out[contig][call]) and out[contig][call] not in [
+                    "None",
+                    "none",
+                    "",
+                ]:
                     calls.append(out[contig][call])
             out[contig]["locus"] = "|".join(list({str(c)[:3] for c in calls}))
-        if out[contig]["locus"] == "None" or out[contig]["locus"] == "":
+        if pd.isna(out[contig]["locus"]) or out[contig]["locus"] in [
+            "None",
+            "",
+        ]:
             out[contig]["locus"] = "|"
     return out
 

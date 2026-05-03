@@ -2644,8 +2644,8 @@ def flatten_and_count(tmp_metadata: pd.DataFrame, clonekey: str) -> pd.Series:
     """Return a Series of clone counts for all unique clones."""
     tmp = tmp_metadata[clonekey].str.split("|", expand=True).stack()
     clone_counts = tmp.value_counts()
-    clone_counts = clone_counts.drop("None", errors="ignore")
-    clone_counts = clone_counts.drop(None, errors="ignore")
+    # Filter out None and "None" string values from the index
+    clone_counts = clone_counts[~clone_counts.index.isin([None, "None"])]
     return clone_counts
 
 
