@@ -19,6 +19,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from itertools import product, cycle
 from matplotlib.axes import Axes
+from matplotlib.collections import PatchCollection
 from matplotlib.figure import Figure
 from nxviz import annotate
 
@@ -961,6 +962,104 @@ def productive_ratio(
     plt.legend(handles=legend, **legend_kwargs)
 
 
+def _pack(hierarchy: list[dict], target_enc, packer: str) -> list:
+    """Dispatch circle packing to circlify or packcircles."""
+    if packer == "circlify":
+        return circlify.circlify(
+            hierarchy, show_enclosure=False, target_enclosure=target_enc
+        )
+    if packer == "packcircles":
+        return _pack_with_packcircles(hierarchy, target_enc)
+    raise ValueError(f"Unknown packer '{packer}'. Choose 'circlify' or 'packcircles'.")
+
+
+def _pack_with_packcircles(hierarchy: list[dict], target_enc) -> list:
+    """Recursive circle packer using packcircles for leaf levels.
+
+    Groups (nodes with children) are positioned with circlify (small N, fast).
+    Leaves are packed with packcircles, which uses an iterative approach that
+    scales much better than circlify's O(N²) sequential algorithm.
+    """
+    import math
+    from types import SimpleNamespace
+
+    try:
+        import packcircles as pc
+    except ImportError:
+        raise ImportError(
+            "packcircles is required for packer='packcircles'. "
+            "Install it with: pip install packcircles"
+        )
+
+    all_circles: list = []
+
+    def _do_pack(nodes: list[dict], enc_x: float, enc_y: float, enc_r: float, level: int) -> None:
+        if not nodes:
+            return
+
+        has_children = any("children" in n for n in nodes)
+
+        if not has_children:
+            # Leaf level — use packcircles.
+            # Sort descending so largest clones match packcircles' internal ordering.
+            sorted_nodes = sorted(nodes, key=lambda n: n["datum"], reverse=True)
+            radii = [math.sqrt(n["datum"]) for n in sorted_nodes]
+            packed = list(pc.pack(radii))
+
+            if not packed:
+                return
+
+            # Use area-weighted centroid (r² weights) so the centre of mass
+            # sits at the origin rather than the bounding-box midpoint.
+            # This produces a noticeably rounder overall shape compared to
+            # bounding-box centering, because large circles pull the centre
+            # toward where most of the area actually is.
+            total_w = sum(pr * pr for px, py, pr in packed)
+            if total_w == 0:
+                return
+            w_cx = sum(pr * pr * px for px, py, pr in packed) / total_w
+            w_cy = sum(pr * pr * py for px, py, pr in packed) / total_w
+
+            max_reach = max(
+                math.sqrt((px - w_cx) ** 2 + (py - w_cy) ** 2) + pr
+                for px, py, pr in packed
+            )
+            if max_reach == 0:
+                return
+            scale = enc_r / max_reach
+
+            for (px, py, pr), node in zip(packed, sorted_nodes):
+                all_circles.append(
+                    SimpleNamespace(
+                        x=enc_x + (px - w_cx) * scale,
+                        y=enc_y + (py - w_cy) * scale,
+                        r=pr * scale,
+                        ex=node,
+                    )
+                )
+        else:
+            # Group level — circlify positions the group circles (small N, fast).
+            stripped = [{"id": n["id"], "datum": n["datum"]} for n in nodes]
+            group_enc = circlify.Circle(enc_x, enc_y, enc_r)
+            group_circles = circlify.circlify(
+                stripped, show_enclosure=False, target_enclosure=group_enc
+            )
+            node_by_id = {n["id"]: n for n in nodes}
+            for gc in group_circles:
+                node = node_by_id.get(gc.ex.get("id", ""))
+                if node is None:
+                    continue
+                # Use the original node dict as ex so color_group_lookup matches.
+                all_circles.append(
+                    SimpleNamespace(x=gc.x, y=gc.y, r=gc.r, ex=node)
+                )
+                if "children" in node:
+                    _do_pack(node["children"], gc.x, gc.y, gc.r, level + 1)
+
+    _do_pack(hierarchy, target_enc.x, target_enc.y, target_enc.r, 1)
+    return all_circles
+
+
 def clone_circlepackplot(
     data: AnnData | DandelionPolars,
     group_by: str | list[str],
@@ -986,6 +1085,9 @@ def clone_circlepackplot(
     scale_factor: float | None = None,
     outer_ring_color: str | None = None,
     show_enclosure_label: bool = True,
+    max_clones_per_group: int | None = None,
+    aggregate_by_size: bool = False,
+    packer: str = "circlify",
 ) -> tuple[Figure, Axes] | tuple[Figure, list[Axes]]:
     """
     A bubble plot to visualise clone sizes within groups using circle packing.
@@ -1259,14 +1361,32 @@ def clone_circlepackplot(
         if not levels:
             # Leaves inherit the deepest group_by level's colour.
             clone_sizes = df[clone_].value_counts()
+            # Re-apply min_clone_size per group: a clone whose cells are spread
+            # across groups can pass the global filter (e.g. 1 cell in each of
+            # 2 samples = global size 2) yet show up with size 1 inside a group.
+            clone_sizes = clone_sizes[clone_sizes >= min_clone_size]
+            if max_clones_per_group is not None and len(clone_sizes) > max_clones_per_group:
+                clone_sizes = clone_sizes.head(max_clones_per_group)
             leaf_info: tuple[int, str] = (
                 parent_info if parent_info is not None else (0, "")
             )
             result = []
-            for cid, cnt in clone_sizes.items():
-                node: dict = {"id": str(cid), "datum": int(cnt)}
-                color_group_lookup[id(node)] = leaf_info
-                result.append(node)
+            if aggregate_by_size:
+                # One circle per distinct clone size; datum = size × count (total cells).
+                # Reduces hundreds of individual-clone circles to ~10-20 size buckets.
+                size_dist = clone_sizes.value_counts().sort_index(ascending=False)
+                for clone_size, n_clones in size_dist.items():
+                    node: dict = {
+                        "id": f"n={int(clone_size)}",
+                        "datum": int(clone_size) * int(n_clones),
+                    }
+                    color_group_lookup[id(node)] = leaf_info
+                    result.append(node)
+            else:
+                for cid, cnt in clone_sizes.items():
+                    node = {"id": str(cid), "datum": int(cnt)}
+                    color_group_lookup[id(node)] = leaf_info
+                    result.append(node)
             return result
         current, rest = levels[0], levels[1:]
         result = []
@@ -1285,10 +1405,16 @@ def clone_circlepackplot(
 
     def _render_circles_on_ax(
         ax: Axes,
-        circles,
+        circles: list,
         lookup: dict[int, tuple[int, str]],
         count_groups: bool = True,
-    ) -> None:
+    ):
+        filled_patches = []
+        filled_facecolors = []
+        ring_patches = []
+        ring_edgecolors = []
+        texts = []
+
         for circle in circles:
             if circle.ex is None:
                 continue
@@ -1305,75 +1431,106 @@ def clone_circlepackplot(
                     if outer_ring_color is not None and level_idx == 0
                     else color
                 )
-                ax.add_patch(
-                    mpatches.Circle(
-                        (x, y),
-                        r,
-                        fill=False,
-                        edgecolor=_ring_color,
-                        linewidth=2,
-                    )
-                )
+                ring_patches.append(mpatches.Circle((x, y), r))
+                ring_edgecolors.append(_ring_color)
                 if show_group_labels:
-                    ax.text(
-                        x,
-                        y + r,
-                        label,
-                        ha="center",
-                        va="bottom",
-                        fontsize=9,
-                        fontweight="bold",
-                        color=_ring_color,
+                    texts.append(
+                        (
+                            x,
+                            y + r,
+                            label,
+                            dict(
+                                ha="center",
+                                va="bottom",
+                                fontsize=9,
+                                fontweight="bold",
+                                color=_ring_color,
+                            ),
+                        )
                     )
                 if show_count_labels and count_groups and show_enclosure_label:
-                    ax.text(
-                        x,
-                        y - r - 0.05,
-                        str(circle.ex["datum"]),
-                        ha="center",
-                        va="top",
-                        fontsize=7,
-                        color=_ring_color,
+                    texts.append(
+                        (
+                            x,
+                            y - r - 0.05,
+                            str(circle.ex["datum"]),
+                            dict(
+                                ha="center",
+                                va="top",
+                                fontsize=7,
+                                color=_ring_color,
+                            ),
+                        )
                     )
             else:
-                ax.add_patch(
-                    mpatches.Circle(
-                        (x, y),
-                        r,
-                        alpha=alpha,
-                        facecolor=color,
-                        edgecolor="white",
-                        linewidth=0.5,
-                    )
+                filled_patches.append(mpatches.Circle((x, y), r))
+                filled_facecolors.append(color)
+                # For aggregate_by_size nodes (id="n=<size>"), show "size (total_cells)"
+                # so the reader can see both the clone size and the total cell count.
+                _is_agg = label.startswith("n=") and label[2:].isdigit()
+                _count_str = (
+                    f"{label[2:]}\n({circle.ex['datum']})" if _is_agg
+                    else str(circle.ex["datum"])
                 )
                 if show_clone_labels and show_count_labels:
-                    ax.text(
-                        x,
-                        y + r * 0.25,
-                        label,
-                        ha="center",
-                        va="center",
-                        fontsize=7,
+                    texts.append(
+                        (
+                            x,
+                            y + r * 0.25,
+                            label,
+                            dict(ha="center", va="center", fontsize=7),
+                        )
                     )
-                    ax.text(
-                        x,
-                        y - r * 0.25,
-                        str(circle.ex["datum"]),
-                        ha="center",
-                        va="center",
-                        fontsize=7,
+                    texts.append(
+                        (
+                            x,
+                            y - r * 0.25,
+                            _count_str,
+                            dict(ha="center", va="center", fontsize=7),
+                        )
                     )
                 elif show_clone_labels:
-                    ax.text(x, y, label, ha="center", va="center", fontsize=7)
-                elif show_count_labels:
-                    ax.text(
-                        x,
-                        y,
-                        str(circle.ex["datum"]),
-                        ha="center",
-                        va="center",
-                        fontsize=7,
+                    texts.append(
+                        (
+                            x,
+                            y,
+                            label,
+                            dict(ha="center", va="center", fontsize=7),
+                        )
                     )
+                elif show_count_labels:
+                    texts.append(
+                        (
+                            x,
+                            y,
+                            _count_str,
+                            dict(ha="center", va="center", fontsize=7),
+                        )
+                    )
+
+        if filled_patches:
+            pc = PatchCollection(
+                filled_patches,
+                facecolors=filled_facecolors,
+                edgecolors="white",
+                linewidths=0.5,
+                alpha=alpha,
+                zorder=1,
+            )
+            ax.add_collection(pc)
+
+        if ring_patches:
+            rc = PatchCollection(
+                ring_patches,
+                facecolors="none",
+                edgecolors=ring_edgecolors,
+                linewidths=2,
+                zorder=2,
+            )
+            ax.add_collection(rc)
+
+        for tx, ty, ts, kw in texts:
+            ax.text(tx, ty, ts, **kw)
 
     def _set_ax_limits(ax: Axes, circles) -> None:
         xs = [c.x for c in circles if c.ex is not None]
@@ -1423,6 +1580,7 @@ def clone_circlepackplot(
         return handles
 
     if as_subplots:
+        _top_col_str = data_[group_by_cols[0]].astype(str)
         top_groups = level_ordered_vals[0]
         n_subplots = len(top_groups)
         _n_col = (
@@ -1435,7 +1593,7 @@ def clone_circlepackplot(
         # Pre-build all sub-hierarchies so totals are available for scaling
         _sub_builds: list[tuple[str, list[dict], dict]] = []
         for grp_val in top_groups:
-            sub_data = data_[data_[group_by_cols[0]].astype(str) == grp_val]
+            sub_data = data_[_top_col_str == grp_val]
             color_group_lookup.clear()
             sub_hier = _build_hierarchy(
                 sub_data, group_by_cols[1:], 1, (0, grp_val)
@@ -1472,11 +1630,7 @@ def clone_circlepackplot(
             else:
                 _enc_r = scale_factor if scale_factor is not None else 1.0
             _target_enc = circlify.Circle(0, 0, _enc_r)
-            sub_circles = circlify.circlify(
-                sub_hierarchy,
-                show_enclosure=False,
-                target_enclosure=_target_enc,
-            )
+            sub_circles = _pack(sub_hierarchy, _target_enc, packer)
             ax.set_aspect("equal")
             _render_circles_on_ax(ax, sub_circles, lookup, count_groups=False)
             # Outer ring for the top-level group (mirrors single-panel behaviour)
@@ -1536,11 +1690,7 @@ def clone_circlepackplot(
     else:
         _target_enc = circlify.Circle(0, 0, 1)
 
-    circles = circlify.circlify(
-        hierarchy,
-        show_enclosure=False,
-        target_enclosure=_target_enc,
-    )
+    circles = _pack(hierarchy, _target_enc, packer)
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_aspect("equal")
