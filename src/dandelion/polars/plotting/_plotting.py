@@ -970,7 +970,9 @@ def _pack(hierarchy: list[dict], target_enc, packer: str) -> list:
         )
     if packer == "packcircles":
         return _pack_with_packcircles(hierarchy, target_enc)
-    raise ValueError(f"Unknown packer '{packer}'. Choose 'circlify' or 'packcircles'.")
+    raise ValueError(
+        f"Unknown packer '{packer}'. Choose 'circlify' or 'packcircles'."
+    )
 
 
 def _pack_with_packcircles(hierarchy: list[dict], target_enc) -> list:
@@ -993,7 +995,9 @@ def _pack_with_packcircles(hierarchy: list[dict], target_enc) -> list:
 
     all_circles: list = []
 
-    def _do_pack(nodes: list[dict], enc_x: float, enc_y: float, enc_r: float, level: int) -> None:
+    def _do_pack(
+        nodes: list[dict], enc_x: float, enc_y: float, enc_r: float, level: int
+    ) -> None:
         if not nodes:
             return
 
@@ -1365,7 +1369,10 @@ def clone_circlepackplot(
             # across groups can pass the global filter (e.g. 1 cell in each of
             # 2 samples = global size 2) yet show up with size 1 inside a group.
             clone_sizes = clone_sizes[clone_sizes >= min_clone_size]
-            if max_clones_per_group is not None and len(clone_sizes) > max_clones_per_group:
+            if (
+                max_clones_per_group is not None
+                and len(clone_sizes) > max_clones_per_group
+            ):
                 clone_sizes = clone_sizes.head(max_clones_per_group)
             leaf_info: tuple[int, str] = (
                 parent_info if parent_info is not None else (0, "")
@@ -1374,7 +1381,9 @@ def clone_circlepackplot(
             if aggregate_by_size:
                 # One circle per distinct clone size; datum = size × count (total cells).
                 # Reduces hundreds of individual-clone circles to ~10-20 size buckets.
-                size_dist = clone_sizes.value_counts().sort_index(ascending=False)
+                size_dist = clone_sizes.value_counts().sort_index(
+                    ascending=False
+                )
                 for clone_size, n_clones in size_dist.items():
                     node: dict = {
                         "id": f"n={int(clone_size)}",
@@ -1469,7 +1478,8 @@ def clone_circlepackplot(
                 # so the reader can see both the clone size and the total cell count.
                 _is_agg = label.startswith("n=") and label[2:].isdigit()
                 _count_str = (
-                    f"{label[2:]}\n({circle.ex['datum']})" if _is_agg
+                    f"{label[2:]}\n({circle.ex['datum']})"
+                    if _is_agg
                     else str(circle.ex["datum"])
                 )
                 if show_clone_labels and show_count_labels:
