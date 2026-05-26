@@ -572,3 +572,116 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
         clone_circlepackplot(
             adata, group_by="isotype", as_subplots=True, min_clone_size=999
         )
+
+    # --- packer="packcircles" (skip if not installed) -----------------------
+    import importlib
+
+    if importlib.util.find_spec("packcircles") is not None:
+        fig, ax = clone_circlepackplot(
+            adata, group_by="isotype", packer="packcircles"
+        )
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        fig, axes = clone_circlepackplot(
+            adata,
+            group_by=["group2", "group3"],
+            as_subplots=True,
+            packer="packcircles",
+        )
+        assert len(axes) == 2
+
+    # Invalid packer name raises ValueError
+    with pytest.raises(ValueError, match="Unknown packer"):
+        clone_circlepackplot(adata, group_by="isotype", packer="unknown_packer")
+
+    # --- aggregate_by_size ---------------------------------------------------
+    # Basic: completes without error
+    fig, ax = clone_circlepackplot(
+        adata, group_by="isotype", aggregate_by_size=True
+    )
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+
+    fig, axes = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        aggregate_by_size=True,
+    )
+    assert isinstance(axes, list)
+    assert len(axes) == 2
+
+    # show_clone_labels=True: aggregate node labels use "n=<size>" format
+    fig, ax = clone_circlepackplot(
+        adata,
+        group_by="isotype",
+        aggregate_by_size=True,
+        show_clone_labels=True,
+    )
+    assert len(ax.texts) > 0
+    agg_labels = [t for t in ax.texts if t.get_text().startswith("n=")]
+    assert len(agg_labels) > 0
+
+    # show_count_labels=True with aggregate_by_size: texts are present
+    fig, ax = clone_circlepackplot(
+        adata,
+        group_by="isotype",
+        aggregate_by_size=True,
+        show_count_labels=True,
+    )
+    assert len(ax.texts) > 0
+
+    # aggregate_by_size + as_subplots + show_count_labels
+    fig, axes = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        aggregate_by_size=True,
+        show_count_labels=True,
+    )
+    for ax in axes:
+        assert len(ax.texts) > 0
+
+    # --- max_clones_per_group ------------------------------------------------
+    # Basic: completes without error
+    fig, ax = clone_circlepackplot(
+        adata, group_by="isotype", max_clones_per_group=2
+    )
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+
+    fig, axes = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        as_subplots=True,
+        max_clones_per_group=1,
+    )
+    assert isinstance(axes, list)
+    assert len(axes) == 2
+
+    # Limited plot has no more labels than unlimited
+    fig_limited, ax_limited = clone_circlepackplot(
+        adata,
+        group_by="isotype",
+        max_clones_per_group=1,
+        show_clone_labels=True,
+        show_count_labels=False,
+        show_group_labels=False,
+    )
+    fig_unlimited, ax_unlimited = clone_circlepackplot(
+        adata,
+        group_by="isotype",
+        show_clone_labels=True,
+        show_count_labels=False,
+        show_group_labels=False,
+    )
+    assert len(ax_limited.texts) <= len(ax_unlimited.texts)
+
+    # max_clones_per_group + aggregate_by_size combined
+    fig, ax = clone_circlepackplot(
+        adata,
+        group_by="isotype",
+        max_clones_per_group=2,
+        aggregate_by_size=True,
+    )
+    assert isinstance(ax, Axes)
