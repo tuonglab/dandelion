@@ -1182,6 +1182,30 @@ def clone_circlepackplot(
         Whether to display the total cell count below each enclosing group
         ring.  Only has an effect when ``show_count_labels=True``.
         Default ``True``.
+    max_clones_per_group : int | None, optional
+        If set, only the top-*N* largest clones within each leaf group are
+        drawn.  Clones are ranked by size (descending) and any beyond the
+        *N*-th are silently dropped before packing.  Useful for keeping
+        very large groups readable.  ``None`` (default) includes all clones
+        that pass ``min_clone_size``.
+    aggregate_by_size : bool, optional
+        When ``True``, instead of drawing one circle per clone, clones are
+        grouped into buckets by their size.  Each bucket becomes a single
+        circle whose area is proportional to ``clone_size × number_of_clones``
+        (total cells in that bucket).  The circle label is ``"n=<size>"`` and,
+        when ``show_count_labels=True``, the annotation reads
+        ``"<size>\\n(<total_cells>)"``.  This greatly reduces the number of
+        circles for samples with many small clones and gives a compact
+        overview of the size distribution.  Default ``False``.
+    packer : {"circlify", "packcircles"}, optional
+        Circle-packing backend to use.
+
+        * ``"circlify"`` (default): uses the *circlify* library, which
+          produces deterministic, aesthetically balanced layouts.
+        * ``"packcircles"``: uses the *packcircles* library, which applies
+          an iterative overlap-removal algorithm.  Leaf-level circles are
+          packed with *packcircles*; enclosing group circles are still laid
+          out by *circlify*.  Requires ``pip install packcircles``.
 
     Returns
     -------
@@ -1194,6 +1218,8 @@ def clone_circlepackplot(
     ------
     ValueError
         If no clones remain after filtering by `min_clone_size`.
+    ValueError
+        If ``packer`` is not ``"circlify"`` or ``"packcircles"``.
     """
     _is_adata = isinstance(data, AnnData)
     _adata_uns = data.uns if _is_adata else {}
