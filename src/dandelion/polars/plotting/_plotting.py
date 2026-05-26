@@ -1091,7 +1091,7 @@ def clone_circlepackplot(
     show_enclosure_label: bool = True,
     max_clones_per_group: int | None = None,
     aggregate_by_size: bool = False,
-    packer: str = "circlify",
+    packer: Literal["circlify", "packcircles"] = "circlify",
 ) -> tuple[Figure, Axes] | tuple[Figure, list[Axes]]:
     """
     A bubble plot to visualise clone sizes within groups using circle packing.
