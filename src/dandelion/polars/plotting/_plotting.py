@@ -1008,6 +1008,25 @@ def _pack_with_packcircles(hierarchy: list[dict], target_enc) -> list:
             # Sort descending so largest clones match packcircles' internal ordering.
             sorted_nodes = sorted(nodes, key=lambda n: n["datum"], reverse=True)
             radii = [math.sqrt(n["datum"]) for n in sorted_nodes]
+
+            if len(radii) < 3:
+                # packcircles requires >= 3 circles; fall back to circlify for small N.
+                fallback_data = [
+                    {"id": n["id"], "datum": n["datum"]} for n in sorted_nodes
+                ]
+                enc = circlify.Circle(enc_x, enc_y, enc_r)
+                fb = circlify.circlify(
+                    fallback_data, show_enclosure=False, target_enclosure=enc
+                )
+                id_to_node = {n["id"]: n for n in sorted_nodes}
+                for fc in fb:
+                    node = id_to_node.get(fc.ex.get("id", ""))
+                    if node is not None:
+                        all_circles.append(
+                            SimpleNamespace(x=fc.x, y=fc.y, r=fc.r, ex=node)
+                        )
+                return
+
             packed = list(pc.pack(radii))
 
             if not packed:
