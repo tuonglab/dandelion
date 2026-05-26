@@ -93,6 +93,7 @@ dependencies = [
   "rapidfuzz>3.12.1",
   "zarr>=2.18.7",
   "circlify>=0.15.0",
+  "packcircles>=0.14",
 ]
 name = "sc-dandelion"
 dynamic = ["version"]
