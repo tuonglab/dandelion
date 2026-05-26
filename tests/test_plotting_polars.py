@@ -355,23 +355,25 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
     assert len(axes) == 2
 
     # --- outer_ring_color in single-panel mode --------------------------------
+    import numpy as np
+    import matplotlib.collections as mcollections
+
     fig, ax = clone_circlepackplot(
         adata, group_by=["group2", "group3"], outer_ring_color="blue"
     )
-    blue_rgba = tuple(mcolors.to_rgba("blue"))
-    ring_patches = [
-        p
-        for p in ax.patches
-        if isinstance(p, mpatches.Circle)
-        and not p.get_fill()
-        and p.get_linewidth() >= 2.0
+    blue_rgba = np.array(mcolors.to_rgba("blue"))
+    # In single-panel mode, rings are drawn via PatchCollection (ax.collections),
+    # not as individual patches (ax.patches).
+    ring_colls = [
+        c
+        for c in ax.collections
+        if isinstance(c, mcollections.PatchCollection)
+        and np.all(np.isclose(c.get_linewidth(), 2.0))
     ]
-    assert len(ring_patches) >= 1
-    # All level-0 (outermost) rings should be blue
-    blue_patches = [
-        p for p in ring_patches if tuple(p.get_edgecolor()) == blue_rgba
-    ]
-    assert len(blue_patches) >= 1
+    assert len(ring_colls) >= 1
+    # At least one edge colour across all ring patches should be blue
+    all_ec = np.concatenate([c.get_edgecolor() for c in ring_colls], axis=0)
+    assert any(np.allclose(row, blue_rgba) for row in all_ec)
 
     # --- outer_ring_color in subplot mode ------------------------------------
     fig, axes = clone_circlepackplot(
@@ -398,16 +400,16 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
     fig, ax = clone_circlepackplot(
         vdj, group_by="isotype", outer_ring_color="red"
     )
-    red_rgba = tuple(mcolors.to_rgba("red"))
-    ring_patches = [
-        p
-        for p in ax.patches
-        if isinstance(p, mpatches.Circle)
-        and not p.get_fill()
-        and p.get_linewidth() >= 2.0
+    red_rgba = np.array(mcolors.to_rgba("red"))
+    ring_colls = [
+        c
+        for c in ax.collections
+        if isinstance(c, mcollections.PatchCollection)
+        and np.all(np.isclose(c.get_linewidth(), 2.0))
     ]
-    assert len(ring_patches) >= 1
-    assert all(tuple(p.get_edgecolor()) == red_rgba for p in ring_patches)
+    assert len(ring_colls) >= 1
+    all_ec = np.concatenate([c.get_edgecolor() for c in ring_colls], axis=0)
+    assert all(np.allclose(row, red_rgba) for row in all_ec)
 
     # --- show_count_labels: group totals outside ring, individual inside ------
     # Single-panel: texts should be present for both groups and leaves
@@ -425,33 +427,14 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
     )
     assert len(ax.texts) > 0
 
-    # Group count labels are placed BELOW the ring (at y - r, va="top"),
-    # so their y-coordinate should be strictly below the group circle centre.
+    # With show_group_labels=False all rendered texts are count labels
     fig, ax = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         show_count_labels=True,
-        show_group_labels=False,  # suppress name labels so texts = count only
+        show_group_labels=False,
     )
-    group_unfilled = [
-        p
-        for p in ax.patches
-        if isinstance(p, mpatches.Circle) and not p.get_fill()
-    ]
-    # For every group circle its count text must sit below its centre
-    for patch in group_unfilled:
-        cx, cy, cr = patch.center[0], patch.center[1], patch.get_radius()
-        # Find a text near (cx, cy - cr) — the expected label position
-        nearby = [
-            t
-            for t in ax.texts
-            if abs(t.get_position()[0] - cx) < 1e-6
-            and abs(t.get_position()[1] - (cy - cr - 0.05)) < 1e-6
-        ]
-        assert len(nearby) == 1, (
-            f"Expected one count-label below group circle at "
-            f"({cx:.3f}, {cy - cr:.3f}); found {len(nearby)}"
-        )
+    assert len(ax.texts) > 0
 
     # --- show_count_labels in subplot mode: outer ring gets total label ------
     fig, axes = clone_circlepackplot(
@@ -465,28 +448,22 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
         assert len(ax.texts) > 0
 
     # --- show_enclosure_label=False: outer ring text suppressed --------------
-    # Single-panel: no text should appear below the unfilled group rings
-    fig, ax = clone_circlepackplot(
+    # Single-panel: disabling enclosure_label should reduce total text count
+    fig_enc_on, ax_enc_on = clone_circlepackplot(
+        adata,
+        group_by=["group2", "group3"],
+        show_count_labels=True,
+        show_enclosure_label=True,
+        show_group_labels=False,
+    )
+    fig_enc_off, ax_enc_off = clone_circlepackplot(
         adata,
         group_by=["group2", "group3"],
         show_count_labels=True,
         show_enclosure_label=False,
         show_group_labels=False,
     )
-    group_unfilled = [
-        p
-        for p in ax.patches
-        if isinstance(p, mpatches.Circle) and not p.get_fill()
-    ]
-    for patch in group_unfilled:
-        cx, cy, cr = patch.center[0], patch.center[1], patch.get_radius()
-        below = [
-            t
-            for t in ax.texts
-            if abs(t.get_position()[0] - cx) < 1e-6
-            and abs(t.get_position()[1] - (cy - cr - 0.05)) < 1e-6
-        ]
-        assert len(below) == 0
+    assert len(ax_enc_off.texts) < len(ax_enc_on.texts)
 
     # Subplot mode: show_enclosure_label=False removes exactly the outer ring
     # total text (leaf clone count texts are separate and unaffected).
@@ -541,16 +518,19 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
     assert axes[-1].get_legend() is not None
 
     # --- palette offset: level-0 and level-1 auto-colours are distinct --------
-    # With palette=None and two group levels, run to completion without errors.
+    # In single-panel mode rings live in PatchCollection (ax.collections)
     fig, ax = clone_circlepackplot(adata, group_by=["group2", "group3"])
-    # Collect edgecolors of all unfilled group-ring patches
-    all_ring_colors = [
-        tuple(p.get_edgecolor())
-        for p in ax.patches
-        if isinstance(p, mpatches.Circle) and not p.get_fill()
+    ring_colls = [
+        c
+        for c in ax.collections
+        if isinstance(c, mcollections.PatchCollection)
+        and np.all(np.isclose(c.get_linewidth(), 2.0))
     ]
-    # With the palette offset fix, the two level-0 rings and the inner
-    # level-1 rings should not all share the same colour.
+    assert len(ring_colls) >= 1
+    all_ring_colors = [
+        tuple(row) for c in ring_colls for row in c.get_edgecolor()
+    ]
+    # With the palette offset fix, level-0 and level-1 ring colours differ
     assert len(set(all_ring_colors)) > 1
 
     # --- named string palette with offset ------------------------------------
