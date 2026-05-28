@@ -332,7 +332,7 @@ def format_fasta(
         seqs = {hiconf: seqs[hiconf] for hiconf in hiconf_contigs}
         data = data.filter(pl.col("contig_id").is_in(hiconf_contigs))
     write_fasta(fasta_dict=seqs, out_fasta=out_fasta)
-    data.write_csv(out_anno, quote_style="never")
+    data.write_csv(out_anno)
 
 
 def format_fastas(
