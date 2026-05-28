@@ -11,7 +11,6 @@ import pytest
 import dandelion as ddl
 from dandelion._backend import get_backend, _set_backend
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -127,11 +126,27 @@ def test_bind_symbols_dandelion_class_polars():
 def test_bind_symbols_io_functions_present():
     """Core IO functions remain bound after a backend switch."""
     ddl.set_backend("base")
-    for attr in ("read", "read_ddl", "read_h5ddl", "read_10x_airr", "read_airr"):
-        assert hasattr(ddl, attr), f"ddl.{attr} missing after set_backend('base')"
+    for attr in (
+        "read",
+        "read_ddl",
+        "read_h5ddl",
+        "read_10x_airr",
+        "read_airr",
+    ):
+        assert hasattr(
+            ddl, attr
+        ), f"ddl.{attr} missing after set_backend('base')"
     ddl.set_backend("polars")
-    for attr in ("read", "read_ddl", "read_h5ddl", "read_10x_airr", "read_airr"):
-        assert hasattr(ddl, attr), f"ddl.{attr} missing after set_backend('polars')"
+    for attr in (
+        "read",
+        "read_ddl",
+        "read_h5ddl",
+        "read_10x_airr",
+        "read_airr",
+    ):
+        assert hasattr(
+            ddl, attr
+        ), f"ddl.{attr} missing after set_backend('polars')"
 
 
 def test_bind_symbols_roundtrip():
