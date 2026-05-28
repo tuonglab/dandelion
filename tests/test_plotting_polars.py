@@ -555,20 +555,48 @@ def test_plot_clone_circlepackplot_new_features(create_testfolder):
 
     # --- packer="packcircles" (skip if not installed) -----------------------
     import importlib
+    import pandas as _pd
+    import anndata as _ad
+
+    # Synthetic data: IgA has 3 distinct clones so that packcircles'
+    # leaf-packing path (which requires N >= 3 radii) is fully exercised.
+    _pc_obs = _pd.DataFrame(
+        {
+            "clone_id": ["c1", "c1", "c2", "c2", "c3", "c3", "c4", "c4"],
+            "isotype": ["IgA", "IgA", "IgA", "IgA", "IgA", "IgA", "IgG", "IgG"],
+            "group2": ["a", "a", "a", "b", "b", "b", "a", "b"],
+            "group3": ["x", "x", "y", "x", "y", "y", "x", "y"],
+        },
+        index=[f"pc_{i}" for i in range(8)],
+    )
+    for _col in ("isotype", "group2", "group3"):
+        _pc_obs[_col] = _pc_obs[_col].astype("category")
+    _adata_pc = _ad.AnnData(X=np.zeros((8, 5)), obs=_pc_obs)
 
     if importlib.util.find_spec("packcircles") is not None:
+        # IgA has 3 distinct clones → pc.pack(radii) is called with N=3
         fig, ax = clone_circlepackplot(
-            adata, group_by="isotype", packer="packcircles"
+            _adata_pc, group_by="isotype", packer="packcircles"
         )
         assert isinstance(fig, Figure)
         assert isinstance(ax, Axes)
+        # Multi-level subplots
         fig, axes = clone_circlepackplot(
-            adata,
+            _adata_pc,
             group_by=["group2", "group3"],
             as_subplots=True,
             packer="packcircles",
         )
+        assert isinstance(axes, list)
         assert len(axes) == 2
+        # aggregate_by_size + packcircles combined
+        fig, ax = clone_circlepackplot(
+            _adata_pc,
+            group_by="isotype",
+            aggregate_by_size=True,
+            packer="packcircles",
+        )
+        assert isinstance(ax, Axes)
 
     # Invalid packer name raises ValueError
     with pytest.raises(ValueError, match="Unknown packer"):
