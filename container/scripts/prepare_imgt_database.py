@@ -138,7 +138,9 @@ def download_germline_and_process(
         # "rhesus_monkey": ["Macaca mulatta", "Macaca_mulatta"], # seems like there's an issue retrieving this from IMGT/GENE-DB 18/07/2024
     }
     url = f"{source}/GENElect?query={query_type}+{chain}&species={query}{url_suffix}"
-    file_name = f"{str(file_path)}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
+    file_name = (
+        f"{str(file_path)}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
+    )
 
     # Stop if the file already exists
     if os.path.exists(file_name):
@@ -582,7 +584,9 @@ def main():
         logging.info(
             f"Downloading IMGT BCR constant sequences for blast database for {species}"
         )
-        fallback_url = f"{GITHUB_BACKUP_BASE}/blast/{species}/{species}_BCR_C.fasta"
+        fallback_url = (
+            f"{GITHUB_BACKUP_BASE}/blast/{species}/{species}_BCR_C.fasta"
+        )
         download_bcr_constant_and_process(
             species, query, blast_out / species, source, fallback_url
         )
