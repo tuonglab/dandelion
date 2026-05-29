@@ -1023,7 +1023,8 @@ def getArgParser():
     Returns:
       argparse.ArgumentParser
     """
-    fields = dedent("""
+    fields = dedent(
+        """
               output files:
                   db-pass
                       database of alignment records with functionality information,
@@ -1057,7 +1058,8 @@ def getArgParser():
                   cell_id, consensus_count, umi_count,
                   v_call_10x, d_call_10x, j_call_10x,
                   junction_10x, junction_10x_aa
-              """)
+              """
+    )
 
     # Define ArgumentParser
     parser = ArgumentParser(
