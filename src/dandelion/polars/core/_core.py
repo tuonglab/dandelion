@@ -3483,9 +3483,9 @@ class DandelionPolars:
         else:
             # pandas DataFrame - convert to Polars
             data_df = pl.from_pandas(self._data)
-        seqs = {}
-        for i, seq in enumerate(data_df[sequence_key].to_list()):
-            seqs[f"seq_{i}"] = seq
+        seqs = dict(
+            zip(data_df["sequence_id"].to_list(), data_df[sequence_key].to_list())
+        )
         write_fasta(seqs, out_fasta=out_fasta)
 
         # also create the contig_annotations.csv

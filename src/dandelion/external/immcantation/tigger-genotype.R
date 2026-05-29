@@ -143,6 +143,40 @@ writeFasta(gt_seq, file.path(opt$OUTDIR, paste0(opt$NAME, "_genotype.fasta")))
 # Modify allele calls
 db <- reassignAlleles(db, gt_seq, v_call=v_call, seq=sequence_alignment)
 
+# Safety: revert gene-family switches when the original gene is absent from
+# the inferred genotype.  This prevents TIgGER from misassigning sequences
+# (e.g. IGHV3-53 -> IGHV3-23) when a dominant clone was too clonal for
+# genotyping, leaving its gene unrepresented in the genotype FASTA.
+get_first_gene <- function(call) {
+    first_allele <- strsplit(as.character(call), ",")[[1]][1]
+    sub("\\*.*", "", trimws(first_allele))
+}
+gt_genes       <- unique(sapply(names(gt_seq), get_first_gene))
+original_gene  <- sapply(db[[v_call]],            get_first_gene)
+genotyped_gene <- sapply(db[[v_call_genotyped]],   get_first_gene)
+revert_mask    <- (original_gene != genotyped_gene) & !(original_gene %in% gt_genes)
+if (any(revert_mask)) {
+    message(sprintf(
+        "Reverting %d sequence(s) whose V gene family is absent from the inferred genotype.",
+        sum(revert_mask)
+    ))
+    db[[v_call_genotyped]][revert_mask] <- db[[v_call]][revert_mask]
+
+    # Supplement the genotype FASTA with full-germline alleles for every
+    # reverted call so that CreateGermlines can build germlines for them.
+    reverted_alleles <- unique(trimws(unlist(strsplit(
+        as.character(db[[v_call]][revert_mask]), ","
+    ))))
+    missing_alleles <- setdiff(reverted_alleles, names(gt_seq))
+    if (length(missing_alleles) > 0) {
+        extra <- igv[names(igv) %in% missing_alleles]
+        if (length(extra) > 0) {
+            gt_seq <- c(gt_seq, extra)
+            writeFasta(gt_seq, file.path(opt$OUTDIR, paste0(opt$NAME, "_genotype.fasta")))
+        }
+    }
+}
+
 # Rename genotyped V call column if necessary
 if (opt$VFIELD != v_call_genotyped) {
     db[[opt$VFIELD]] <- db[[v_call_genotyped]]
