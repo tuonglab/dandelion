@@ -3484,7 +3484,10 @@ class DandelionPolars:
             # pandas DataFrame - convert to Polars
             data_df = pl.from_pandas(self._data)
         seqs = dict(
-            zip(data_df["sequence_id"].to_list(), data_df[sequence_key].to_list())
+            zip(
+                data_df["sequence_id"].to_list(),
+                data_df[sequence_key].to_list(),
+            )
         )
         write_fasta(seqs, out_fasta=out_fasta)
 
