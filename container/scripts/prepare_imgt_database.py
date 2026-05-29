@@ -55,12 +55,14 @@ def download_from_github_backup(fallback_url: str, dest_path: str) -> bool:
         True if download succeeded, False otherwise.
     """
     try:
-        logging.warning(f"Trying GitHub backup: {fallback_url}")
+        logging.warning(
+            f"IMGT unavailable — trying GitHub backup: {fallback_url}"
+        )
         with urlopen(fallback_url, timeout=60) as response:
             content = response.read().decode("utf-8")
         with open(dest_path, "w") as fh:
             fh.write(content)
-        logging.info(f"GitHub backup succeeded: {dest_path}")
+        logging.info(f"Downloaded from GitHub backup: {dest_path}")
         return True
     except Exception as e:
         logging.error(f"GitHub backup also failed for {dest_path}: {str(e)}")
@@ -182,6 +184,7 @@ def download_germline_and_process(
 
         with open(file_name, "w") as output_file:
             output_file.write(content)
+        logging.info(f"Downloaded from IMGT: {file_name}")
 
     except Exception as e:
         logging.error(
@@ -250,6 +253,7 @@ def download_bcr_constant_and_process(
             newline = "\n"
         with open(file_name, "a") as output_file:
             output_file.write(contents)
+        logging.info(f"Downloaded from IMGT: {file_name}")
     except Exception as e:
         logging.error(
             f"Failed to download BCR constant sequences for {species} from IMGT: {str(e)}"
