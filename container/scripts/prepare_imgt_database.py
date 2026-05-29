@@ -13,6 +13,8 @@ from urllib.request import urlopen
 
 from utils import Tree, fasta_iterator, write_fasta
 
+GITHUB_BACKUP_BASE = "https://raw.githubusercontent.com/tuonglab/dandelion/master/container/database"
+
 
 def parse_args():
     """Get command line arguments."""
@@ -34,6 +36,35 @@ def parse_args():
     )
     args = parser.parse_args()
     return args
+
+
+def download_from_github_backup(fallback_url: str, dest_path: str) -> bool:
+    """
+    Download a file from the GitHub backup database.
+
+    Parameters
+    ----------
+    fallback_url : str
+        Raw GitHub URL to download from.
+    dest_path : str
+        Local path to write the downloaded file to.
+
+    Returns
+    -------
+    bool
+        True if download succeeded, False otherwise.
+    """
+    try:
+        logging.warning(f"Trying GitHub backup: {fallback_url}")
+        with urlopen(fallback_url, timeout=60) as response:
+            content = response.read().decode("utf-8")
+        with open(dest_path, "w") as fh:
+            fh.write(content)
+        logging.info(f"GitHub backup succeeded: {dest_path}")
+        return True
+    except Exception as e:
+        logging.error(f"GitHub backup also failed for {dest_path}: {str(e)}")
+        return False
 
 
 def copy_db_from_igblast(
@@ -71,6 +102,7 @@ def download_germline_and_process(
     add_prefix: str,
     add_suffix: str,
     url_suffix: str,
+    fallback_url: str | None = None,
 ):
     """
     Download sequence from imgt and write to fasta file.
@@ -95,24 +127,25 @@ def download_germline_and_process(
         Suffix to add in file name, before `.fasta`.
     url_suffix : str
         Suffix to add in url.
+    fallback_url : str | None, optional
+        GitHub raw URL to fall back to if the IMGT download fails.
     """
-    try:
-        imgt_out_dict = {
-            "human": ["Homo sapiens", "Homo_sapiens"],
-            "mouse": ["Mus musculus", "Mus_musculus"],
-            # "rat": ["Rattus norvegicus", "Rattus_norvegicus"], # seems like there's an issue retrieving this from IMGT/GENE-DB 18/07/2024
-            "rabbit": ["Oryctolagus cuniculus", "Oryctolagus_cuniculus"],
-            # "rhesus_monkey": ["Macaca mulatta", "Macaca_mulatta"], # seems like there's an issue retrieving this from IMGT/GENE-DB 18/07/2024
-        }
-        url = f"{source}/GENElect?query={query_type}+{chain}&species={query}{url_suffix}"
-        file_name = f"{str(file_path)}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
+    imgt_out_dict = {
+        "human": ["Homo sapiens", "Homo_sapiens"],
+        "mouse": ["Mus musculus", "Mus_musculus"],
+        # "rat": ["Rattus norvegicus", "Rattus_norvegicus"], # seems like there's an issue retrieving this from IMGT/GENE-DB 18/07/2024
+        "rabbit": ["Oryctolagus cuniculus", "Oryctolagus_cuniculus"],
+        # "rhesus_monkey": ["Macaca mulatta", "Macaca_mulatta"], # seems like there's an issue retrieving this from IMGT/GENE-DB 18/07/2024
+    }
+    url = f"{source}/GENElect?query={query_type}+{chain}&species={query}{url_suffix}"
+    file_name = f"{str(file_path)}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
 
-        # Stop if the file already exists
-        if os.path.exists(file_name):
-            logging.info(
-                f"Skipping download of {file_name} as it already exists."
-            )
-            return
+    # Stop if the file already exists
+    if os.path.exists(file_name):
+        logging.info(f"Skipping download of {file_name} as it already exists.")
+        return
+
+    try:
         # else download the file
         with urlopen(url, timeout=60) as response:
             content = (
@@ -141,15 +174,19 @@ def download_germline_and_process(
                 line = re.sub(
                     imgt_out_dict[species][0], imgt_out_dict[species][1], line
                 )
-                # Add more substitutions as needed
                 content_lines[i] = line
 
         content = "\n".join(content_lines)
 
         with open(file_name, "w") as output_file:
             output_file.write(content)
+
     except Exception as e:
-        logging.error(f"Failed to download {species} {chain}: {str(e)}")
+        logging.error(
+            f"Failed to download {species} {chain} from IMGT: {str(e)}"
+        )
+        if fallback_url is not None:
+            download_from_github_backup(fallback_url, file_name)
 
 
 def download_bcr_constant_and_process(
@@ -157,6 +194,7 @@ def download_bcr_constant_and_process(
     query: str,
     file_path: str | Path,
     source: str,
+    fallback_url: str | None = None,
 ):
     """
     Download BCR CH1/constant region sequences from imgt.
@@ -171,6 +209,8 @@ def download_bcr_constant_and_process(
         Path to write fasta file to.
     source : str
         Source url.
+    fallback_url : str | None, optional
+        GitHub raw URL to fall back to if the IMGT download fails.
     """
     urls = [
         f"{source}/GENElect?query=8.1+IGHC&species={query}&IMGTlabel=CH1",
@@ -188,23 +228,35 @@ def download_bcr_constant_and_process(
     else:
         fh = open(file_name, "w")
         fh.close()
-    # else download the file
-    contents = ""
-    newline = ""
-    for url in urls:
-        with urlopen(url, timeout=60) as response:
-            content = (
-                response.read()
-                .decode("utf-8")
-                .split("<pre>")[2]
-                .split("</pre>")[0]
-            )
-        # Remove empty lines
-        content_lines = [line for line in content.splitlines() if line.strip()]
-        contents += newline + "\n".join(content_lines)
-        newline = "\n"
-    with open(file_name, "a") as output_file:
-        output_file.write(contents)
+
+    try:
+        contents = ""
+        newline = ""
+        for url in urls:
+            with urlopen(url, timeout=60) as response:
+                content = (
+                    response.read()
+                    .decode("utf-8")
+                    .split("<pre>")[2]
+                    .split("</pre>")[0]
+                )
+            # Remove empty lines
+            content_lines = [
+                line for line in content.splitlines() if line.strip()
+            ]
+            contents += newline + "\n".join(content_lines)
+            newline = "\n"
+        with open(file_name, "a") as output_file:
+            output_file.write(contents)
+    except Exception as e:
+        logging.error(
+            f"Failed to download BCR constant sequences for {species} from IMGT: {str(e)}"
+        )
+        if fallback_url is not None:
+            if not download_from_github_backup(fallback_url, str(file_name)):
+                return
+        else:
+            return
 
     seqs = {}
     if file_name.stat().st_size != 0:
@@ -305,6 +357,7 @@ def main():
                         "TRGV",
                         "TRGJ",
                     ]:
+                        fallback_url = f"{GITHUB_BACKUP_BASE}/germlines/imgt/{species}/{folder}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
                         futures.append(
                             executor.submit(
                                 download_germline_and_process,
@@ -317,6 +370,7 @@ def main():
                                 add_prefix,
                                 add_suffix,
                                 url_suffix,
+                                fallback_url,
                             )
                         )
                 elif folder == "vdj_aa":
@@ -335,6 +389,7 @@ def main():
                         "TRDV",
                         "TRGV",
                     ]:
+                        fallback_url = f"{GITHUB_BACKUP_BASE}/germlines/imgt/{species}/{folder}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
                         futures.append(
                             executor.submit(
                                 download_germline_and_process,
@@ -347,6 +402,7 @@ def main():
                                 add_prefix,
                                 add_suffix,
                                 url_suffix,
+                                fallback_url,
                             )
                         )
                 # elif folder == "leader_vexon":
@@ -416,6 +472,7 @@ def main():
                         "",
                         "",
                     )
+                    fallback_url = f"{GITHUB_BACKUP_BASE}/germlines/imgt/{species}/{folder}/imgt_{add_prefix}{species}_IGHC{add_suffix}.fasta"
                     futures.append(
                         executor.submit(
                             download_germline_and_process,
@@ -428,6 +485,7 @@ def main():
                             add_prefix,
                             add_suffix,
                             url_suffix,
+                            fallback_url,
                         )
                     )
                     for chain in [
@@ -438,6 +496,7 @@ def main():
                         "TRDC",
                         "TRGC",
                     ]:
+                        fallback_url = f"{GITHUB_BACKUP_BASE}/germlines/imgt/{species}/{folder}/imgt_{add_prefix}{species}_{chain}{add_suffix}.fasta"
                         futures.append(
                             executor.submit(
                                 download_germline_and_process,
@@ -450,6 +509,7 @@ def main():
                                 add_prefix,
                                 add_suffix,
                                 url_suffix,
+                                fallback_url,
                             )
                         )
                 # Wait for all futures to complete
@@ -522,8 +582,9 @@ def main():
         logging.info(
             f"Downloading IMGT BCR constant sequences for blast database for {species}"
         )
+        fallback_url = f"{GITHUB_BACKUP_BASE}/blast/{species}/{species}_BCR_C.fasta"
         download_bcr_constant_and_process(
-            species, query, blast_out / species, source
+            species, query, blast_out / species, source, fallback_url
         )
     for species, query in species_dict.items():
         logging.info(f"Converting to blast database for {species}")
