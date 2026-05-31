@@ -268,9 +268,14 @@ def download_bcr_constant_and_process(
     if file_name.stat().st_size != 0:
         fh = open(file_name)
         for header, sequence in fasta_iterator(fh):
-            if header.split("|")[3] != "P":  # keep only functional alleles
-                if len(sequence) >= 150:  # remove short sequences
-                    seqs[header.split("|")[1].rstrip()] = sequence.upper()
+            parts = header.split("|")
+            if len(parts) > 3:
+                # Raw IMGT format: filter pseudo-genes and short sequences
+                if parts[3] != "P" and len(sequence) >= 150:
+                    seqs[parts[1].rstrip()] = sequence.upper()
+            else:
+                # Already-processed format (GitHub backup): keep as-is
+                seqs[header.rstrip()] = sequence.upper()
         fh.close()
         write_fasta(seqs, file_name, overwrite=True)
 
