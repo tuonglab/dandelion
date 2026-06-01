@@ -258,25 +258,43 @@ def setup_colab_singularity() -> None:  # pragma: no cover
     """
 
     bash_script = r"""
-# install apptainer
 set -e
-export DEBIAN_FRONTEND=noninteractive
-export DEBCONF_NONINTERACTIVE_SEEN=true
-sudo apt update -qq > /dev/null
-sudo apt install -y -qq software-properties-common > /dev/null
-sudo add-apt-repository -y ppa:apptainer/ppa > /dev/null 2>&1
-sudo apt update -qq > /dev/null
-sudo apt install -y -qq apptainer-suid > /dev/null
-apptainer config fakeroot --add root > /dev/null 2>&1
-echo 'unshare -r apptainer "$@"' > /usr/bin/singularity_test
-chmod +x /usr/bin/singularity_test
-mv /usr/bin/singularity /usr/bin/singularity_backup 2>/dev/null || true
-mv /usr/bin/singularity_test /usr/bin/singularity
 
-# pull dandelion singularity image
-apptainer remote add --no-login SylabsCloud cloud.sycloud.io
+echo "Installing Apptainer..."
+
+sudo apt update
+sudo apt install -y software-properties-common
+
+if ! grep -q apptainer /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
+    sudo add-apt-repository -y ppa:apptainer/ppa
+    sudo apt update
+fi
+
+sudo apt install -y apptainer-suid
+
+echo "Configuring fakeroot..."
+sudo apptainer config fakeroot --add root || true
+
+echo "Creating singularity wrapper..."
+
+sudo bash -c 'cat <<EOF > /usr/bin/singularity_test
+# unshare -r apptainer "$@"
+EOF'
+
+sudo chmod +x /usr/bin/singularity_test
+
+if [ -f /usr/bin/singularity ]; then
+    sudo mv /usr/bin/singularity /usr/bin/singularity_backup || true
+fi
+
+sudo mv /usr/bin/singularity_test /usr/bin/singularity
+
+echo "Adding Sylabs remote..."
+apptainer remote add --no-login SylabsCloud cloud.sylabs.io || true
 apptainer remote use SylabsCloud
+
+echo "Done."
 """
 
-    subprocess.run(["bash", "-c", bash_script], check=True, shell=True)
+    subprocess.run(["bash", "-c", bash_script], check=True)
     print("\n✅ Singularity / Apptainer ready!")
