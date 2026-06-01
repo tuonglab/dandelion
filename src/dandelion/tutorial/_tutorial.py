@@ -261,32 +261,24 @@ def setup_colab_singularity() -> None:  # pragma: no cover
 set -e
 
 echo "Installing Apptainer..."
-
-sudo apt update
-sudo apt install -y software-properties-common
+sudo apt update -qq
+sudo apt install -y -qq software-properties-common
 
 if ! grep -q apptainer /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
     sudo add-apt-repository -y ppa:apptainer/ppa
-    sudo apt update
+    sudo apt update -qq
 fi
 
-sudo apt install -y apptainer-suid
+sudo apt install -y -qq apptainer-suid
 
 echo "Configuring fakeroot..."
 sudo apptainer config fakeroot --add root || true
 
 echo "Creating singularity wrapper..."
-
-sudo bash -c 'cat <<EOF > /usr/bin/singularity_test
-# unshare -r apptainer "$@"
-EOF'
-
+echo 'unshare -r apptainer "$@"' | sudo tee /usr/bin/singularity_test > /dev/null
 sudo chmod +x /usr/bin/singularity_test
 
-if [ -f /usr/bin/singularity ]; then
-    sudo mv /usr/bin/singularity /usr/bin/singularity_backup || true
-fi
-
+sudo mv /usr/bin/singularity /usr/bin/singularity_backup 2>/dev/null || true
 sudo mv /usr/bin/singularity_test /usr/bin/singularity
 
 echo "Adding Sylabs remote..."
