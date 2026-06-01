@@ -244,7 +244,8 @@ fi
 sudo mv /usr/bin/singularity_test /usr/bin/singularity
 
 echo "Adding Sylabs remote..."
-singularity remote add --no-login SylabsCloud cloud.sylabs.io || true
+apptainer remote add --no-login SylabsCloud cloud.sylabs.io || true
+apptainer remote use SylabsCloud
 
 echo "Done."
 """
