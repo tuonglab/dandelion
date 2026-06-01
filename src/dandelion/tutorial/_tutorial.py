@@ -1,3 +1,4 @@
+from importlib.resources import path
 import subprocess
 
 from pathlib import Path
@@ -251,5 +252,31 @@ echo "Done."
 """
 
     subprocess.run(["bash", "-c", bash_script], check=True)
-
     print("\n✅ Singularity / Apptainer ready!")
+    try:
+        import gdown
+    except ImportError:
+        raise ImportError(
+            "gdown is required to download the tutorial data on colab. Please install it via `pip install gdown`."
+        )
+    # also download the tutorial datasets since this is likely being run in a fresh Colab environment
+    base = Path("./dandelion_tutorial") if path is None else Path(path)
+    base.mkdir(parents=True, exist_ok=True)
+
+    gex_id = "1-PrwDi1Py8jqioNtP0DISKrcShRRHKxk"
+    vdj_id = "1-d_uah-NzJqDYRP53ICgAAquiVLWRRtN"
+    datasets = {
+        "colab_demo": {
+            "demo-gex.h5ad": f"https://drive.google.com/uc?id={gex_id}",
+            "demo-vdj.h5ddl": f"https://drive.google.com/uc?id={vdj_id}",
+        }
+    }
+    for dirname, files in datasets.items():
+        dirpath = base / dirname
+        dirpath.mkdir(parents=True, exist_ok=True)
+        for filename, url in files.items():
+            outfile = dirpath / filename
+            if outfile.exists():
+                continue
+            print(f"Downloading {filename} → {outfile}")
+            gdown.download(url, str(outfile), quiet=False)
