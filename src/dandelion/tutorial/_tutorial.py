@@ -278,7 +278,7 @@ sudo apptainer config fakeroot --add root || true
 echo "Creating singularity wrapper..."
 
 sudo bash -c 'cat <<EOF > /usr/bin/singularity_test
-unshare -r apptainer "$@"
+# unshare -r apptainer "$@"
 EOF'
 
 sudo chmod +x /usr/bin/singularity_test
@@ -296,5 +296,5 @@ apptainer remote use SylabsCloud
 echo "Done."
 """
 
-    subprocess.run(["bash", "-c", bash_script], check=True)
+    subprocess.run(["bash", "-c", bash_script], check=True, shell=True)
     print("\n✅ Singularity / Apptainer ready!")
