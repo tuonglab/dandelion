@@ -17,17 +17,6 @@ jobs:
       - name: Setup Singularity
         uses: singularityhub/install-singularity@main
 
-      - name: Extract repository location
-        shell: bash
-        id: extract_location
-        run: |
-          # Use the workflow_dispatch input tag if available, otherwise strip refs/tags/ from GITHUB_REF
-          TAG="${{ github.event.inputs.tag_name || '' }}"
-          if [ -z "$TAG" ]; then
-            TAG="${GITHUB_REF##refs/*/}"
-          fi
-          echo "location=      - git+https://www.github.com/${GITHUB_REPOSITORY}@${TAG}" >> $GITHUB_OUTPUT
-
       - name: Build Container
         run: |
           cd container
