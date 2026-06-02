@@ -118,6 +118,7 @@ def barplot(
 
     """
     if isinstance(data, DandelionPolars):
+        data = data.copy()
         if data._backend == "polars":
             data.to_pandas()
         data = data._metadata.copy()
@@ -235,6 +236,7 @@ def stackedbarplot(
         stacked barplot.
     """
     if isinstance(data, DandelionPolars):
+        data = data.copy()
         if data._backend == "polars":
             data.to_pandas()
         data = data._metadata.copy()
@@ -1261,6 +1263,7 @@ def clone_circlepackplot(
     _adata_uns = data.uns if _is_adata else {}
 
     if isinstance(data, DandelionPolars):
+        data = data.copy()
         if data._backend == "polars":
             data.to_pandas()
         data = data._metadata.copy()

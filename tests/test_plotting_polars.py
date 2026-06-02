@@ -151,7 +151,7 @@ def test_plot_clone_circlepackplot(create_testfolder):
     vdj = read_ddl(f)
     f2 = create_testfolder / "test.h5ad"
     adata = sc.read_h5ad(f2)
-    ax = clone_circlepackplot(vdj, group_by="isotype")
+    ax = clone_circlepackplot(vdj, group_by="locus_status")
     assert ax is not None
     ax = clone_circlepackplot(adata, group_by="isotype")
     assert ax is not None
@@ -261,6 +261,21 @@ def test_plot_clone_circlepackplot(create_testfolder):
     assert ax is not None
     with pytest.raises(ValueError):
         clone_circlepackplot(vdj, group_by="isotype", min_clone_size=999)
+
+
+def test_plot_clone_circlepackplot_preserves_polars_input(vdj_smaller):
+    """clone_circlepackplot should not mutate a DandelionPolars input."""
+    vdj = Dandelion(vdj_smaller._data)
+
+    backend_before = vdj._backend
+    data_type_before = type(vdj._data)
+    metadata_type_before = type(vdj._metadata)
+
+    ax = clone_circlepackplot(vdj, group_by="locus_status")
+    assert ax is not None
+    assert vdj._backend == backend_before
+    assert type(vdj._data) is data_type_before
+    assert type(vdj._metadata) is metadata_type_before
 
 
 @pytest.mark.usefixtures("create_testfolder")
