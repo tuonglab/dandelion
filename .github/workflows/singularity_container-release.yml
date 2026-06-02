@@ -19,7 +19,7 @@ jobs:
 
       - name: Build Container
         run: |
-          cd container          
+          cd container
           sudo -E singularity build --notest sc-dandelion.sif sc-dandelion.def
 
       - name: Test Container
