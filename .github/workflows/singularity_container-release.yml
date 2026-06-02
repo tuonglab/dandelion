@@ -17,21 +17,9 @@ jobs:
       - name: Setup Singularity
         uses: singularityhub/install-singularity@main
 
-      - name: Extract repository location
-        shell: bash
-        id: extract_location
-        run: |
-          # Use the workflow_dispatch input tag if available, otherwise strip refs/tags/ from GITHUB_REF
-          TAG="${{ github.event.inputs.tag_name || '' }}"
-          if [ -z "$TAG" ]; then
-            TAG="${GITHUB_REF##refs/*/}"
-          fi
-          echo "location=      - git+https://www.github.com/${GITHUB_REPOSITORY}@${TAG}" >> $GITHUB_OUTPUT
-
       - name: Build Container
         run: |
           cd container
-          echo '${{ steps.extract_location.outputs.location }}' >> environment.yml
           sudo -E singularity build --notest sc-dandelion.sif sc-dandelion.def
 
       - name: Test Container
@@ -45,9 +33,21 @@ jobs:
             exit 1
           fi
 
-      - name: Create artifact
+      # - name: Create artifact
+      #   if: success()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: sc-dandelion.sif
+      #     path: container/sc-dandelion.sif # fixed: file is built inside container/
+
+      - name: Login to Sylabs Library
+        env:
+          SINGULARITY_TOKEN: ${{ secrets.SINGULARITY_TOKEN }}
+        run: |
+          singularity remote login --token "$SINGULARITY_TOKEN"
+
+      - name: Push to Sylabs Library
         if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sc-dandelion.sif
-          path: container/sc-dandelion.sif # fixed: file is built inside container/
+        run: |
+          singularity push sc-dandelion.sif \
+            library://kt16/default/sc-dandelion:${{ github.event.inputs.tag_name }}
