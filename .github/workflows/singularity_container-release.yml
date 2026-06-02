@@ -33,12 +33,13 @@ jobs:
             exit 1
           fi
 
-      # - name: Create artifact
-      #   if: success()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: sc-dandelion.sif
-      #     path: container/sc-dandelion.sif # fixed: file is built inside container/
+      - name: Sign and Verify Container
+        if: success()
+        run: |
+          cd container
+          echo ${{ secrets.SINGULARITY_KEY }} > private.key
+          singularity sign --key private.key sc-dandelion.sif
+          singularity verify sc-dandelion.sif
 
       - name: Login to Sylabs Library
         env:
