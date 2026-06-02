@@ -3040,7 +3040,14 @@ class DandelionPolars:
         data = self._data
         if isinstance(data, pl.LazyFrame):
             data = data.collect(engine="streaming")
-        data = data.to_pandas()
+        if isinstance(data, pl.DataFrame):
+            data = data.to_pandas()
+        elif isinstance(data, pd.DataFrame):
+            data = data.copy()
+        else:
+            raise TypeError(
+                f"Unsupported data type for write_h5ddl: {type(data)}"
+            )
         data = sanitize_data(data)
         data, data_dtypes = sanitize_data_for_saving(data)
         structured_data_array = np.array(
@@ -3058,7 +3065,15 @@ class DandelionPolars:
             metadata = self._metadata
             if isinstance(metadata, pl.LazyFrame):
                 metadata = metadata.collect(engine="streaming")
-            metadata_pd = metadata.to_pandas()
+            if isinstance(metadata, pl.DataFrame):
+                metadata_pd = metadata.to_pandas()
+            elif isinstance(metadata, pd.DataFrame):
+                metadata_pd = metadata.copy()
+            else:
+                raise TypeError(
+                    "Unsupported metadata type for write_h5ddl: "
+                    f"{type(metadata)}"
+                )
             # polars stores cell_id as a column; h5ddl expects it as the index
             if "cell_id" in metadata_pd.columns:
                 metadata_pd = metadata_pd.set_index("cell_id")

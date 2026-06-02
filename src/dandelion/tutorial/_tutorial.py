@@ -1,3 +1,4 @@
+from importlib.resources import path
 import subprocess
 
 from pathlib import Path
@@ -165,6 +166,51 @@ def setup_dandelion_tutorial_trajectory(path: Path | str | None = None) -> None:
             gdown.download(url, str(outfile), quiet=False)
 
 
+def setup_dandelion_tutorial_simple(path: Path | str | None = None) -> None:
+    """Download example datasets for Dandelion simple tutorial.
+
+    Downloads a small demo dataset with GEX and BCR data from Google Drive
+    using ``gdown``.
+
+    Parameters
+    ----------
+    path : Path | str | None, optional
+        Root directory to download datasets into.
+        Defaults to ``./dandelion_tutorial``.
+
+    Raises
+    ------
+    ImportError
+        If ``gdown`` is not installed.
+    """
+    try:
+        import gdown
+    except ImportError:
+        raise ImportError(
+            "gdown is required to download the simple tutorial data. Please install it via `pip install gdown`."
+        )
+    base = Path("./dandelion_tutorial") if path is None else Path(path)
+    base.mkdir(parents=True, exist_ok=True)
+
+    gex_id = "1-PrwDi1Py8jqioNtP0DISKrcShRRHKxk"
+    vdj_id = "1-d_uah-NzJqDYRP53ICgAAquiVLWRRtN"
+    datasets = {
+        "simple_demo": {
+            "demo-gex.h5ad": f"https://drive.google.com/uc?id={gex_id}",
+            "demo-vdj.h5ddl": f"https://drive.google.com/uc?id={vdj_id}",
+        }
+    }
+    for dirname, files in datasets.items():
+        dirpath = base / dirname
+        dirpath.mkdir(parents=True, exist_ok=True)
+        for filename, url in files.items():
+            outfile = dirpath / filename
+            if outfile.exists():
+                continue
+            print(f"Downloading {filename} → {outfile}")
+            gdown.download(url, str(outfile), quiet=False)
+
+
 def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
     """Download the extremely large dataset from Parse Biosciences for Dandelion tutorial.
 
@@ -215,40 +261,32 @@ def setup_colab_singularity() -> None:  # pragma: no cover
 set -e
 
 echo "Installing Apptainer..."
-
-sudo apt update
-sudo apt install -y software-properties-common
+sudo apt update -qq
+sudo apt install -y -qq software-properties-common
 
 if ! grep -q apptainer /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
     sudo add-apt-repository -y ppa:apptainer/ppa
-    sudo apt update
+    sudo apt update -qq
 fi
 
-sudo apt install -y apptainer-suid
+sudo apt install -y -qq apptainer-suid
 
 echo "Configuring fakeroot..."
 sudo apptainer config fakeroot --add root || true
 
 echo "Creating singularity wrapper..."
-
-sudo bash -c 'cat <<EOF > /usr/bin/singularity_test
-unshare -r apptainer "$@"
-EOF'
-
+echo 'unshare -r apptainer "$@"' | sudo tee /usr/bin/singularity_test > /dev/null
 sudo chmod +x /usr/bin/singularity_test
 
-if [ -f /usr/bin/singularity ]; then
-    sudo mv /usr/bin/singularity /usr/bin/singularity_backup || true
-fi
-
+sudo mv /usr/bin/singularity /usr/bin/singularity_backup 2>/dev/null || true
 sudo mv /usr/bin/singularity_test /usr/bin/singularity
 
 echo "Adding Sylabs remote..."
-singularity remote add --no-login SylabsCloud cloud.sylabs.io || true
+apptainer remote add --no-login SylabsCloud cloud.sylabs.io || true
+apptainer remote use SylabsCloud
 
 echo "Done."
 """
 
     subprocess.run(["bash", "-c", bash_script], check=True)
-
     print("\n✅ Singularity / Apptainer ready!")
