@@ -48,6 +48,7 @@ jobs:
         env:
           SINGULARITY_TOKEN: ${{ secrets.SINGULARITY_TOKEN }}
         run: |
-          echo "$SINGULARITY_TOKEN" | singularity remote login --password-stdin
-          singularity push sc-dandelion.sif \
-            library://kt16/default/sc-dandelion:${{ github.event.inputs.tag_name }}
+          echo "$SINGULARITY_TOKEN" > /tmp/sylabs_token
+          singularity remote login --tokenfile /tmp/sylabs_token
+          rm /tmp/sylabs_token
+          singularity push sc-dandelion.sif library://kt16/default/sc-dandelion:${{ github.event.inputs.tag_name }}
