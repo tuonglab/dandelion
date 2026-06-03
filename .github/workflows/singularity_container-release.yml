@@ -37,9 +37,10 @@ jobs:
         if: success()
         env:
           SINGULARITY_KEY: ${{ secrets.SINGULARITY_KEY }}
+          SINGULARITY_KEY_PASS: ${{ secrets.SINGULARITY_KEY_PASS }}
         run: |
           cd container
-          printf '%s' "$SINGULARITY_KEY" | singularity key import /dev/stdin
+          printf '%s' "$SINGULARITY_KEY" | singularity key import --passphrase "$SINGULARITY_KEY_PASS" /dev/stdin
           singularity sign --keyidx 0 sc-dandelion.sif
           singularity verify sc-dandelion.sif
 
