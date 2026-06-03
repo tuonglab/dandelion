@@ -30,6 +30,8 @@ jobs:
             container/scripts/*.{sh,py}
             container/*.{yml,yaml,py,def,toml}
             tests
+          files_ignore: |
+            **/singularity_container-release.yml
       - name: List all changed files
         run: |
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
