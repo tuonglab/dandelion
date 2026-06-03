@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - "*"
-  push:
-    branches:
-      - "master"
 
 env:
   cache-version: "cache-v0"
@@ -33,6 +30,8 @@ jobs:
             container/tests
             container/scripts/*.py
             tests
+          files_ignore: |
+            **/singularity_container-release.yml
       - name: List all changed files
         run: |
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
@@ -174,7 +173,8 @@ jobs:
           coverage report
 
       - name: Upload coverage to Codecov
-        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
+        if:
+          matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
           '3.13' && github.repository == 'tuonglab/dandelion'
         uses: codecov/codecov-action@v1
         with:
@@ -191,7 +191,8 @@ jobs:
           verbose: true
 
       - name: Upload test results to Codecov
-        if: matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
+        if:
+          matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
           '3.13' && github.repository == 'tuonglab/dandelion' && !cancelled()
         uses: codecov/test-results-action@v1
         with:
