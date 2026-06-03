@@ -10,6 +10,9 @@ on:
 jobs:
   container:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: container
     steps:
       - name: Check out code for the container build
         uses: actions/checkout@v4
@@ -19,13 +22,11 @@ jobs:
 
       - name: Build Container
         run: |
-          cd container
           sudo -E singularity build --notest sc-dandelion.sif sc-dandelion.def
 
       - name: Test Container
         id: test_container
         run: |
-          cd container
           sudo singularity test --writable-tmpfs sc-dandelion.sif
           singularity run -B $PWD sc-dandelion.sif dandelion-preprocess --help
           if [ $? -ne 0 ]; then
@@ -38,19 +39,15 @@ jobs:
         env:
           SINGULARITY_KEY: ${{ secrets.SINGULARITY_KEY }}
         run: |
-          cd container
           printf '%s' "$SINGULARITY_KEY" | singularity key import /dev/stdin
           singularity sign --keyidx 0 sc-dandelion.sif
           singularity verify sc-dandelion.sif
 
-      - name: Login to Sylabs Library
+      - name: Push to Sylabs Library
+        if: success()
         env:
           SINGULARITY_TOKEN: ${{ secrets.SINGULARITY_TOKEN }}
         run: |
-          singularity remote login --password "$SINGULARITY_TOKEN"
-
-      - name: Push to Sylabs Library
-        if: success()
-        run: |
+          echo "$SINGULARITY_TOKEN" | singularity remote login --password-stdin
           singularity push sc-dandelion.sif \
             library://kt16/default/sc-dandelion:${{ github.event.inputs.tag_name }}
