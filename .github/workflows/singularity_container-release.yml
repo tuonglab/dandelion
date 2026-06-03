@@ -35,9 +35,11 @@ jobs:
 
       - name: Sign and Verify Container
         if: success()
+        env:
+          SINGULARITY_KEY: ${{ secrets.SINGULARITY_KEY }}
         run: |
           cd container
-          echo ${{ secrets.SINGULARITY_KEY }} > private.key
+          printf '%s' "$SINGULARITY_KEY" > private.key                    
           singularity sign --key private.key sc-dandelion.sif
           singularity verify sc-dandelion.sif
 
