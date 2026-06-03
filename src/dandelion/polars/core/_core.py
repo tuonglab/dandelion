@@ -2032,7 +2032,7 @@ class DandelionPolars:
                     self._metadata = self._metadata.lazy()
             # Preserve order before join
             self._metadata = self._metadata.lazy().with_row_index("_join_order")
-            if "c_call_VDJ" in self._metadata:
+            if "c_call_VDJ" in self._metadata.collect_schema():
                 iso_tmp = self._split("c_call", join=False, data=_data)
                 isotype_df = (
                     iso_tmp.lazy()
