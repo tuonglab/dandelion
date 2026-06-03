@@ -39,8 +39,8 @@ jobs:
           SINGULARITY_KEY: ${{ secrets.SINGULARITY_KEY }}
         run: |
           cd container
-          printf '%s' "$SINGULARITY_KEY" > private.key                    
-          singularity sign --key private.key sc-dandelion.sif
+          printf '%s' "$SINGULARITY_KEY" | singularity key import /dev/stdin
+          singularity sign --keyidx 0 sc-dandelion.sif
           singularity verify sc-dandelion.sif
 
       - name: Login to Sylabs Library
