@@ -303,7 +303,7 @@ def generate_network(
         compute_layout = False
 
     if distance_mode == "clone" or compute_graph or compute_layout:
-        if clone_key not in vdj._data:
+        if clone_key not in vdj._data.collect_schema():
             raise ValueError(
                 "Data does not contain clone information. Please run ddl.tl.find_clones."
             )
@@ -334,11 +334,6 @@ def generate_network(
     if regenerate:
         start = logg.info("Generating network")
 
-        key_ = key if key is not None else "sequence_alignment_aa"
-
-        if key_ not in vdj._data:
-            raise ValueError(f"key {key_} not found in data.")
-
         if sample is not None:
             if adata is not None:
                 vdj, adata = vdj_sample(
@@ -356,64 +351,26 @@ def generate_network(
                     random_state=random_state,
                 )
 
-        dat = vdj[
-            vdj.data.locus.is_in(
-                ["IGH", "TRB", "TRD", "IGK", "IGL", "TRA", "TRG"]
-            )
-        ]
-
-        if "ambiguous" in dat.data.collect_schema().names():
-            # Convert FALSES to strings only (remove boolean False) for Polars compatibility
-            falses_strings = [str(f) for f in FALSES if f is not False]
-            falses_strings.append(
-                "False"
-            )  # Ensure both uppercase and lowercase are included
-            dat = dat[
-                dat.data["ambiguous"].cast(pl.String).is_in(falses_strings)
-            ]
-
-        dat_seq = dat._split(key_, explode=True)
-        dat_seq = dat_seq.rename(
-            {
-                col: re.sub(f"^{key_}_", "", col)
-                for col in dat_seq.collect_schema().names()
-                if col.startswith(f"{key_}_")
-            }
+        # Determine distance source after any sampling mutates vdj.
+        reuse_distance = (
+            use_existing_distance
+            and hasattr(vdj, "distances")
+            and vdj.distances is not None
         )
 
-        # Align dat_seq to vdj._metadata order to ensure indices match
-        # pre-computed distances from find_clones (which are indexed by metadata position)
+        # Build metadata-position mapping once; graph construction always uses this.
         meta_cell_ids = vdj._metadata.select("cell_id")
         if isinstance(meta_cell_ids, pl.LazyFrame):
             meta_cell_ids = meta_cell_ids.collect(engine="streaming")
 
-        # Left join to preserve metadata order, missing cells get null sequences
-        dat_seq = meta_cell_ids.join(dat_seq, on="cell_id", how="left")
-
-        # Build a position lookup table (cell_id → row index)
-        # Positions match metadata indices
-        pos_map = (
-            dat_seq.with_row_index("_row_pos")
-            if isinstance(dat_seq, pl.DataFrame)
-            else dat_seq.lazy()
-            .with_row_index("_row_pos")
-            .collect(engine="streaming")
-        ).select(["cell_id", pl.col("_row_pos").cast(pl.Int64).alias("pos")])
+        pos_map = meta_cell_ids.with_row_index("_row_pos").select(
+            ["cell_id", pl.col("_row_pos").cast(pl.Int64).alias("pos")]
+        )
         cell_to_pos = dict(
             zip(pos_map["cell_id"].to_list(), pos_map["pos"].to_list())
         )
 
-        if compute_graph or compute_layout or distance_mode == "clone":
-            # Get clone membership as DataFrame and merge overlapping clones
-            clone_df = dat._merge(clone_key, unique=True)
-            membership = _merge_overlapping_clones(clone_df, clone_key)
-
-        # Check if pre-computed distances are available
-        if (
-            use_existing_distance
-            and hasattr(vdj, "distances")
-            and vdj.distances is not None
-        ):
+        if reuse_distance:
             logg.info("Using pre-computed distances from .distances\n")
             total_dist = vdj.distances
             if isinstance(total_dist, np.ndarray):
@@ -422,6 +379,44 @@ def generate_network(
             if isinstance(total_dist, csr_matrix):
                 lazy = False
         else:
+            key_ = key if key is not None else "sequence_alignment_aa"
+
+            if key_ not in vdj._data:
+                raise ValueError(f"key {key_} not found in data.")
+
+            dat = vdj[
+                vdj.data.locus.is_in(
+                    ["IGH", "TRB", "TRD", "IGK", "IGL", "TRA", "TRG"]
+                )
+            ]
+
+            if "ambiguous" in dat.data.collect_schema().names():
+                # Convert FALSES to strings only (remove boolean False) for Polars compatibility
+                falses_strings = [str(f) for f in FALSES if f is not False]
+                falses_strings.append(
+                    "False"
+                )  # Ensure both uppercase and lowercase are included
+                dat = dat[
+                    dat.data["ambiguous"].cast(pl.String).is_in(falses_strings)
+                ]
+
+            dat_seq = dat._split(key_, explode=True)
+            dat_seq = dat_seq.rename(
+                {
+                    col: re.sub(f"^{key_}_", "", col)
+                    for col in dat_seq.collect_schema().names()
+                    if col.startswith(f"{key_}_")
+                }
+            )
+
+            # Align dat_seq to metadata order so computed distances match metadata indices.
+            dat_seq = meta_cell_ids.join(dat_seq, on="cell_id", how="left")
+
+            if distance_mode == "clone":
+                # Get clone membership as DataFrame and merge overlapping clones.
+                clone_df = dat._merge(clone_key, unique=True)
+                membership = _merge_overlapping_clones(clone_df, clone_key)
+
             # compute total_dist using chosen mode (original uses membership)
             logg.info(
                 f"Calculating distance matrix {'lazily ' if lazy else ' '}with distance_mode = '{distance_mode}'\n"
