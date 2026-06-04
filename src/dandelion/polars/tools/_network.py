@@ -292,6 +292,8 @@ def generate_network(
     ValueError
         if any errors with dandelion input.
     """
+    # make sure input is lazy
+    vdj.to_lazy()
     # normalize n_cpus convention (-1 => use all CPUs)
     if n_cpus == -1:
         n_cpus = multiprocessing.cpu_count()
@@ -381,7 +383,7 @@ def generate_network(
         else:
             key_ = key if key is not None else "sequence_alignment_aa"
 
-            if key_ not in vdj._data:
+            if key_ not in vdj._data.collect_schema():
                 raise ValueError(f"key {key_} not found in data.")
 
             dat = vdj[
@@ -390,7 +392,7 @@ def generate_network(
                 )
             ]
 
-            if "ambiguous" in dat.data.collect_schema().names():
+            if "ambiguous" in dat._data.collect_schema():
                 # Convert FALSES to strings only (remove boolean False) for Polars compatibility
                 falses_strings = [str(f) for f in FALSES if f is not False]
                 falses_strings.append(
