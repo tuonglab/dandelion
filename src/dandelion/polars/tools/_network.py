@@ -292,8 +292,8 @@ def generate_network(
     ValueError
         if any errors with dandelion input.
     """
-    # make sure input is lazy
-    vdj.to_lazy()
+    # make sure input is polars and lazy
+    vdj.to_polars()
     # normalize n_cpus convention (-1 => use all CPUs)
     if n_cpus == -1:
         n_cpus = multiprocessing.cpu_count()
