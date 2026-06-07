@@ -92,7 +92,7 @@ def _rewrite_duplicated_sample_ids(sample_dir: str, file_prefix: str, tag: str):
     ann.to_csv(ann_path, index=False)
 
     rewritten = []
-    with open(fa_path, "r") as f:
+    with open(fa_path) as f:
         for line in f:
             if line.startswith(">"):
                 header = line[1:].strip()
