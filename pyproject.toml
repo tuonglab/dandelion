@@ -89,8 +89,8 @@ dependencies = [
   "plotnine>=0.10",
   "palettable>=3.3",
   "mizani>=0.8",
-  # "nxviz>=0.7",
-  "nxviz @ git+https://github.com/ericmjl/nxviz.git", # use the latest version of nxviz to avoid cm deprecation issue
+  "matplotlib<3.11.0",         # plot_cm was removed in 3.11.0, see https://github.com/ericmjl/nxviz/pull/709
+  "nxviz>=0.7",                # TODO: update to >0.9 when it is released
   "rapidfuzz>3.12.1",
   "zarr>=2.18.7",
   "circlify>=0.15.0",
