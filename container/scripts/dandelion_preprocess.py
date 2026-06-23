@@ -20,11 +20,46 @@ def parse_args():
     parser.add_argument(
         "--meta",
         help=(
-            "Optional metadata CSV file, header required, first column for "
-            + "sample ID matching folder names in the directory this is being "
-            + 'ran in. Can have a "prefix"/"suffix" column for barcode '
-            + 'alteration, and "individual" to provide tigger groupings that '
-            + "isn't analysing all of the samples jointly."
+            "Optional metadata file. Legacy mode: CSV with first column as "
+            + "sample ID matching folder names in the current directory. "
+            + "Demultiplex mode: CSV/TSV (or .h5ad, using .obs) with per-cell "
+            + "mapping columns for cell ID and individual/sample assignment."
+        ),
+    )
+    parser.add_argument(
+        "--meta_cell_id_col",
+        type=str,
+        default="cell_id",
+        help=(
+            "Column in --meta containing cell IDs when using per-cell demultiplex metadata. "
+            + 'Defaults to "cell_id".'
+        ),
+    )
+    parser.add_argument(
+        "--meta_individual_col",
+        type=str,
+        default="individual",
+        help=(
+            "Column in --meta containing individual IDs for TIgGER grouping when using per-cell demultiplex metadata. "
+            + 'Defaults to "individual".'
+        ),
+    )
+    parser.add_argument(
+        "--meta_sample_col",
+        type=str,
+        default=None,
+        help=(
+            "Optional source sample folder column in per-cell --meta. "
+            + "Required when multiple source sample folders are present."
+        ),
+    )
+    parser.add_argument(
+        "--meta_output_col",
+        type=str,
+        default=None,
+        help=(
+            "Optional output sample/folder name column in per-cell --meta. "
+            + "Defaults to --meta_individual_col."
         ),
     )
     parser.add_argument(
@@ -189,34 +224,157 @@ def main():
         ),
     )
 
-    # set up a sample list
-    # do we have metadata?
-    if args.meta is not None:
-        # if so, read it and use the index as the sample list
-        meta = pd.read_csv(args.meta, index_col=0)
-        samples = [str(s) for s in meta.index]
-        if "individual" in meta.columns:
-            individuals = list(meta["individual"])
-            if not args.skip_tigger:
-                if any(ind in samples for ind in individuals):
-                    if args.clean_output:
-                        raise ValueError(
-                            "Individuals in metadata file must not be the same as sample names when `--clean_output` flag is used."
-                            "Otherwise, your sample folders will be deleted. "
-                            "Please rename the individual or sample folders, or run without `--clean_output`."
-                        )
-    else:
-        # no metadata file. create empty data frame so we can easily check for
-        # column presence
-        meta = pd.DataFrame()
-        # get list of all subfolders in current folder and run with that
-        samples = []
+    def discover_sample_folders() -> list[str]:
+        folders = []
         for item in os.listdir("."):
-            if os.path.isdir(item):
-                if not item.startswith(
-                    "."
-                ):  # exclude hidden folders like .ipynb_checkpoints
-                    samples.append(item)
+            if os.path.isdir(item) and (not item.startswith(".")):
+                folders.append(item)
+        return sorted(folders)
+
+    def read_meta_table(path: str) -> pd.DataFrame:
+        if str(path).lower().endswith(".h5ad"):
+            obs = sc.read_h5ad(path).obs.copy()
+            if args.meta_cell_id_col not in obs.columns:
+                obs[args.meta_cell_id_col] = obs.index.astype(str)
+            return obs.reset_index(drop=True)
+        # sep=None + python engine infers comma/tab separators.
+        return pd.read_csv(path, sep=None, engine="python")
+
+    def split_multiplexed_samples(
+        assignment: pd.DataFrame, source_samples: list[str]
+    ) -> tuple[pd.DataFrame, list[str]]:
+        cell_col = args.meta_cell_id_col
+        individual_col = args.meta_individual_col
+        source_col = args.meta_sample_col
+        out_col = (
+            args.meta_output_col
+            if args.meta_output_col is not None
+            else individual_col
+        )
+
+        if cell_col not in assignment.columns:
+            raise ValueError(
+                f"Per-cell metadata is missing '{cell_col}' column."
+            )
+        if individual_col not in assignment.columns:
+            raise ValueError(
+                f"Per-cell metadata is missing '{individual_col}' column."
+            )
+        if out_col not in assignment.columns:
+            raise ValueError(
+                f"Per-cell metadata is missing output column '{out_col}'."
+            )
+
+        assign = assignment.copy()
+        assign[cell_col] = assign[cell_col].astype(str)
+        assign[individual_col] = assign[individual_col].astype(str)
+        assign[out_col] = assign[out_col].astype(str)
+
+        if source_col is not None:
+            if source_col not in assign.columns:
+                raise ValueError(
+                    f"Per-cell metadata is missing source sample column '{source_col}'."
+                )
+            assign[source_col] = assign[source_col].astype(str)
+            requested_sources = sorted(assign[source_col].unique().tolist())
+        else:
+            if len(source_samples) != 1:
+                raise ValueError(
+                    "Per-cell metadata across multiple folders requires --meta_sample_col."
+                )
+            source_col = "_source_sample"
+            assign[source_col] = source_samples[0]
+            requested_sources = [source_samples[0]]
+
+        missing = sorted(set(requested_sources) - set(source_samples))
+        if missing:
+            raise ValueError(
+                "Source sample folders referenced in per-cell metadata were not found: "
+                + ", ".join(missing)
+            )
+
+        logg.info(
+            "Detected per-cell metadata. Running pre-format demultiplex step."
+        )
+
+        generated_rows = []
+        generated_samples = []
+        for src_sample in requested_sources:
+            src_assign = assign[assign[source_col] == src_sample]
+            if src_assign.empty:
+                continue
+
+            vdj = ddl.read_10x_vdj(
+                src_sample,
+                filename_prefix=args.file_prefix,
+                remove_trailing_hyphen_number=args.keep_trailing_hyphen_number,
+            )
+
+            for out_name, out_df in src_assign.groupby(out_col, sort=False):
+                cell_ids = list(pd.unique(out_df[cell_col]))
+                if len(cell_ids) == 0:
+                    continue
+
+                sub_vdj = vdj[cell_ids]
+                out_folder = Path(str(out_name))
+                out_folder.mkdir(parents=True, exist_ok=True)
+                sub_vdj.write_10x(
+                    folder=out_folder,
+                    filename_prefix=args.file_prefix,
+                )
+
+                generated_samples.append(str(out_name))
+                row = {
+                    "sample": str(out_name),
+                    "individual": str(out_df[individual_col].iloc[0]),
+                }
+                if "prefix" in out_df.columns:
+                    row["prefix"] = str(out_df["prefix"].iloc[0])
+                if "suffix" in out_df.columns:
+                    row["suffix"] = str(out_df["suffix"].iloc[0])
+                generated_rows.append(row)
+
+        if len(generated_rows) == 0:
+            raise ValueError(
+                "No demultiplexed outputs were generated from per-cell metadata."
+            )
+
+        generated_meta = pd.DataFrame(generated_rows).drop_duplicates(
+            subset=["sample"], keep="first"
+        )
+        generated_meta = generated_meta.set_index("sample")
+        generated_samples = sorted(list(pd.unique(generated_samples)))
+        return generated_meta, generated_samples
+
+    # set up sample list + metadata
+    meta = pd.DataFrame()
+    samples = discover_sample_folders()
+
+    if args.meta is not None:
+        raw_meta = read_meta_table(args.meta)
+        # Flexible --meta mode:
+        # 1) per-cell demultiplex mapping if required columns are present
+        # 2) legacy sample-level metadata otherwise
+        if (
+            args.meta_cell_id_col in raw_meta.columns
+            and args.meta_individual_col in raw_meta.columns
+        ):
+            meta, samples = split_multiplexed_samples(raw_meta, samples)
+        else:
+            # legacy sample-level CSV metadata (first column = sample id)
+            meta = pd.read_csv(args.meta, index_col=0)
+            samples = [str(s) for s in meta.index]
+
+    if "individual" in meta.columns:
+        individuals = list(meta["individual"])
+        if not args.skip_tigger:
+            if any(ind in samples for ind in individuals):
+                if args.clean_output:
+                    raise ValueError(
+                        "Individuals in metadata file must not be the same as sample names when `--clean_output` flag is used."
+                        "Otherwise, your sample folders will be deleted. "
+                        "Please rename the individual or sample folders, or run without `--clean_output`."
+                    )
 
     # STEP ONE - ddl.pp.format_fastas()
     # do we have a prefix/suffix?
