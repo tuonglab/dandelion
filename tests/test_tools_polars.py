@@ -24,14 +24,12 @@ from dandelion.polars.tools._diversity import (
 
 
 @pytest.fixture
-@pytest.mark.usefixtures("airr_reannotated")
 def airr_polars(airr_reannotated):
     """Helper fixture to create DandelionPolars object from airr_reannotated fixture."""
     return DandelionPolars(airr_reannotated)
 
 
 @pytest.fixture
-@pytest.mark.usefixtures("airr_reannotated2")
 def airr_polars2(airr_reannotated2):
     """Helper fixture to create DandelionPolars object from airr_reannotated2 fixture."""
     return DandelionPolars(airr_reannotated2)
