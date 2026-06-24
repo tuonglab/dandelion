@@ -13,7 +13,6 @@ from dandelion.polars.tools import find_clones as find_clones_polars
 
 
 @pytest.fixture
-# @pytest.mark.usefixtures("annotation_10x_mouse")
 def vdj_pl(annotation_10x_mouse):
     """Load and process data in polars version."""
     vdj_pl = read_10x_vdj_polars(annotation_10x_mouse)
@@ -22,7 +21,6 @@ def vdj_pl(annotation_10x_mouse):
 
 
 @pytest.fixture
-# @pytest.mark.usefixtures("annotation_10x_mouse")
 def vdj_pd(annotation_10x_mouse):
     """Load and process data in pandas version."""
     vdj_pd = read_10x_vdj(annotation_10x_mouse)
