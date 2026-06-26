@@ -300,7 +300,9 @@ def _split_clone_ids(clone_value: object) -> list[str]:
     """Split a possibly multi-assigned clone_id string into separate clone identifiers."""
     if clone_value is None or pd.isna(clone_value):
         return []
-    return [part.strip() for part in str(clone_value).split("|") if part.strip()]
+    return [
+        part.strip() for part in str(clone_value).split("|") if part.strip()
+    ]
 
 
 def _expanded_clone_assignments(
@@ -329,7 +331,9 @@ def _expanded_clone_assignments(
         )
 
     node_clone_df = (
-        data[required_cols].drop_duplicates(subset=[cell_col], keep="first").copy()
+        data[required_cols]
+        .drop_duplicates(subset=[cell_col], keep="first")
+        .copy()
     )
     node_clone_df["original_clone_id"] = node_clone_df[clone_col]
     node_clone_df["parts"] = node_clone_df[clone_col].map(_split_clone_ids)
