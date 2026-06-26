@@ -21,6 +21,10 @@ from dandelion.polars.tools._diversity import (
     clone_diversity,
     clone_rarefaction,
 )
+from dandelion.polars.tools._intraclonal_diversity import (
+    intraclonal_diversity,
+    intraclonal_metrics_per_clone,
+)
 from dandelion.utilities._layout import extract_edge_weights
 from dandelion.polars.tools._trajectory import (
     project_pseudotime_to_cell,
@@ -48,6 +52,8 @@ __all__ = [
     "find_clones_polars",
     "from_scirpy",
     "generate_network",
+    "intraclonal_diversity",
+    "intraclonal_metrics_per_clone",
     "productive_ratio",
     "project_pseudotime_to_cell",
     "pseudobulk_gex",

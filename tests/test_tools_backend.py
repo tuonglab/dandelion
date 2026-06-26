@@ -10,6 +10,8 @@ is exercised.  CI runs this file once per backend to cover both
 
 import pytest
 import scanpy as sc
+import pandas as pd
+import networkx as nx
 
 import dandelion as ddl
 
@@ -115,6 +117,27 @@ def test_clone_rarefaction(create_testfolder):
     f = create_testfolder / "test_backend.ddl"
     vdj = ddl.read(f)
     ddl.tl.clone_rarefaction(vdj, group_by="sample_id")
+
+
+def test_intraclonal_diversity_api_available():
+    data = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2", "c3"],
+            "clone_id": ["A", "A", "B"],
+        }
+    )
+    G = nx.Graph()
+    G.add_weighted_edges_from([("c1", "c2", 1.0), ("c2", "c3", 1.0)])
+    vdj_like = type("V", (), {"data": data, "graph": (None, G)})()
+
+    out = ddl.tl.intraclonal_diversity(
+        vdj_like,
+        min_cells=1,
+        top_n=None,
+        fast=False,
+    )
+    assert "clone_id" in out.columns
+    assert "clone_size" in out.columns
 
 
 # -- scirpy / concat ----------------------------------------------------------

@@ -416,11 +416,11 @@ def diversity_gini(
     )
 
     return {
-        "cluster_size_gini": cluster_size,
-        "vertex_size_gini": vertex_size,
+        "cluster_gini": cluster_size,
+        "vertex_gini": vertex_size,
     }, {
-        "cluster_size_gini": cluster_raw,
-        "vertex_size_gini": vertex_raw,
+        "cluster_gini": cluster_raw,
+        "vertex_gini": vertex_raw,
     }
 
 

@@ -18,6 +18,10 @@ from dandelion.base.tools._network import (
     generate_network,
 )
 from dandelion.base.tools._diversity import clone_diversity, clone_rarefaction
+from dandelion.base.tools._intraclonal_diversity import (
+    intraclonal_diversity,
+    intraclonal_metrics_per_clone,
+)
 
 from dandelion.external.immcantation.base.changeo import define_clones
 
@@ -46,6 +50,8 @@ __all__ = [
     "find_clones_polars",
     "from_scirpy",
     "generate_network",
+    "intraclonal_diversity",
+    "intraclonal_metrics_per_clone",
     "productive_ratio",
     "project_pseudotime_to_cell",
     "pseudobulk_gex",
