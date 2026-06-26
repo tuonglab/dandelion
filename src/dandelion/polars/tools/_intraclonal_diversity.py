@@ -124,7 +124,67 @@ def _intraclonal_diversity_metrics(
     betweenness_k: int = 64,
     random_state: int = 42,
 ) -> dict[str, int | float | str]:
-    """Compute clone-level intraclonal graph and community metrics."""
+    """Compute clone-level intraclonal graph and community metrics.
+
+    Parameters
+    ----------
+    G : nx.Graph
+        Clone graph where nodes are cells/sequences and edges encode relatedness.
+    distance_key : str
+        Edge attribute interpreted as distance for shortest-path and centrality computations.
+    similarity_key : str
+        Edge attribute interpreted as similarity for PageRank and community weighting.
+    fast : bool
+        If True, estimate path metrics and use approximate betweenness for speed.
+    n_sources : int
+        Number of sampled source nodes for shortest-path estimates in fast mode.
+    betweenness_k : int
+        Number of sampled pivot nodes for approximate betweenness in fast mode.
+    random_state : int
+        Seed for reproducible sampling in fast mode.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys (all values are int or float unless noted):
+
+        n_nodes : int
+            Number of nodes in the clone graph.
+        n_edges : int
+            Number of edges in the clone graph.
+        largest_community_fraction : float
+            Fraction of nodes in the largest greedy-modularity community. Higher values
+            indicate one dominant sub-community; lower values indicate a more even split.
+        n_communities_greedy : int
+            Number of communities detected by greedy modularity.
+        modularity_greedy : float
+            Community-separation score for the detected partition. Larger values suggest
+            stronger within-community connectivity relative to between-community mixing.
+        density : float
+            Fraction of possible edges that are present.
+        mean_degree : float
+            Mean node degree; reflects average connectivity level.
+        var_degree : float
+            Variance of node degree; reflects connectivity heterogeneity.
+        degree_assortativity : float
+            Degree-degree correlation across edges. Negative values suggest hub-spoke structure.
+        transitivity : float
+            Transitivity (global clustering coefficient). Higher values indicate tighter triangles.
+        average_clustering : float
+            Average clustering coefficient. Higher values suggest tighter local neighborhoods.
+        diameter_component : float
+            Longest shortest path in the largest detected community.
+        average_shortest_path_component : float
+            Mean shortest-path distance in the largest detected community.
+        mean_betweenness : float
+            Mean betweenness centrality in the largest detected community.
+        mean_closeness : float
+            Mean closeness centrality in the largest detected community.
+        max_pagerank : float
+            Highest PageRank score in the largest detected community.
+        mode : str
+            "fast" for sampled/approximate calculations or "exact" for full calculations.
+    """
     if G.number_of_nodes() == 0:
         return {
             "n_nodes": 0,
@@ -384,7 +444,64 @@ def intraclonal_diversity(
     -------
     pd.DataFrame
         One row per reported clone with clone identifier, clone size, and all
-        intraclonal diversity metrics.
+        intraclonal diversity metrics returned by the helper:
+
+        clone_id : str
+            Reported clonotype label after smart split logic.
+        clone_size : int
+            Number of unique cells assigned to the reported clonotype.
+        group_by column (optional) : str
+            Present only when ``group_by`` is provided; identifies the group for
+            each clonotype row.
+        n_nodes : int
+            Number of cells in the clonotype subgraph (typically equals clone_size).
+        n_edges : int
+            Number of observed relationships among cells in the clonotype.
+        largest_community_fraction : float
+            Fraction of clonotype cells in the largest subgroup. High values mean most
+            cells sit in one main subgroup; low values mean the clone is split into several parts.
+        n_communities_greedy : int
+            Number of detected subgroups inside the clonotype. More subgroups usually
+            means more internal heterogeneity.
+        modularity_greedy : float
+            How clearly the clonotype separates into subgroups. Higher values mean
+            subgroup boundaries are stronger.
+        density : float
+            Fraction of all possible within-clonotype links that are present.
+            Higher values indicate a more tightly interconnected clonotype.
+        mean_degree : float
+            Average number of within-clonotype neighbors per cell.
+        var_degree : float
+            How uneven connectivity is across cells. High values mean a mix of
+            highly connected cells and sparsely connected cells.
+        degree_assortativity : float
+            Whether highly connected cells mostly link to other highly connected cells.
+            Negative values mean a "core-and-branches" pattern (few central cells linked
+            to many less-connected cells). Positive values mean cells tend to connect to
+            others with similar connectivity.
+        transitivity : float
+            How often connected triplets of clonotype cells form closed triangles.
+            Higher values suggest tighter local groupings.
+        average_clustering : float
+            Average local cohesiveness around each cell. Higher values indicate cells tend
+            to form tight local neighborhoods.
+        diameter_component : float
+            Largest shortest-path distance within the clonotype's main subgroup.
+            Higher values suggest broader spread of the lineage in sequence space.
+        average_shortest_path_component : float
+            Average shortest-path distance within the clonotype's main subgroup.
+            Lower values indicate a more compact lineage.
+        mean_betweenness : float
+            Average tendency of cells to sit on paths connecting other cells.
+            Higher values suggest more bridge-like cells between subgroup regions.
+        mean_closeness : float
+            Average proximity of cells to the rest of the main subgroup.
+            Higher values indicate cells are, on average, closer to one another.
+        max_pagerank : float
+            Highest centrality score in the main subgroup. High values indicate one or a few
+            especially influential/central cells in that clonotype structure.
+        mode : str
+            "fast" for sampled/approximate calculations or "exact" for full calculations.
 
     Raises
     ------
