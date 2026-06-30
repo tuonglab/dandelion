@@ -100,7 +100,7 @@ You will need to download the database folder in this repository and place them 
 python prepare_imgt_database.py
 python prepare_ogrdb_database.py
 python prepare_kiava_database.py
-python prepare_ghklab_database.py
+python prepare_gkhlab_database.py
 ```
 
 Also set the paths to the germline and igblast databases

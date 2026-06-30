@@ -222,7 +222,7 @@ def creategermlines(
     org: Literal["human", "mouse"] = "human",
     genotyped_fasta: str | None = None,
     mode: Literal["heavy", "light"] | None = None,
-    db: Literal["imgt", "ogrdb", "kiarva", "ghklab"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
     strain: (
         Literal[
             "c57bl6",

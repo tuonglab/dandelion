@@ -827,7 +827,7 @@ def reannotate_genes(
     reassign_dj: bool = True,
     overwrite: bool = True,
     dust: str | None = "no",
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -855,6 +855,7 @@ def reannotate_genes(
         ]
         | None
     ) = None,
+    lightchain_db: str | None = None,
     additional_args: dict[str, list[str]] = {
         "assigngenes": [],
         "makedb": [],
@@ -929,8 +930,10 @@ def reannotate_genes(
         dustmasker options. Filter query sequence with DUST
         Format: 'yes', or 'no' to disable. Accepts str.
         If None, defaults to `20 64 1`.
-    db : Literal["imgt", "ogrdb"], optional
+    db : Literal["imgt", "ogrdb", "kiarva", "gkhlab"], optional
         database to use for igblastn. Defaults to 'imgt'.
+    lightchain_db : str | None, optional
+        database to use for light chain annotation. None defaults to `db`. However, if `db` is 'kiarva', `None` defaults to 'imgt' but this option can also be set to 'ogrdb' if desired.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -970,6 +973,12 @@ def reannotate_genes(
                 )
 
         logg.info(f"Processing {str(filePath)} \n")
+        if db == "kiarva":
+            db = (
+                "kiarva_imgt"
+                if lightchain_db is None
+                else f"kiarva_{lightchain_db}"
+            )
         if flavour == "original":
             assigngenes_igblast(
                 filePath,
@@ -1177,7 +1186,8 @@ def reassign_alleles(
     v_germline: str | None = None,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva"] = "imgt",
+    lightchain_db: Literal["imgt", "ogrdb"] | None = None,
     strain: (
         Literal[
             "c57bl6",
@@ -1239,8 +1249,10 @@ def reassign_alleles(
         variable.
     org : Literal["human", "mouse"], optional
         organism of germline database.
-    db : Literal["imgt", "ogrdb"], optional
+    db : Literal["imgt", "ogrdb", "kiarva"], optional
         database to use for germline sequences.
+    lightchain_db : Literal["imgt", "ogrdb"] | None, optional
+        database to use for light chains. Only for `db="kiarva"`, `None` defaults to 'imgt' but this option can also be set to 'ogrdb' if desired.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -1271,7 +1283,12 @@ def reassign_alleles(
     """
     fileformat = "blast"
     data, filename_prefix = check_data(data, filename_prefix)
-
+    if db == "kiarva":
+        db = (
+            "kiarva_imgt"
+            if lightchain_db is None
+            else f"kiarva_{lightchain_db}"
+        )
     informat_dict = {
         "changeo": "_igblast_db-pass.tsv",
         "blast": "_igblast_db-pass.tsv",
@@ -1816,7 +1833,9 @@ def run_igblastn(
     loci: Literal["ig", "tr"] = "ig",
     evalue: float = 1e-4,
     min_d_match: int = 9,
-    db: Literal["imgt", "ogrdb", "kiarva", "ghklab"] = "imgt",
+    db: Literal[
+        "imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"
+    ] = "imgt",
     strain: (
         Literal[
             "c57bl6",
