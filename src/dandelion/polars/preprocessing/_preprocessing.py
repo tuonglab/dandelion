@@ -1324,7 +1324,7 @@ def reassign_alleles(
     v_germline: str | None = None,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva"] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -1386,7 +1386,7 @@ def reassign_alleles(
         variable.
     org : Literal["human", "mouse"], optional
         organism of germline database.
-    db : Literal["imgt", "ogrdb"], optional
+    db : Literal["imgt", "ogrdb", "kiarva"], optional
         database to use for germline sequences.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.

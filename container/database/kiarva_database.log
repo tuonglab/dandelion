@@ -1,0 +1,284 @@
+2026-06-30 18:26:53 - INFO: Source:        https://kiarva.scilifelab.se/api/fasta
+2026-06-30 18:26:53 - INFO: Out directory: /Users/uqztuong/Documents/GitHub/dandelion/container/database
+2026-06-30 18:26:53 - INFO: Download date: 2026-06-30
+2026-06-30 18:26:53 - INFO: Species: human (BCR VDJ only)
+2026-06-30 18:26:53 - INFO: --- Downloading KIARVA BCR germline sequences ---
+2026-06-30 18:26:53 - INFO: Downloading IGHV ...
+2026-06-30 18:26:56 - INFO: Adding IMGT gaps to sequences in IGHV
+2026-06-30 18:27:02 - INFO: Warning: reference sequence X60503|IGHV1-18*02|Homo_sapiens|F|V-REGION|142..417|276: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing KF698736|IGHV1-38-4*01|Homo_sapiens|ORF|V-REGION|391..686|296 from reference: Second cysteine not found
+Removing AB019437|IGHV1-68*01|Homo_sapiens|P|V-REGION|129383..129678|296 from reference: Second cysteine not found
+Removing MK540648|IGHV1-68*02|Homo_sapiens|P|V-REGION|31744..32039|296 from reference: Second cysteine not found
+Removing AC279908|IGHV1-68*03|Homo_sapiens|P|V-REGION|28585..28880|296 from reference: Second cysteine not found
+Removing IMGT000175|IGHV1-68*04|Homo_sapiens|P|V-REGION|133877..134172|296 from reference: Second cysteine not found
+Removing BK063799|IGHV1-68D*02|Homo_sapiens|P|V-REGION|129263..129558|296 from reference: Second cysteine not found
+Removing IMGT000177|IGHV1-68D*03|Homo_sapiens|P|V-REGION|141766..142061|296 from reference: Second cysteine not found
+Warning: reference sequence X92340|IGHV1-69*03|Homo_sapiens|F|V-REGION|133..407|275: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence Z29977|IGHV1-69-2*02|Homo_sapiens|F|V-REGION|1..233|233: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing M13911|IGHV1-NL1*01|Homo_sapiens|P|V-REGION|125..420|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing L25543|IGHV1/OR15-2*01|Homo_sapiens|P|V-REGION|229..524|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing HM855297|IGHV1/OR15-2*02|Homo_sapiens|P|V-REGION|24..319|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing HM855556|IGHV1/OR15-2*03|Homo_sapiens|P|V-REGION|20..315|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z29595|IGHV1/OR15-3*01|Homo_sapiens|P|V-REGION|1..294|294 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing HM855458|IGHV1/OR15-3*02|Homo_sapiens|P|V-REGION|21..316|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing J00238|IGHV1/OR15-3*03|Homo_sapiens|P|V-REGION|375..670|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z29596|IGHV1/OR15-4*01|Homo_sapiens|P|V-REGION|1..294|294 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found
+Warning: reference sequence IMGT000069|IGHV1/OR16-22*01|Homo_sapiens|P|V-REGION|1900751..1900897|147: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence IMGT000069|IGHV1/OR16-3*01|Homo_sapiens|P|V-REGION|108194..108343|150: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence IMGT000069|IGHV1/OR16-4*01|Homo_sapiens|P|V-REGION|1051443..1051592|150: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing M99647|IGHV2-10*01|Homo_sapiens|P|V-REGION|211..511|301 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing BK068299|IGHV2-10*02|Homo_sapiens|P|V-REGION|790329..790629|301 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Warning: reference sequence X93619|IGHV2-5*03|Homo_sapiens|F|V-REGION|1..210|210: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92241|IGHV2-70*02|Homo_sapiens|F|V-REGION|144..433|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92238|IGHV2-70*03|Homo_sapiens|F|V-REGION|144..433|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92239|IGHV2-70*06|Homo_sapiens|F|V-REGION|144..433|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92243|IGHV2-70*07|Homo_sapiens|F|V-REGION|144..433|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92245|IGHV2-70*08|Homo_sapiens|F|V-REGION|144..433|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing L21962|IGHV2-70*09|Homo_sapiens|ORF|V-REGION|144..440|297 from reference: First cysteine not found
+Removing IMGT000177|IGHV2-70D*23|Homo_sapiens|ORF|V-REGION|168475..168775|301 from reference: Conserved Trp not found
+Removing IMGT000069|IGHV2/OR16-23*01|Homo_sapiens|P|V-REGION|2062356..2062656|301 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing KC713937|IGHV3-20*02|Homo_sapiens|ORF|V-REGION|411..706|296 from reference: First cysteine not found
+Removing MH332884|IGHV3-20*03|Homo_sapiens|ORF|V-REGION|227..522|296 from reference: First cysteine not found
+Removing M99659|IGHV3-22*01|Homo_sapiens|P|V-REGION|245..546|302 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019439|IGHV3-22*02|Homo_sapiens|P|V-REGION|174880..175181|302 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing M99661|IGHV3-25*01|Homo_sapiens|P|V-REGION|236..531|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019439|IGHV3-25*02|Homo_sapiens|P|V-REGION|143626..143921|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AC245166|IGHV3-25*03|Homo_sapiens|P|V-REGION|128936..129231|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing HM855898|IGHV3-25*04|Homo_sapiens|ORF|V-REGION|22..317|296 from reference: Conserved Trp not found
+Removing AC280062|IGHV3-25*05|Homo_sapiens|P|V-REGION|35114..35409|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019439|IGHV3-29*01|Homo_sapiens|P|V-REGION|101886..102183|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing BK063800|IGHV3-29*02|Homo_sapiens|P|V-REGION|558605..558902|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019439|IGHV3-30-2*01|Homo_sapiens|P|V-REGION|88935..89232|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing IMGT000173|IGHV3-30-2*03|Homo_sapiens|P|V-REGION|538008..538305|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing KC162924|IGHV3-30-22*01|Homo_sapiens|P|V-REGION|41477..41774|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AC244456|IGHV3-30-33*01|Homo_sapiens|P|V-REGION|11003..11300|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing IMGT000177|IGHV3-30-33*02|Homo_sapiens|P|V-REGION|610583..610880|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AC244456|IGHV3-30-42*01|Homo_sapiens|P|V-REGION|22749..23046|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing IMGT000158|IGHV3-30-42*03|Homo_sapiens|P|V-REGION|539301..539598|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AC244456|IGHV3-30-52*01|Homo_sapiens|P|V-REGION|36011..36306|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019439|IGHV3-32*01|Homo_sapiens|P|V-REGION|77173..77470|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found, Second cysteine not found
+Removing IMGT000177|IGHV3-32*02|Homo_sapiens|P|V-REGION|598769..599066|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019439|IGHV3-33-2*01|Homo_sapiens|P|V-REGION|64215..64512|298 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing BK063799|IGHV3-41*02|Homo_sapiens|P|V-REGION|436421..436714|294 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing M99678|IGHV3-52*01|Homo_sapiens|P|V-REGION|367..662|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing AC279961|IGHV3-52*02|Homo_sapiens|P|V-REGION|23120..23415|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing J00237|IGHV3-52*03|Homo_sapiens|P|V-REGION|177..470|294 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing M99680|IGHV3-54*01|Homo_sapiens|P|V-REGION|297..592|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing X92215|IGHV3-54*02|Homo_sapiens|P|V-REGION|346..641|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing AB019438|IGHV3-54*04|Homo_sapiens|P|V-REGION|31896..32191|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing IMGT000177|IGHV3-54*07|Homo_sapiens|P|V-REGION|292334..292629|296 from reference: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+Removing M29813|IGHV3-60*06|Homo_sapiens|P|V-REGION|217..512|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing AB019437|IGHV3-62*01|Homo_sapiens|P|V-REGION|190113..190408|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing BK063799|IGHV3-62*03|Homo_sapiens|P|V-REGION|236420..236715|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing M99681|IGHV3-63*01|Homo_sapiens|P|V-REGION|170..467|298 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing IMGT000058|IGHV3-63*02|Homo_sapiens|P|V-REGION|8665..8962|298 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing BK068299|IGHV3-63*03|Homo_sapiens|P|V-REGION|192225..192522|298 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing AB019437|IGHV3-71*01|Homo_sapiens|P|V-REGION|105844..106145|302 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing HM855875|IGHV3-71*02|Homo_sapiens|P|V-REGION|22..323|302 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing IMGT000175|IGHV3-71*03|Homo_sapiens|P|V-REGION|107832..108133|302 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing MK540648|IGHV3-71*04|Homo_sapiens|P|V-REGION|7621..7922|302 from reference: Stop codon in V-REGION before 2nd cysteine
+Warning: reference sequence Z29979|IGHV3-72*02|Homo_sapiens|F|V-REGION|1..165|165: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing IMGT000069|IGHV3/OR16-12*01|Homo_sapiens|ORF|V-REGION|1851891..1852186|296 from reference: First cysteine not found
+Removing Z29611|IGHV3/OR16-14*01|Homo_sapiens|P|V-REGION|1..294|294 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing L25546|IGHV3/OR16-15*01|Homo_sapiens|P|V-REGION|204..499|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z29612|IGHV3/OR16-15*02|Homo_sapiens|P|V-REGION|1..294|294 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z14217|IGHV3/OR16-15*03|Homo_sapiens|P|V-REGION|161..456|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing IMGT000069|IGHV3/OR16-16*01|Homo_sapiens|P|V-REGION|1998935..1999230|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z14218|IGHV3/OR16-16*02|Homo_sapiens|P|V-REGION|158..453|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z14220|IGHV3/OR16-16*03|Homo_sapiens|P|V-REGION|162..457|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing IMGT000069|IGHV3/OR16-18*01|Homo_sapiens|P|V-REGION|11057..11352|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z75351|IGHV4-30-2*04|Homo_sapiens|F|V-REGION|1..227|227 from reference: First cysteine not found
+Warning: reference sequence X92274|IGHV4-30-4*03|Homo_sapiens|F|V-REGION|140..429|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92275|IGHV4-30-4*04|Homo_sapiens|F|V-REGION|140..429|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing Z75353|IGHV4-30-4*05|Homo_sapiens|F|V-REGION|1..228|228 from reference: First cysteine not found
+Removing Z75360|IGHV4-30-4*06|Homo_sapiens|F|V-REGION|1..227|227 from reference: First cysteine not found
+Warning: reference sequence X92270|IGHV4-31*06|Homo_sapiens|F|V-REGION|140..429|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92271|IGHV4-31*07|Homo_sapiens|F|V-REGION|140..429|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92272|IGHV4-31*08|Homo_sapiens|F|V-REGION|140..429|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92273|IGHV4-31*09|Homo_sapiens|F|V-REGION|140..429|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92255|IGHV4-34*03|Homo_sapiens|F|V-REGION|141..424|284: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92256|IGHV4-34*06|Homo_sapiens|F|V-REGION|141..424|284: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92258|IGHV4-34*07|Homo_sapiens|F|V-REGION|141..424|284: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing Z75356|IGHV4-34*13|Homo_sapiens|F|V-REGION|1..221|221 from reference: First cysteine not found
+Warning: reference sequence X92259|IGHV4-39*03|Homo_sapiens|F|V-REGION|141..430|290: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92297|IGHV4-39*04|Homo_sapiens|F|V-REGION|1..196|196: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92253|IGHV4-4*04|Homo_sapiens|F|V-REGION|140..426|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92254|IGHV4-4*05|Homo_sapiens|F|V-REGION|140..426|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing Z75355|IGHV4-4*06|Homo_sapiens|F|V-REGION|1..224|224 from reference: First cysteine not found
+Removing M99685|IGHV4-55*01|Homo_sapiens|P|V-REGION|370..665|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing X92223|IGHV4-55*02|Homo_sapiens|P|V-REGION|349..644|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Warning: reference sequence X92263|IGHV4-55*03|Homo_sapiens|P|V-REGION|141..427|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92265|IGHV4-55*04|Homo_sapiens|P|V-REGION|141..427|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92266|IGHV4-55*05|Homo_sapiens|P|V-REGION|141..427|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92267|IGHV4-55*06|Homo_sapiens|P|V-REGION|141..427|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X92268|IGHV4-55*07|Homo_sapiens|P|V-REGION|141..427|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing X92234|IGHV4-55*08|Homo_sapiens|P|V-REGION|141..436|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing X92235|IGHV4-55*09|Homo_sapiens|P|V-REGION|140..435|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing Z75359|IGHV4-59*09|Homo_sapiens|F|V-REGION|1..221|221 from reference: First cysteine not found
+Warning: reference sequence X92250|IGHV4-61*04|Homo_sapiens|F|V-REGION|140..426|287: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing Z75347|IGHV4-61*06|Homo_sapiens|ORF|V-REGION|1..227|227 from reference: First cysteine not found
+Removing Z75348|IGHV4-61*07|Homo_sapiens|F|V-REGION|1..227|227 from reference: First cysteine not found
+Warning: reference sequence BK063799|IGHV4-80*02|Homo_sapiens|P|V-REGION|6799..7062|264: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence IMGT000111|IGHV4-80*03|Homo_sapiens|P|V-REGION|16803..17066|264: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing X92279|IGHV5-10-1*02|Homo_sapiens|F|V-REGION|252..546|295 from reference: Codon 'GC-' is invalid
+EVQLVQSGA-EVKKPGESLRISCKGSGYSF----TSYWISWVRQMPGKGLEWMGRIDPS--DSYTNYSPSFQ-GHVTISADKSISTAYLQWSSLKASDTAMYYCAR
+Warning: reference sequence Z27449|IGHV5-51*05|Homo_sapiens|F|V-REGION|1..245|245: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing IMGT000054|IGHV6-1*03|Homo_sapiens|P|V-REGION|15191..15495|305 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing AB019439|IGHV7-34-1*01|Homo_sapiens|P|V-REGION|56018..56310|293 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found
+Removing IMGT000197|IGHV7-34-1*02|Homo_sapiens|P|V-REGION|467337..467629|293 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found
+Removing IMGT000056|IGHV7-34-1*03|Homo_sapiens|P|V-REGION|19040..19332|293 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found
+Removing IMGT000111|IGHV7-34-1*04|Homo_sapiens|P|V-REGION|527767..528059|293 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found
+Warning: reference sequence X92290|IGHV7-4-1*03|Homo_sapiens|F|V-REGION|1..274|274: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing AC241995|IGHV7-40*03|Homo_sapiens|P|V-REGION|10194..10396|203 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found
+Removing AB019439|IGHV7-40*04|Homo_sapiens|P|V-REGION|8075..8277|203 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found
+Removing AC233755|IGHV7-40D*01|Homo_sapiens|P|V-REGION|38409..38611|203 from reference: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found, Second cysteine not found
+Removing AB019438|IGHV8-51-1*01|Homo_sapiens|P|V-REGION|49758..50053|296 from reference: Stop codon in V-REGION before 2nd cysteine
+Removing IMGT000055|IGHV8-51-1*03|Homo_sapiens|P|V-REGION|20351..20646|296 from reference: Stop codon in V-REGION before 2nd cysteine
+IGHV1-18*01_S7240: First cysteine not found, Conserved Trp not found
+IGHV1-3*01_S8894: Second cysteine not found
+IGHV1-58*02_S3166: Second cysteine not found
+IGHV1-69*13_S1754: Stop codon in V-REGION before 2nd cysteine
+IGHV2-70*04_S0783: Stop codon in V-REGION before 2nd cysteine
+IGHV3-11*06_S2862: Second cysteine not found
+IGHV3-20*02: First cysteine not found
+IGHV3-20*04_S0679: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found, Second cysteine not found
+IGHV3-21*01_S7659: Stop codon in V-REGION before 2nd cysteine
+IGHV3-30*01_S3367: Conserved Trp not found
+IGHV3-30*18_S0642: Stop codon in V-REGION before 2nd cysteine, Second cysteine not found
+IGHV3-33*01_S8274: Stop codon in V-REGION before 2nd cysteine, Conserved Trp not found
+IGHV3-43*01_S0532: Stop codon in V-REGION before 2nd cysteine
+IGHV3-43*01_S2321: Stop codon in V-REGION before 2nd cysteine
+IGHV3-49*04_S4009: Stop codon in V-REGION before 2nd cysteine, Second cysteine not found
+IGHV3-53*02_S1345: Stop codon in V-REGION before 2nd cysteine, Second cysteine not found
+IGHV3-64*01_S9062: Stop codon in V-REGION before 2nd cysteine
+IGHV3-66*01_S7576: First cysteine not found, Conserved Trp not found
+IGHV3-66*02_S0188: Conserved Trp not found
+IGHV3-9*01_S2201: Stop codon in V-REGION before 2nd cysteine
+IGHV3-9*01_S9147: Stop codon in V-REGION before 2nd cysteine
+IGHV4-34*01_S1561: Stop codon in V-REGION before 2nd cysteine
+IGHV4-39*01_S4123: Second cysteine not found
+IGHV5-51*03_S5843: Second cysteine not found
+IGHV6-1*03: Stop codon in V-REGION before 2nd cysteine
+IGHV7-4-1*02_S0157: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found, Second cysteine not found
+
+2026-06-30 18:27:02 - INFO: Saved IGHV (561 sequences).
+2026-06-30 18:27:02 - INFO: Downloading IGHD ...
+2026-06-30 18:27:04 - INFO: Adding IMGT gaps to sequences in IGHD
+2026-06-30 18:27:04 - INFO: Warning: reference sequence X97051|IGHD1-1*01|Homo_sapiens|F|D-REGION|33714..33730|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD1-14*01|Homo_sapiens|ORF|D-REGION|14518..14534|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD1-20*01|Homo_sapiens|F|D-REGION|62015..62031|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD1-26*01|Homo_sapiens|F|D-REGION|72169..72188|20: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD1-7*01|Homo_sapiens|F|D-REGION|5266..5282|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55575|IGHD1/OR15-1a*01|Homo_sapiens|ORF|D-REGION|63..79|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55576|IGHD1/OR15-1b*01|Homo_sapiens|ORF|D-REGION|63..79|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00234|IGHD2-15*01|Homo_sapiens|F|D-REGION|29..59|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00232|IGHD2-2*01|Homo_sapiens|F|D-REGION|29..59|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD2-2*02|Homo_sapiens|F|D-REGION|36367..36397|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence M35648|IGHD2-2*03|Homo_sapiens|F|D-REGION|70..100|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00235|IGHD2-21*01|Homo_sapiens|F|D-REGION|29..56|28: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD2-21*02|Homo_sapiens|F|D-REGION|64644..64671|28: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD2-8*01|Homo_sapiens|F|D-REGION|7949..7979|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00233|IGHD2-8*02|Homo_sapiens|F|D-REGION|29..59|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55577|IGHD2/OR15-2a*01|Homo_sapiens|ORF|D-REGION|68..98|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55578|IGHD2/OR15-2b*01|Homo_sapiens|ORF|D-REGION|68..98|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD3-10*01|Homo_sapiens|F|D-REGION|10659..10689|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Removing X93615|IGHD3-10*02|Homo_sapiens|F|D-REGION|30..59|30 from reference: Codon 'TG-' is invalid
+VLLWFGELL*
+Warning: reference sequence BK063800|IGHD3-10*03|Homo_sapiens|F|D-REGION|985897..985927|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X93614|IGHD3-16*01|Homo_sapiens|F|D-REGION|30..66|37: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD3-16*02|Homo_sapiens|F|D-REGION|57552..57588|37: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence BK063800|IGHD3-16*03|Homo_sapiens|F|D-REGION|994754..994790|37: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X93616|IGHD3-22*01|Homo_sapiens|F|D-REGION|30..60|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD3-3*01|Homo_sapiens|F|D-REGION|804..834|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X93618|IGHD3-3*02|Homo_sapiens|F|D-REGION|30..60|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD3-9*01|Homo_sapiens|F|D-REGION|10475..10505|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55579|IGHD3/OR15-3a*01|Homo_sapiens|ORF|D-REGION|210..240|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55580|IGHD3/OR15-3b*01|Homo_sapiens|ORF|D-REGION|210..240|31: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD4-11*01|Homo_sapiens|ORF|D-REGION|11550..11565|16: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD4-17*01|Homo_sapiens|F|D-REGION|58699..58714|16: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD4-23*01|Homo_sapiens|ORF|D-REGION|68334..68352|19: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD4-4*01|Homo_sapiens|F|D-REGION|1952..1967|16: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55581|IGHD4/OR15-4a*01|Homo_sapiens|ORF|D-REGION|83..101|19: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55582|IGHD4/OR15-4b*01|Homo_sapiens|ORF|D-REGION|82..100|19: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD5-12*01|Homo_sapiens|F|D-REGION|12506..12528|23: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD5-18*01|Homo_sapiens|F|D-REGION|59661..59680|20: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence BK063800|IGHD5-18*02|Homo_sapiens|ORF|D-REGION|996862..996884|23: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD5-24*01|Homo_sapiens|ORF|D-REGION|69300..69319|20: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD5-5*01|Homo_sapiens|F|D-REGION|2913..2932|20: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55583|IGHD5/OR15-5a*01|Homo_sapiens|ORF|D-REGION|94..116|23: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X55584|IGHD5/OR15-5b*01|Homo_sapiens|ORF|D-REGION|94..116|23: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD6-13*01|Homo_sapiens|F|D-REGION|14011..14031|21: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD6-19*01|Homo_sapiens|F|D-REGION|61503..61523|21: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X97051|IGHD6-25*01|Homo_sapiens|F|D-REGION|71666..71683|18: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X13972|IGHD6-6*01|Homo_sapiens|F|D-REGION|4762..4779|18: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00256|IGHD7-27*01|Homo_sapiens|F|D-REGION|621..631|11: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+
+2026-06-30 18:27:04 - INFO: Saved IGHD (51 sequences).
+2026-06-30 18:27:04 - INFO: Downloading IGHJ ...
+2026-06-30 18:27:06 - INFO: Adding IMGT gaps to sequences in IGHJ
+2026-06-30 18:27:06 - INFO: Warning: reference sequence J00256|IGHJ1*01|Homo_sapiens|F|J-REGION|723..774|52: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00256|IGHJ2*01|Homo_sapiens|F|J-REGION|932..984|53: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00256|IGHJ3*01|Homo_sapiens|F|J-REGION|1537..1586|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X86355|IGHJ3*02|Homo_sapiens|F|J-REGION|1107..1156|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00256|IGHJ4*01|Homo_sapiens|F|J-REGION|1912..1959|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X86355|IGHJ4*02|Homo_sapiens|F|J-REGION|1480..1527|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence M25625|IGHJ4*03|Homo_sapiens|F|J-REGION|446..493|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00256|IGHJ5*01|Homo_sapiens|F|J-REGION|2354..2404|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence X86355|IGHJ5*02|Homo_sapiens|F|J-REGION|1878..1928|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence IMGT000158|IGHJ5*03|Homo_sapiens|P|J-REGION|881967..882017|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence IMGT000207|IGHJ5*04|Homo_sapiens|F|J-REGION|775032..775082|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence J00256|IGHJ6*01|Homo_sapiens|F|J-REGION|2947..3009|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence M25625|IGHJ6*02|Homo_sapiens|F|J-REGION|1480..1542|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence M63030|IGHJ6*03|Homo_sapiens|F|J-REGION|58..120|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+Warning: reference sequence AJ879487|IGHJ6*04|Homo_sapiens|F|J-REGION|39..101|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+
+2026-06-30 18:27:06 - INFO: Saved IGHJ (12 sequences).
+2026-06-30 18:27:06 - INFO: --- Building merged igblast fasta files ---
+2026-06-30 18:27:06 - INFO: Wrote 561 sequences to kiarva_human_ig_v.fasta
+2026-06-30 18:27:06 - INFO: Wrote 51 sequences to kiarva_human_ig_d.fasta
+2026-06-30 18:27:06 - INFO: Wrote 12 sequences to kiarva_human_ig_j.fasta
+2026-06-30 18:27:06 - INFO: --- Generating igblastn auxiliary file ---
+2026-06-30 18:27:06 - INFO: Generating auxiliary file: human_gl_kiarva.aux
+2026-06-30 18:27:06 - INFO: 
+2026-06-30 18:27:06 - INFO: --- Building blast databases ---
+2026-06-30 18:27:06 - INFO: Building blast database: kiarva_human_ig_d
+2026-06-30 18:27:08 - INFO: 
+
+Building a new DB, current time: 06/30/2026 18:27:06
+New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_human_ig_d
+New DB title:  database/igblast/fasta/kiarva_human_ig_d.fasta
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 3000000000B
+Adding sequences from FASTA; added 51 sequences in 0.0123131 seconds.
+
+
+
+2026-06-30 18:27:08 - INFO: Building blast database: kiarva_human_ig_j
+2026-06-30 18:27:09 - INFO: 
+
+Building a new DB, current time: 06/30/2026 18:27:08
+New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_human_ig_j
+New DB title:  database/igblast/fasta/kiarva_human_ig_j.fasta
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 3000000000B
+Adding sequences from FASTA; added 12 sequences in 0.00288916 seconds.
+
+
+
+2026-06-30 18:27:09 - INFO: Building blast database: kiarva_human_ig_v
+2026-06-30 18:27:11 - INFO: 
+
+Building a new DB, current time: 06/30/2026 18:27:10
+New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_human_ig_v
+New DB title:  database/igblast/fasta/kiarva_human_ig_v.fasta
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 3000000000B
+Adding sequences from FASTA; added 561 sequences in 0.00753999 seconds.
+
+
+
+2026-06-30 18:27:11 - INFO: Download finished: 2026-06-30 18:27:11.394296
+2026-06-30 18:27:11 - INFO: Total execution time: 0:00:18.155201

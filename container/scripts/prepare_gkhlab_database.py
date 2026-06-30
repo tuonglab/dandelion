@@ -25,7 +25,7 @@ GKHLAB_BASE_URL = "https://gkhlab.gitlab.io/tcr/sequences"
 
 # Maps (locus, segment) -> filename on the GKHlab server.
 # Key is the 3-letter locus prefix (lowercase) and single-char gene type.
-GKHLAB_FILES: dict[tuple[str, str], str] = {
+ORI_GKHLAB_FILES: dict[tuple[str, str], str] = {
     ("tra", "v"): "TRAV.fasta",
     ("tra", "j"): "TRAJ.fasta",
     ("trb", "v"): "TRBV.fasta",
@@ -36,6 +36,19 @@ GKHLAB_FILES: dict[tuple[str, str], str] = {
     ("trd", "j"): "TRDJ.fasta",
     ("trg", "v"): "TRGV.fasta",
     ("trg", "j"): "TRGJ.fasta",
+}
+
+GKHLAB_FILES: dict[tuple[str, str], str] = {
+    ("tra", "v"): "gkhlab_human_TRAV.fasta",
+    ("tra", "j"): "gkhlab_human_TRAJ.fasta",
+    ("trb", "v"): "gkhlab_human_TRBV.fasta",
+    ("trb", "d"): "gkhlab_human_TRBD.fasta",
+    ("trb", "j"): "gkhlab_human_TRBJ.fasta",
+    ("trd", "v"): "gkhlab_human_TRDV.fasta",
+    ("trd", "d"): "gkhlab_human_TRDD.fasta",
+    ("trd", "j"): "gkhlab_human_TRDJ.fasta",
+    ("trg", "v"): "gkhlab_human_TRGV.fasta",
+    ("trg", "j"): "gkhlab_human_TRGJ.fasta",
 }
 
 
@@ -76,7 +89,7 @@ def download_gkhlab_fasta(locus: str, segment: str) -> str | None:
     str | None
         Raw fasta content as a string, or ``None`` on failure.
     """
-    filename = GKHLAB_FILES[(locus, segment)]
+    filename = ORI_GKHLAB_FILES[(locus, segment)]
     url = f"{GKHLAB_BASE_URL}/{filename}"
     request = Request(url, headers={"Accept": "text/plain"})
     try:
@@ -145,7 +158,9 @@ def deduplicate_fasta(path: Path) -> None:
             fh.write(f">{header}\n{sequence}\n")
 
 
-def download_and_write_germlines(germline_dir: Path) -> bool:
+def download_and_write_germlines(
+    germline_dir: Path, imgt_ref_dir: Path
+) -> bool:
     """
     Download all GKHlab TCR fasta files and write them to *germline_dir*.
 
@@ -156,6 +171,8 @@ def download_and_write_germlines(germline_dir: Path) -> bool:
     ----------
     germline_dir : Path
         Directory to write raw per-segment fasta files into.
+    imgt_ref_dir : Path
+        Directory containing the IMGT reference fasta files, used for gapping.
 
     Returns
     -------
@@ -165,7 +182,7 @@ def download_and_write_germlines(germline_dir: Path) -> bool:
     germline_dir.mkdir(parents=True, exist_ok=True)
     all_ok = True
 
-    for (locus, segment), filename in GKHLAB_FILES.items():
+    for (locus, segment), filename in ORI_GKHLAB_FILES.items():
         dest = germline_dir / filename
         if dest.exists() and dest.stat().st_size > 0:
             logging.info(f"Skipping {filename} — already exists.")
@@ -188,11 +205,57 @@ def download_and_write_germlines(germline_dir: Path) -> bool:
 
         dest.write_text("\n".join(lines) + "\n")
         deduplicate_fasta(dest)
+        # create gapped sequences
+        # make sure imgt database was actually downloaded - just check the file exists and is not empty
+        imgt_reference = Path(imgt_ref_dir) / (
+            ("imgt_human_" + dest.stem) + ".fasta"
+        )
+        assert imgt_reference.exists() and imgt_reference.stat().st_size > 0, (
+            f"IMGT reference fasta {imgt_reference} not found or empty, which is required for gapping.\n"
+            "Please run the prepare_imgt_database.py script first to download the IMGT reference sequences."
+        )
+        gap_sequence(
+            in_fasta=dest,
+            out_fasta=dest.parent / f"gkhlab_human_{filename}",
+            reference_fasta=imgt_reference,
+        )
+        dest.unlink()  # remove the original un-gapped fasta
         logging.info(
             f"Saved {filename} ({len([l for l in lines if l.startswith('>')])} sequences)."
         )
 
     return all_ok
+
+
+def gap_sequence(
+    in_fasta: Path, out_fasta: Path, reference_fasta: Path
+) -> None:
+    """
+    Add IMGT alignment gaps to sequences in a fasta file.
+
+    Parameters
+    ----------
+    in_fasta : Path
+        Input fasta file with unaligned sequences.
+    out_fasta : Path
+        Output fasta file with IMGT-aligned sequences.
+    """
+    if not in_fasta.exists() or in_fasta.stat().st_size == 0:
+        logging.warning(
+            f"Input fasta not found or empty ({in_fasta}); skipping."
+        )
+        return
+
+    logging.info(f"Adding IMGT gaps to sequences in {in_fasta.name}")
+    cmd = ["gap_sequences", str(in_fasta), str(reference_fasta), str(out_fasta)]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if res.returncode != 0:
+        logging.warning(
+            f"gap_sequences returned non-zero exit code: "
+            f"{res.stderr.decode('utf-8')}"
+        )
+    else:
+        logging.info(res.stdout.decode("utf-8"))
 
 
 def build_igblast_fastas(germline_dir: Path, igblast_fasta_dir: Path) -> None:
@@ -353,7 +416,8 @@ def main():
     #   igblast/fasta/                   <- merged fastas for makeblastdb
     #   igblast/database/                <- blast databases
     #   igblast/optional_file/           <- aux files
-    germline_dir = out_dir / "germlines" / "gkhlab" / "human"
+    germline_dir = out_dir / "germlines" / "gkhlab" / "human" / "vdj"
+    imgt_ref_dir = out_dir / "germlines" / "imgt" / "human" / "vdj"
     igblast_fasta_dir = out_dir / "igblast" / "fasta"
     igblastdb_dir = out_dir / "igblast" / "database"
     optional_file_dir = out_dir / "igblast" / "optional_file"
@@ -377,7 +441,7 @@ def main():
 
     # 1. Download raw fastas
     logging.info("--- Downloading GKHlab TCR germline sequences ---")
-    ok = download_and_write_germlines(germline_dir)
+    ok = download_and_write_germlines(germline_dir, imgt_ref_dir)
     if not ok:
         logging.warning(
             "One or more downloads failed. The resulting databases may be "

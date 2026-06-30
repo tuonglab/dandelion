@@ -27,10 +27,16 @@ KIARVA_HEADERS = {
 
 # Maps (locus, segment) -> filename on the KIARVA server.
 # Key is the 3-letter locus prefix (lowercase) and single-char gene type.
-KIARVA_FILES = {
+ORI_KIARVA_FILES = {
     ("igh", "v"): "IGHV",
     ("igh", "d"): "IGHD",
     ("igh", "j"): "IGHJ",
+}
+
+KIARVA_FILES = {
+    ("igh", "v"): "kiarva_human_IGHV.fasta",
+    ("igh", "d"): "kiarva_human_IGHD.fasta",
+    ("igh", "j"): "kiarva_human_IGHJ.fasta",
 }
 
 
@@ -56,7 +62,7 @@ def parse_args():
 
 
 def download_kiarva_fasta(locus: str, segment: str) -> str | None:
-    family = KIARVA_FILES[(locus, segment)]
+    family = ORI_KIARVA_FILES[(locus, segment)]
 
     url = f"{KIARVA_BASE_URL}/genomic?file_name={family}"
 
@@ -71,7 +77,9 @@ def download_kiarva_fasta(locus: str, segment: str) -> str | None:
         return None
 
 
-def download_and_write_germlines(germline_dir: Path) -> bool:
+def download_and_write_germlines(
+    germline_dir: Path, imgt_ref_dir: Path
+) -> bool:
     """
     Download all KIARVA BCR fasta files and write them to *germline_dir*.
 
@@ -82,6 +90,8 @@ def download_and_write_germlines(germline_dir: Path) -> bool:
     ----------
     germline_dir : Path
         Directory to write raw per-segment fasta files into.
+    imgt_ref_dir : Path
+        Directory containing IMGT reference sequences for gapping.
 
     Returns
     -------
@@ -91,7 +101,7 @@ def download_and_write_germlines(germline_dir: Path) -> bool:
     germline_dir.mkdir(parents=True, exist_ok=True)
     all_ok = True
 
-    for (locus, segment), filename in KIARVA_FILES.items():
+    for (locus, segment), filename in ORI_KIARVA_FILES.items():
         dest = germline_dir / filename
         if dest.exists() and dest.stat().st_size > 0:
             logging.info(f"Skipping {filename} — already exists.")
@@ -113,6 +123,21 @@ def download_and_write_germlines(germline_dir: Path) -> bool:
             continue
 
         dest.write_text("\n".join(lines) + "\n")
+        # create gapped sequences
+        # make sure imgt database was actually downloaded - just check the file exists and is not empty
+        imgt_reference = Path(imgt_ref_dir) / (
+            ("imgt_human_" + dest.stem) + ".fasta"
+        )
+        assert imgt_reference.exists() and imgt_reference.stat().st_size > 0, (
+            f"IMGT reference fasta {imgt_reference} not found or empty, which is required for gapping.\n"
+            "Please run the prepare_imgt_database.py script first to download the IMGT reference sequences."
+        )
+        gap_sequence(
+            in_fasta=dest,
+            out_fasta=dest.parent / f"kiarva_human_{filename}.fasta",
+            reference_fasta=imgt_reference,
+        )
+        dest.unlink()  # remove the original un-gapped fasta
         logging.info(
             f"Saved {filename} ({len([l for l in lines if l.startswith('>')])} sequences)."
         )
@@ -210,6 +235,37 @@ def build_igblast_aux(igblast_fasta_dir: Path, optional_file_dir: Path) -> None:
         logging.info(res.stdout.decode("utf-8"))
 
 
+def gap_sequence(
+    in_fasta: Path, out_fasta: Path, reference_fasta: Path
+) -> None:
+    """
+    Add IMGT alignment gaps to sequences in a fasta file.
+
+    Parameters
+    ----------
+    in_fasta : Path
+        Input fasta file with unaligned sequences.
+    out_fasta : Path
+        Output fasta file with IMGT-aligned sequences.
+    """
+    if not in_fasta.exists() or in_fasta.stat().st_size == 0:
+        logging.warning(
+            f"Input fasta not found or empty ({in_fasta}); skipping."
+        )
+        return
+
+    logging.info(f"Adding IMGT gaps to sequences in {in_fasta.name}")
+    cmd = ["gap_sequences", str(in_fasta), str(reference_fasta), str(out_fasta)]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if res.returncode != 0:
+        logging.warning(
+            f"gap_sequences returned non-zero exit code: "
+            f"{res.stderr.decode('utf-8')}"
+        )
+    else:
+        logging.info(res.stdout.decode("utf-8"))
+
+
 def build_blast_databases(
     igblast_fasta_dir: Path,
     igblastdb_dir: Path,
@@ -278,7 +334,8 @@ def main():
     #   igblast/fasta/                   <- merged fastas for makeblastdb
     #   igblast/database/                <- blast databases
     #   igblast/optional_file/           <- aux files
-    germline_dir = out_dir / "germlines" / "kiarva" / "human"
+    germline_dir = out_dir / "germlines" / "kiarva" / "human" / "vdj"
+    imgt_ref_dir = out_dir / "germlines" / "imgt" / "human" / "vdj"
     igblast_fasta_dir = out_dir / "igblast" / "fasta"
     igblastdb_dir = out_dir / "igblast" / "database"
     optional_file_dir = out_dir / "igblast" / "optional_file"
@@ -302,7 +359,7 @@ def main():
 
     # 1. Download raw fastas
     logging.info("--- Downloading KIARVA BCR germline sequences ---")
-    ok = download_and_write_germlines(germline_dir)
+    ok = download_and_write_germlines(germline_dir, imgt_ref_dir)
     if not ok:
         logging.warning(
             "One or more downloads failed. The resulting databases may be "

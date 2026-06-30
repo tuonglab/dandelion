@@ -55,18 +55,75 @@ def create_testfolder_number(tmp_path_factory):
 
 
 @pytest.fixture
-def database_paths() -> Dict[str, Path]:
+def database_paths() -> dict[str, Path]:
     """
     Fixture to get the database paths.
 
     Returns
     -------
-    Dict[str, Path]
+    dict[str, Path]
         Dictionary with the database paths.
     """
     db = {
         "igblast_db": DATABASE_PATH / "igblast",
         "germline": DATABASE_PATH / "germlines" / "imgt" / "human" / "vdj",
+        "blastdb": HBLASTDB_PATH,
+        "blastdb_fasta": HBLASTDB_PATH / "human_BCR_C.fasta",
+    }
+    return db
+
+
+@pytest.fixture
+def database_paths_ogrdb() -> dict[str, Path]:
+    """
+    Fixture to get the database paths.
+
+    Returns
+    -------
+    dict[str, Path]
+        Dictionary with the database paths.
+    """
+    db = {
+        "igblast_db": DATABASE_PATH / "igblast",
+        "germline": DATABASE_PATH / "germlines" / "ogrdb" / "human" / "vdj",
+        "blastdb": HBLASTDB_PATH,
+        "blastdb_fasta": HBLASTDB_PATH / "human_BCR_C.fasta",
+    }
+    return db
+
+
+@pytest.fixture
+def database_paths_kiarva() -> dict[str, Path]:
+    """
+    Fixture to get the database paths.
+
+    Returns
+    -------
+    dict[str, Path]
+        Dictionary with the database paths.
+    """
+    db = {
+        "igblast_db": DATABASE_PATH / "igblast",
+        "germline": DATABASE_PATH / "germlines" / "kiarva" / "human" / "vdj",
+        "blastdb": HBLASTDB_PATH,
+        "blastdb_fasta": HBLASTDB_PATH / "human_BCR_C.fasta",
+    }
+    return db
+
+
+@pytest.fixture
+def database_paths_gkhlab() -> dict[str, Path]:
+    """
+    Fixture to get the database paths.
+
+    Returns
+    -------
+    dict[str, Path]
+        Dictionary with the database paths.
+    """
+    db = {
+        "igblast_db": DATABASE_PATH / "igblast",
+        "germline": DATABASE_PATH / "germlines" / "gkhlab" / "human" / "vdj",
         "blastdb": HBLASTDB_PATH,
         "blastdb_fasta": HBLASTDB_PATH / "human_BCR_C.fasta",
     }
