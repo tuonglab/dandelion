@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -20,6 +21,10 @@ MERGE_STRAINS_DICT = {
     "C57BL_6": "c57bl6",
     "C57BL_6J": "c57bl6",
 }
+OGRDB_IGHC_URL = (
+    "https://ogrdb.airr-community.org/download_germline_set/"
+    "Homo%20sapiens/IGHC/published/ungapped_ex"
+)
 
 
 def parse_args():
@@ -172,7 +177,7 @@ def download_germline_and_process(
         # Check if the downloaded content is empty
         if content.rstrip() == "":
             logging.warning(
-                f"Downloaded content for {url} is empty. Skipping processing."
+                f"Downloaded content for {new_file_name} is empty. Skipping processing."
             )
             fh = open(new_file_name, "w")
             fh.close()
@@ -348,6 +353,93 @@ def process_ogrdb_fasta(species: str, file_path: str | Path):
                 file.unlink()
 
 
+def download_ogrdb_ighc(out_dir: str | Path) -> Path | None:
+    """
+    Download the human IGHC germline set from OGRDB (set 90) and build a
+    blastn database from it.
+
+    Parameters
+    ----------
+    out_dir : str | Path
+        Root database output directory (same as --outdir).
+
+    Returns
+    -------
+    Path | None
+        Path to the downloaded fasta, or None on failure.
+    """
+    fasta_name = "Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta"
+    germline_dir = Path(out_dir) / "germlines" / "ogrdb" / "human"
+    germline_dir.mkdir(parents=True, exist_ok=True)
+    fasta_path = germline_dir / fasta_name
+
+    if fasta_path.exists() and fasta_path.stat().st_size > 0:
+        logging.info(f"Skipping IGHC download – {fasta_path} already exists.")
+        return fasta_path
+
+    logging.info(f"Downloading human OGRDB IGHC set from {OGRDB_IGHC_URL}")
+    request = Request(OGRDB_IGHC_URL, headers={"accept": "application/json"})
+    try:
+        with urlopen(request, timeout=60) as response:
+            data = response.read().decode("utf-8")
+    except URLError as e:
+        logging.warning(f"Failed to download OGRDB IGHC: {e.reason}")
+        return None
+
+    content_lines = [line for line in data.splitlines() if line.strip()]
+    if not content_lines:
+        logging.warning("Downloaded OGRDB IGHC content is empty – skipping.")
+        return None
+
+    fasta_path.write_text("\n".join(content_lines) + "\n")
+    logging.info(f"Saved IGHC fasta to {fasta_path}")
+    return fasta_path
+
+
+def build_ogrdb_ighc_blastdb(
+    fasta_path: Path,
+    out_dir: str | Path,
+    makeblastdb: str | Path,
+) -> None:
+    """
+    Run makeblastdb on the OGRDB IGHC fasta and place the database under
+    <out_dir>/blast/database/ as ``ogrdb_human_ig_c``.
+
+    Parameters
+    ----------
+    fasta_path : Path
+        Path to the downloaded IGHC fasta.
+    out_dir : str | Path
+        Root database output directory.
+    makeblastdb : str | Path
+        Path to the makeblastdb binary.
+    """
+    blastdb_out = Path(out_dir) / "blast" / "database"
+    blastdb_out.mkdir(parents=True, exist_ok=True)
+    db_name = blastdb_out / "ogrdb_human_ig_c"
+
+    logging.info(f"Building OGRDB IGHC blast database at {db_name}")
+    cmd = [
+        str(makeblastdb),
+        "-parse_seqids",
+        "-dbtype",
+        "nucl",
+        "-input_type",
+        "fasta",
+        "-in",
+        str(fasta_path),
+        "-out",
+        str(db_name),
+    ]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    logging.info(res.stdout.decode("utf-8"))
+    if res.returncode != 0:
+        logging.warning(
+            f"makeblastdb for IGHC returned non-zero exit code: "
+            f"{res.stderr.decode('utf-8')}"
+        )
+
+
 def main():
     """Main function."""
     args = parse_args()
@@ -434,6 +526,19 @@ def main():
                             )
                     fh.close()
             write_fasta(seqs, out_file)
+        if species == "human":
+            # Download and build blast DB for OGRDB human IGHC (no mouse equivalent)
+            logging.info("Downloading OGRDB human IGHC germline set")
+            ighc_fasta = download_ogrdb_ighc(out_dir)
+            if ighc_fasta is not None:
+                build_ogrdb_ighc_blastdb(ighc_fasta, out_dir, makeblastdb)
+            else:
+                logging.warning(
+                    "OGRDB IGHC download failed – ogrdb_human_ig_c blast database "
+                    "will not be available. Constant gene annotation with db='ogrdb' "
+                    "will fall back to IMGT."
+                )
+
     logging.info("Preparing auxiliary files for igblast")
     copy_ogrdb_aux_to_igblast(
         igblast_out,
@@ -466,4 +571,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if not shutil.which("annotate_j"):
+        print("Please install receptor-utils with `pip install receptor-utils`")
+
     main()

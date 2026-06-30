@@ -14,6 +14,8 @@ From: ubuntu:latest
     dandelion/container/scripts/changeo_clonotypes.py /share/changeo_clonotypes.py
     dandelion/container/scripts/prepare_imgt_database.py /share/prepare_imgt_database.py
     dandelion/container/scripts/prepare_ogrdb_database.py /share/prepare_ogrdb_database.py
+    dandelion/container/scripts/prepare_kiarva_database.py /share/prepare_kiarva_database.py
+    dandelion/container/scripts/prepare_gkhlab_database.py /share/prepare_gkhlab_database.py
     dandelion/container/scripts/utils.py /share/utils.py
     dandelion/container/tests /tests
 
@@ -24,6 +26,8 @@ From: ubuntu:latest
     . /etc/profile.d/igblast.sh # so i can get the right igblast version
     python /share/prepare_imgt_database.py --outdir /share/database --igblast_dir /share/ncbi-igblast-$IGBLAST_VERSION
     python /share/prepare_ogrdb_database.py --outdir /share/database
+    python /share/prepare_kiarva_database.py --outdir /share/database
+    python /share/prepare_gkhlab_database.py --outdir /share/database
 
 %environment
     . /etc/profile.d/igblast.sh

@@ -91,7 +91,9 @@ def parse_args():
         "--db",
         type=str,
         default="imgt",
-        help=("Which database to use for reannotation. imgt or ogrdb."),
+        help=(
+            "Which database to use for reannotation. imgt, ogrdb, gkhlab or kiarva. For `gkhlab` and `kiarva`, only human is supported and only either Defaults to imgt."
+        ),
     )
     parser.add_argument(
         "--strain",
