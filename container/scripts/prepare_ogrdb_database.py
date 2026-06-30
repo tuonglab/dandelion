@@ -414,9 +414,9 @@ def build_ogrdb_ighc_blastdb(
     makeblastdb : str | Path
         Path to the makeblastdb binary.
     """
-    blastdb_out = Path(out_dir) / "blast" / "database"
-    blastdb_out.mkdir(parents=True, exist_ok=True)
-    db_name = blastdb_out / "ogrdb_human_ig_c"
+    igblastdb_out = Path(out_dir) / "igblast" / "database"
+    igblastdb_out.mkdir(parents=True, exist_ok=True)
+    db_name = igblastdb_out / "ogrdb_human_ig_c"
 
     logging.info(f"Building OGRDB IGHC blast database at {db_name}")
     cmd = [

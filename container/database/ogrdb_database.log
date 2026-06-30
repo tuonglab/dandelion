@@ -1,728 +1,846 @@
-2025-03-24 15:34:17 - INFO: Source:  https://ogrdb.airr-community.org
-2025-03-24 15:34:17 - INFO: Out directory:  /Users/uqztuong/Documents/GitHub/dandelion/container/database
-2025-03-24 15:34:17 - INFO: Download date: 2025-03-24
-2025-03-24 15:34:17 - INFO: Species:
-2025-03-24 15:34:17 - INFO:     - human
-2025-03-24 15:34:17 - INFO: Skipping download of files as it already exists.
-2025-03-24 15:34:17 - INFO: Skipping download of files as it already exists.
-2025-03-24 15:34:17 - INFO: Converting to igblast database for human
-2025-03-24 15:34:17 - INFO:     - mouse
-2025-03-24 15:34:17 - INFO: Skipping download of files as it already exists.
-2025-03-24 15:34:17 - INFO: Skipping download of files as it already exists.
-2025-03-24 15:34:17 - INFO: Converting to igblast database for mouse
-2025-03-24 15:34:18 - INFO: Preparing auxiliary files for igblast
-2025-03-24 15:34:18 - INFO:
-2025-03-24 15:34:19 - INFO: IGKJ0-5NUZ*00: no solutions
-IGKJ0-IIHF*00: no solutions
-IGLJ0-UWMQ*00: no solutions
+2026-06-30 20:16:44 - INFO: Source:  https://ogrdb.airr-community.org
+2026-06-30 20:16:44 - INFO: Out directory:  /Users/uqztuong/Documents/GitHub/dandelion/container/database
+2026-06-30 20:16:44 - INFO: Download date: 2026-06-30
+2026-06-30 20:16:44 - INFO: Species:
+2026-06-30 20:16:44 - INFO:     - human
+2026-06-30 20:16:46 - INFO: Downloading Homo_sapiens_IGH_VDJ_rev_10_gapped.fasta.
+2026-06-30 20:16:47 - INFO: Downloading Homo_sapiens_IGKappa_VJ_rev_5_gapped.fasta.
+2026-06-30 20:16:47 - INFO: Downloading Homo_sapiens_IGLambda_VJ_rev_4_gapped.fasta.
+2026-06-30 20:16:49 - INFO: Downloading Homo_sapiens_IGHC_rev_1_gapped.fasta.
+2026-06-30 20:16:49 - INFO: Converting to igblast database for human
+2026-06-30 20:16:49 - INFO: Downloading OGRDB human IGHC germline set
+2026-06-30 20:16:49 - INFO: Downloading human OGRDB IGHC set from https://ogrdb.airr-community.org/download_germline_set/Homo%20sapiens/IGHC/published/ungapped_ex
+2026-06-30 20:16:50 - INFO: Saved IGHC fasta to database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta
+2026-06-30 20:16:50 - INFO: Building OGRDB IGHC blast database at database/igblast/database/ogrdb_human_ig_c
+2026-06-30 20:16:52 - INFO: 
 
-2025-03-24 15:34:20 - INFO:
+Building a new DB, current time: 06/30/2026 20:16:50
+New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_c
+New DB title:  database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta
+Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_c
+Keep MBits: T
+Maximum file size: 3000000000B
+Adding sequences from FASTA; added 307 sequences in 0.154045 seconds.
 
-Building a new DB, current time: 03/24/2025 15:34:19
+
+
+2026-06-30 20:16:52 - INFO:     - mouse
+2026-06-30 20:16:53 - INFO: Downloading Mus_musculus_BALB/c IGH_rev_3_gapped.fasta.
+2026-06-30 20:16:54 - INFO: Downloading Mus_musculus_C57BL/6 IGH_rev_5_gapped.fasta.
+2026-06-30 20:16:54 - INFO: Downloading Mus_musculus_129S1/SvImJ IGLV_rev_3_gapped.fasta.
+2026-06-30 20:16:55 - INFO: Downloading Mus_musculus_A/J IGLV_rev_2_gapped.fasta.
+2026-06-30 20:16:56 - INFO: Downloading Mus_musculus_AKR/J IGLV_rev_1_gapped.fasta.
+2026-06-30 20:16:56 - INFO: Downloading Mus_musculus_BALB/c/ByJ IGLV_rev_2_gapped.fasta.
+2026-06-30 20:16:57 - INFO: Downloading Mus_musculus_C3H/HeJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:16:57 - INFO: Downloading Mus_musculus_C57BL/6J IGLV_rev_1_gapped.fasta.
+2026-06-30 20:16:58 - INFO: Downloading Mus_musculus_CAST/EiJ IGLV_rev_2_gapped.fasta.
+2026-06-30 20:16:58 - INFO: Downloading Mus_musculus_CBA/J IGLV_rev_1_gapped.fasta.
+2026-06-30 20:16:59 - INFO: Downloading Mus_musculus_DBA/1J IGLV_rev_1_gapped.fasta.
+2026-06-30 20:16:59 - INFO: Downloading Mus_musculus_DBA/2J IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:00 - INFO: Downloading Mus_musculus_LEWES/EiJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:00 - INFO: Downloading Mus_musculus_MRL/MpJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:01 - INFO: Downloading Mus_musculus_MSM/MsJ IGLV_rev_2_gapped.fasta.
+2026-06-30 20:17:01 - INFO: Downloading Mus_musculus_NOD/ShiLtJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:02 - INFO: Downloading Mus_musculus_NOR/LtJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:03 - INFO: Downloading Mus_musculus_NZB/BlNJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:03 - INFO: Downloading Mus_musculus_PWD/PhJ IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:04 - INFO: Downloading Mus_musculus_SJL/J IGLV_rev_1_gapped.fasta.
+2026-06-30 20:17:04 - INFO: Downloading Mus_musculus_129S1/SvImJ IGKV_rev_2_gapped.fasta.
+2026-06-30 20:17:05 - INFO: Downloading Mus_musculus_AKR/J IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:06 - INFO: Downloading Mus_musculus_BALB/c/ByJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:06 - INFO: Downloading Mus_musculus_C3H/HeJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:07 - INFO: Downloading Mus_musculus_C57BL/6J IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:08 - INFO: Downloading Mus_musculus_CAST/EiJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:09 - INFO: Downloading Mus_musculus_CBA/J IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:09 - INFO: Downloading Mus_musculus_DBA/1J IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:10 - INFO: Downloading Mus_musculus_DBA/2J IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:11 - INFO: Downloading Mus_musculus_LEWES/EiJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:12 - INFO: Downloading Mus_musculus_MRL/MpJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:12 - INFO: Downloading Mus_musculus_MSM/MsJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:13 - INFO: Downloading Mus_musculus_NOD/ShiLtJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:14 - INFO: Downloading Mus_musculus_NOR/LtJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:14 - INFO: Downloading Mus_musculus_NZB/BlNJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:15 - INFO: Downloading Mus_musculus_PWD/PhJ IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:16 - INFO: Downloading Mus_musculus_SJL/J IGKV_rev_1_gapped.fasta.
+2026-06-30 20:17:17 - INFO: Downloading Mus_musculus_A/J IGKV_rev_2_gapped.fasta.
+2026-06-30 20:17:17 - INFO: Downloading Mus_musculus_CAST/EiJ IGH_rev_2_gapped.fasta.
+2026-06-30 20:17:18 - INFO: Downloading Mus_musculus_LEWES/EiJ IGH_rev_2_gapped.fasta.
+2026-06-30 20:17:19 - INFO: Downloading Mus_musculus_MSM/MsJ IGH_rev_1_gapped.fasta.
+2026-06-30 20:17:20 - INFO: Downloading Mus_musculus_NOD/ShiLtJ IGH_rev_1_gapped.fasta.
+2026-06-30 20:17:20 - INFO: Downloading Mus_musculus_PWD/PhJ IGH_rev_2_gapped.fasta.
+2026-06-30 20:17:21 - INFO: Downloading Mus_musculus_IGKJ (all strains)_rev_1_gapped.fasta.
+2026-06-30 20:17:21 - INFO: Downloading Mus_musculus_IGLJ (all strains)_rev_1_gapped.fasta.
+2026-06-30 20:17:49 - INFO: Converting to igblast database for mouse
+2026-06-30 20:17:49 - INFO: Preparing auxiliary files for igblast
+2026-06-30 20:17:50 - INFO: 
+2026-06-30 20:17:50 - INFO: 
+2026-06-30 20:17:51 - INFO: 
+
+Building a new DB, current time: 06/30/2026 20:17:50
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_d
 New DB title:  database/igblast/fasta/ogrdb_human_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 33 sequences in 0.00911593 seconds.
+Adding sequences from FASTA; added 53 sequences in 0.179127 seconds.
 
 
 
-2025-03-24 15:34:21 - INFO:
+2026-06-30 20:17:53 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:20
+Building a new DB, current time: 06/30/2026 20:17:52
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_j
 New DB title:  database/igblast/fasta/ogrdb_human_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 24 sequences in 0.00276208 seconds.
+Adding sequences from FASTA; added 24 sequences in 0.00334907 seconds.
 
 
 
-2025-03-24 15:34:23 - INFO:
+2026-06-30 20:17:54 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:22
+Building a new DB, current time: 06/30/2026 20:17:53
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_v
 New DB title:  database/igblast/fasta/ogrdb_human_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 354 sequences in 0.00562 seconds.
+Adding sequences from FASTA; added 379 sequences in 0.0127001 seconds.
 
 
 
-2025-03-24 15:34:24 - INFO:
+2026-06-30 20:17:55 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:23
+Building a new DB, current time: 06/30/2026 20:17:54
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_129S1_SvImJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_129S1_SvImJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_129S1_SvImJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00281906 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.0032661 seconds.
 
 
 
-2025-03-24 15:34:26 - INFO:
+2026-06-30 20:17:57 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:25
+Building a new DB, current time: 06/30/2026 20:17:56
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_129S1_SvImJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_129S1_SvImJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_129S1_SvImJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 94 sequences in 0.00351477 seconds.
+Adding sequences from FASTA; added 94 sequences in 0.00445509 seconds.
 
 
 
-2025-03-24 15:34:27 - INFO:
+2026-06-30 20:17:58 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:26
+Building a new DB, current time: 06/30/2026 20:17:57
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_AKR_J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_AKR_J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_AKR_J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00281382 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00309992 seconds.
 
 
 
-2025-03-24 15:34:29 - INFO:
+2026-06-30 20:17:59 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:27
+Building a new DB, current time: 06/30/2026 20:17:58
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_AKR_J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_AKR_J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_AKR_J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 88 sequences in 0.00357389 seconds.
+Adding sequences from FASTA; added 88 sequences in 0.00584102 seconds.
 
 
 
-2025-03-24 15:34:30 - INFO:
+2026-06-30 20:18:01 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:29
+Building a new DB, current time: 06/30/2026 20:18:00
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_A_J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_A_J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_A_J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.002599 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.003268 seconds.
 
 
 
-2025-03-24 15:34:32 - INFO:
+2026-06-30 20:18:02 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:30
+Building a new DB, current time: 06/30/2026 20:18:01
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_A_J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_A_J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_A_J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 105 sequences in 0.00342894 seconds.
+Adding sequences from FASTA; added 105 sequences in 0.00373411 seconds.
 
 
 
-2025-03-24 15:34:33 - INFO:
+2026-06-30 20:18:03 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:32
+Building a new DB, current time: 06/30/2026 20:18:02
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_BALB_c_ByJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00276017 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00283194 seconds.
 
 
 
-2025-03-24 15:34:35 - INFO:
+2026-06-30 20:18:05 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:33
+Building a new DB, current time: 06/30/2026 20:18:03
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_BALB_c_ByJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 101 sequences in 0.00340295 seconds.
+Adding sequences from FASTA; added 101 sequences in 0.00381899 seconds.
 
 
 
-2025-03-24 15:34:36 - INFO:
+2026-06-30 20:18:06 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:35
+Building a new DB, current time: 06/30/2026 20:18:05
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_BALB_c_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 10 sequences in 0.00283909 seconds.
+Adding sequences from FASTA; added 10 sequences in 0.00291014 seconds.
 
 
 
-2025-03-24 15:34:38 - INFO:
+2026-06-30 20:18:07 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:36
+Building a new DB, current time: 06/30/2026 20:18:06
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_BALB_c_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00319195 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00293112 seconds.
 
 
 
-2025-03-24 15:34:39 - INFO:
+2026-06-30 20:18:09 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:38
+Building a new DB, current time: 06/30/2026 20:18:07
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_BALB_c_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 164 sequences in 0.00415111 seconds.
+Adding sequences from FASTA; added 164 sequences in 0.00443602 seconds.
 
 
 
-2025-03-24 15:34:41 - INFO:
+2026-06-30 20:18:10 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:39
+Building a new DB, current time: 06/30/2026 20:18:09
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C3H_HeJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_C3H_HeJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C3H_HeJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00273705 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00302601 seconds.
 
 
 
-2025-03-24 15:34:42 - INFO:
+2026-06-30 20:18:12 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:41
+Building a new DB, current time: 06/30/2026 20:18:10
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C3H_HeJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_C3H_HeJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C3H_HeJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 99 sequences in 0.0036149 seconds.
+Adding sequences from FASTA; added 99 sequences in 0.0041101 seconds.
 
 
 
-2025-03-24 15:34:44 - INFO:
+2026-06-30 20:18:13 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:42
+Building a new DB, current time: 06/30/2026 20:18:12
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_C57BL_6J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00282097 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00312591 seconds.
 
 
 
-2025-03-24 15:34:45 - INFO:
+2026-06-30 20:18:14 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:44
+Building a new DB, current time: 06/30/2026 20:18:13
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_C57BL_6J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 94 sequences in 0.00351286 seconds.
+Adding sequences from FASTA; added 94 sequences in 0.00374699 seconds.
 
 
 
-2025-03-24 15:34:47 - INFO:
+2026-06-30 20:18:16 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:45
+Building a new DB, current time: 06/30/2026 20:18:15
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_C57BL_6_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 8 sequences in 0.00256515 seconds.
+Adding sequences from FASTA; added 8 sequences in 0.00291395 seconds.
 
 
 
-2025-03-24 15:34:48 - INFO:
+2026-06-30 20:18:17 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:47
+Building a new DB, current time: 06/30/2026 20:18:16
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_C57BL_6_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00272012 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00316095 seconds.
 
 
 
-2025-03-24 15:34:50 - INFO:
+2026-06-30 20:18:18 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:48
+Building a new DB, current time: 06/30/2026 20:18:17
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_C57BL_6_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 102 sequences in 0.00347209 seconds.
+Adding sequences from FASTA; added 102 sequences in 0.003896 seconds.
 
 
 
-2025-03-24 15:34:51 - INFO:
+2026-06-30 20:18:20 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:50
+Building a new DB, current time: 06/30/2026 20:18:19
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_CAST_EiJ_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 9 sequences in 0.00261402 seconds.
+Adding sequences from FASTA; added 9 sequences in 0.00295591 seconds.
 
 
 
-2025-03-24 15:34:53 - INFO:
+2026-06-30 20:18:21 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:51
+Building a new DB, current time: 06/30/2026 20:18:20
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_CAST_EiJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00396609 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00317502 seconds.
 
 
 
-2025-03-24 15:34:54 - INFO:
+2026-06-30 20:18:23 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:53
+Building a new DB, current time: 06/30/2026 20:18:21
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_CAST_EiJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 184 sequences in 0.00411201 seconds.
+Adding sequences from FASTA; added 184 sequences in 0.00535607 seconds.
 
 
 
-2025-03-24 15:34:56 - INFO:
+2026-06-30 20:18:24 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:54
+Building a new DB, current time: 06/30/2026 20:18:23
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CBA_J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_CBA_J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CBA_J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00307393 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00296783 seconds.
 
 
 
-2025-03-24 15:34:57 - INFO:
+2026-06-30 20:18:25 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:56
+Building a new DB, current time: 06/30/2026 20:18:24
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CBA_J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_CBA_J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CBA_J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 85 sequences in 0.00331712 seconds.
+Adding sequences from FASTA; added 85 sequences in 0.00357795 seconds.
 
 
 
-2025-03-24 15:34:58 - INFO:
+2026-06-30 20:18:27 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:57
+Building a new DB, current time: 06/30/2026 20:18:25
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_1J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_DBA_1J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_1J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.002877 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00289798 seconds.
 
 
 
-2025-03-24 15:35:00 - INFO:
+2026-06-30 20:18:28 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:34:59
+Building a new DB, current time: 06/30/2026 20:18:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_1J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_DBA_1J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_1J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 107 sequences in 0.00337291 seconds.
+Adding sequences from FASTA; added 107 sequences in 0.003618 seconds.
 
 
 
-2025-03-24 15:35:01 - INFO:
+2026-06-30 20:18:29 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:00
+Building a new DB, current time: 06/30/2026 20:18:28
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_2J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_DBA_2J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_2J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00274801 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00293493 seconds.
 
 
 
-2025-03-24 15:35:03 - INFO:
+2026-06-30 20:18:31 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:02
+Building a new DB, current time: 06/30/2026 20:18:29
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_2J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_DBA_2J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_2J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 103 sequences in 0.00437689 seconds.
+Adding sequences from FASTA; added 103 sequences in 0.00449896 seconds.
 
 
 
-2025-03-24 15:35:04 - INFO:
+2026-06-30 20:18:32 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:03
+Building a new DB, current time: 06/30/2026 20:18:31
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_LEWES_EiJ_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 11 sequences in 0.00284386 seconds.
+Adding sequences from FASTA; added 11 sequences in 0.00291514 seconds.
 
 
 
-2025-03-24 15:35:06 - INFO:
+2026-06-30 20:18:33 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:04
+Building a new DB, current time: 06/30/2026 20:18:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_LEWES_EiJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00279689 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00300789 seconds.
 
 
 
-2025-03-24 15:35:07 - INFO:
+2026-06-30 20:18:35 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:06
+Building a new DB, current time: 06/30/2026 20:18:33
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_LEWES_EiJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 169 sequences in 0.00401711 seconds.
+Adding sequences from FASTA; added 169 sequences in 0.00436091 seconds.
 
 
 
-2025-03-24 15:35:09 - INFO:
+2026-06-30 20:18:36 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:07
+Building a new DB, current time: 06/30/2026 20:18:35
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MRL_MpJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_MRL_MpJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MRL_MpJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00291705 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00312805 seconds.
 
 
 
-2025-03-24 15:35:11 - INFO:
+2026-06-30 20:18:37 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:09
+Building a new DB, current time: 06/30/2026 20:18:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MRL_MpJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_MRL_MpJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MRL_MpJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 75 sequences in 0.00310993 seconds.
+Adding sequences from FASTA; added 75 sequences in 0.00344801 seconds.
 
 
 
-2025-03-24 15:35:12 - INFO:
+2026-06-30 20:18:39 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:11
+Building a new DB, current time: 06/30/2026 20:18:37
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_MSM_MsJ_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 9 sequences in 0.00257111 seconds.
+Adding sequences from FASTA; added 9 sequences in 0.003021 seconds.
 
 
 
-2025-03-24 15:35:13 - INFO:
+2026-06-30 20:18:40 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:12
+Building a new DB, current time: 06/30/2026 20:18:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_MSM_MsJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00310802 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.0028801 seconds.
 
 
 
-2025-03-24 15:35:15 - INFO:
+2026-06-30 20:18:41 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:14
+Building a new DB, current time: 06/30/2026 20:18:40
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_MSM_MsJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 172 sequences in 0.00444007 seconds.
+Adding sequences from FASTA; added 172 sequences in 0.00450706 seconds.
 
 
 
-2025-03-24 15:35:16 - INFO:
+2026-06-30 20:18:43 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:15
+Building a new DB, current time: 06/30/2026 20:18:42
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_NOD_ShiLtJ_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 9 sequences in 0.0029161 seconds.
+Adding sequences from FASTA; added 9 sequences in 0.00295901 seconds.
 
 
 
-2025-03-24 15:35:18 - INFO:
+2026-06-30 20:18:44 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:17
+Building a new DB, current time: 06/30/2026 20:18:43
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_NOD_ShiLtJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00279403 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00299597 seconds.
 
 
 
-2025-03-24 15:35:19 - INFO:
+2026-06-30 20:18:46 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:18
+Building a new DB, current time: 06/30/2026 20:18:44
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_NOD_ShiLtJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 149 sequences in 0.00385499 seconds.
+Adding sequences from FASTA; added 149 sequences in 0.0383651 seconds.
 
 
 
-2025-03-24 15:35:21 - INFO:
+2026-06-30 20:18:47 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:19
+Building a new DB, current time: 06/30/2026 20:18:46
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOR_LtJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_NOR_LtJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOR_LtJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00295496 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.0030241 seconds.
 
 
 
-2025-03-24 15:35:22 - INFO:
+2026-06-30 20:18:48 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:21
+Building a new DB, current time: 06/30/2026 20:18:47
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOR_LtJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_NOR_LtJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOR_LtJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 83 sequences in 0.00345111 seconds.
+Adding sequences from FASTA; added 83 sequences in 0.003649 seconds.
 
 
 
-2025-03-24 15:35:24 - INFO:
+2026-06-30 20:18:50 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:22
+Building a new DB, current time: 06/30/2026 20:18:49
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NZB_BlNJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_NZB_BlNJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NZB_BlNJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00289011 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00345397 seconds.
 
 
 
-2025-03-24 15:35:25 - INFO:
+2026-06-30 20:18:51 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:24
+Building a new DB, current time: 06/30/2026 20:18:50
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NZB_BlNJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_NZB_BlNJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NZB_BlNJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 108 sequences in 0.00365686 seconds.
+Adding sequences from FASTA; added 108 sequences in 0.00389695 seconds.
 
 
 
-2025-03-24 15:35:27 - INFO:
+2026-06-30 20:18:53 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:25
+Building a new DB, current time: 06/30/2026 20:18:51
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_PWD_PhJ_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 10 sequences in 0.00285602 seconds.
+Adding sequences from FASTA; added 10 sequences in 0.00293016 seconds.
 
 
 
-2025-03-24 15:35:28 - INFO:
+2026-06-30 20:18:54 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:27
+Building a new DB, current time: 06/30/2026 20:18:53
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_PWD_PhJ_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00272393 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00298405 seconds.
 
 
 
-2025-03-24 15:35:30 - INFO:
+2026-06-30 20:18:55 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:28
+Building a new DB, current time: 06/30/2026 20:18:54
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_PWD_PhJ_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 184 sequences in 0.00450611 seconds.
+Adding sequences from FASTA; added 184 sequences in 0.00443292 seconds.
 
 
 
-2025-03-24 15:35:32 - INFO:
+2026-06-30 20:18:57 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:30
+Building a new DB, current time: 06/30/2026 20:18:55
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_SJL_J_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_SJL_J_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_SJL_J_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 18 sequences in 0.00273013 seconds.
+Adding sequences from FASTA; added 18 sequences in 0.00289893 seconds.
 
 
 
-2025-03-24 15:35:34 - INFO:
+2026-06-30 20:18:58 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:32
+Building a new DB, current time: 06/30/2026 20:18:57
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_SJL_J_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_SJL_J_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_SJL_J_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 70 sequences in 0.00321293 seconds.
+Adding sequences from FASTA; added 70 sequences in 0.00345683 seconds.
 
 
 
-2025-03-24 15:35:35 - INFO:
+2026-06-30 20:18:59 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:34
+Building a new DB, current time: 06/30/2026 20:18:58
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_balbc_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 10 sequences in 0.00267816 seconds.
+Adding sequences from FASTA; added 10 sequences in 0.00281596 seconds.
 
 
 
-2025-03-24 15:35:37 - INFO:
+2026-06-30 20:19:01 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:35
+Building a new DB, current time: 06/30/2026 20:18:59
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_balbc_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00280404 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00309396 seconds.
 
 
 
-2025-03-24 15:35:38 - INFO:
+2026-06-30 20:19:02 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:37
+Building a new DB, current time: 06/30/2026 20:19:01
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_balbc_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 265 sequences in 0.00484896 seconds.
+Adding sequences from FASTA; added 265 sequences in 0.00525689 seconds.
 
 
 
-2025-03-24 15:35:40 - INFO:
+2026-06-30 20:19:03 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:38
+Building a new DB, current time: 06/30/2026 20:19:02
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_c57bl6_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 8 sequences in 0.00268698 seconds.
+Adding sequences from FASTA; added 8 sequences in 0.00311112 seconds.
 
 
 
-2025-03-24 15:35:41 - INFO:
+2026-06-30 20:19:05 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:40
+Building a new DB, current time: 06/30/2026 20:19:03
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_c57bl6_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 22 sequences in 0.00283909 seconds.
+Adding sequences from FASTA; added 22 sequences in 0.00320888 seconds.
 
 
 
-2025-03-24 15:35:43 - INFO:
+2026-06-30 20:19:06 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:41
+Building a new DB, current time: 06/30/2026 20:19:05
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_c57bl6_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 196 sequences in 0.00444698 seconds.
+Adding sequences from FASTA; added 196 sequences in 0.00452995 seconds.
 
 
 
-2025-03-24 15:35:44 - INFO:
+2026-06-30 20:19:07 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:43
+Building a new DB, current time: 06/30/2026 20:19:06
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_d
 New DB title:  database/igblast/fasta/ogrdb_mouse_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 66 sequences in 0.00540996 seconds.
+Adding sequences from FASTA; added 66 sequences in 0.00341105 seconds.
 
 
 
-2025-03-24 15:35:46 - INFO:
+2026-06-30 20:19:09 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:44
+Building a new DB, current time: 06/30/2026 20:19:08
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_j
 New DB title:  database/igblast/fasta/ogrdb_mouse_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 46 sequences in 0.00303793 seconds.
+Adding sequences from FASTA; added 46 sequences in 0.00334501 seconds.
 
 
 
-2025-03-24 15:35:47 - INFO:
+2026-06-30 20:19:10 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:35:46
+Building a new DB, current time: 06/30/2026 20:19:09
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_v
 New DB title:  database/igblast/fasta/ogrdb_mouse_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 2334 sequences in 0.0217292 seconds.
+Adding sequences from FASTA; added 2334 sequences in 0.022671 seconds.
 
 
 
-2025-03-24 15:35:47 - INFO: Download finished: 2025-03-24 15:35:47.962864
-2025-03-24 15:35:47 - INFO: Total execution time: 0:01:30.000691
+2026-06-30 20:19:10 - INFO: Download finished: 2026-06-30 20:19:10.558340
+2026-06-30 20:19:10 - INFO: Total execution time: 0:02:25.636202

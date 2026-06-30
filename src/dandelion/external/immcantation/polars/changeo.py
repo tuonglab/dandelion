@@ -222,7 +222,7 @@ def creategermlines(
     org: Literal["human", "mouse"] = "human",
     genotyped_fasta: str | None = None,
     mode: Literal["heavy", "light"] | None = None,
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva", "ghklab"] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -287,47 +287,47 @@ def creategermlines(
         if mode == "heavy":
             if genotyped_fasta is None:
                 gml_ref = [
-                    str(gml / ("imgt_" + org + _strain + "_IGHV.fasta")),
+                    str(gml / (db + "_" + org + _strain + "_IGHV.fasta")),
                 ]
             else:
                 gml_ref = [
                     str(genotyped_fasta),
                 ]
             gml_ref += [
-                str(gml / ("imgt_" + org + _strain + "_IGHJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGHJ.fasta")),
             ]
             _strainD = "" if strain not in NO_DS else _strain
             gml_ref += [
-                str(gml / ("imgt_" + org + _strainD + "_IGHD.fasta")),
+                str(gml / (db + "_" + org + _strainD + "_IGHD.fasta")),
             ]
         elif mode == "light":
             gml_ref = [
-                str(gml / ("imgt_" + org + _strain + "_IGKV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGKJ.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLJ.fasta")),
             ]
         elif mode is None:
             if genotyped_fasta is None:
                 gml_ref = [
-                    str(gml / ("imgt_" + org + _strain + "_IGHV.fasta")),
+                    str(gml / (db + "_" + org + _strain + "_IGHV.fasta")),
                 ]
             else:
                 gml_ref = [
                     str(genotyped_fasta),
                 ]
             gml_ref += [
-                str(gml / ("imgt_" + org + _strain + "_IGHJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGHJ.fasta")),
             ]
             _strainD = "" if strain not in NO_DS else _strain
             gml_ref += [
-                str(gml / ("imgt_" + org + _strainD + "_IGHD.fasta")),
+                str(gml / (db + "_" + org + _strainD + "_IGHD.fasta")),
             ]
             gml_ref += [
-                str(gml / ("imgt_" + org + _strain + "_IGKV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGKJ.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLJ.fasta")),
             ]
     else:
         if not isinstance(germline, list):

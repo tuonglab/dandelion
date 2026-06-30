@@ -33,11 +33,29 @@ ORI_KIARVA_FILES = {
     ("igh", "j"): "IGHJ",
 }
 
-KIARVA_FILES = {
-    ("igh", "v"): "kiarva_human_IGHV.fasta",
-    ("igh", "d"): "kiarva_human_IGHD.fasta",
-    ("igh", "j"): "kiarva_human_IGHJ.fasta",
+KIARVA_FILES_IMGT = {
+    ("igh", "v"): "kiarva_imgt_human_IGHV.fasta",
+    ("igh", "d"): "kiarva_imgt_human_IGHD.fasta",
+    ("igh", "j"): "kiarva_imgt_human_IGHJ.fasta",
+    ("igk", "v"): "kiarva_imgt_human_IGKV.fasta",
+    ("igk", "j"): "kiarva_imgt_human_IGKJ.fasta",
+    ("igl", "v"): "kiarva_imgt_human_IGLV.fasta",
+    ("igl", "j"): "kiarva_imgt_human_IGLJ.fasta",
 }
+
+KIARVA_FILES_OGRDB = {
+    ("igh", "v"): "kiarva_ogrdb_human_IGHV.fasta",
+    ("igh", "d"): "kiarva_ogrdb_human_IGHD.fasta",
+    ("igh", "j"): "kiarva_ogrdb_human_IGHJ.fasta",
+    ("igk", "v"): "kiarva_ogrdb_human_IGKV.fasta",
+    ("igk", "j"): "kiarva_ogrdb_human_IGKJ.fasta",
+    ("igl", "v"): "kiarva_ogrdb_human_IGLV.fasta",
+    ("igl", "j"): "kiarva_ogrdb_human_IGLJ.fasta",
+}
+
+# Light chain segments that need to be borrowed from another germline
+# database, since KIARVA does not provide them.
+LIGHT_CHAIN_SEGMENTS = ["IGKV", "IGKJ", "IGLV", "IGLJ"]
 
 
 def parse_args():
@@ -132,11 +150,13 @@ def download_and_write_germlines(
             f"IMGT reference fasta {imgt_reference} not found or empty, which is required for gapping.\n"
             "Please run the prepare_imgt_database.py script first to download the IMGT reference sequences."
         )
-        gap_sequence(
-            in_fasta=dest,
-            out_fasta=dest.parent / f"kiarva_human_{filename}.fasta",
-            reference_fasta=imgt_reference,
-        )
+        for lc_db in ["imgt", "ogrdb"]:
+            gap_sequence(
+                in_fasta=dest,
+                out_fasta=dest.parent
+                / f"kiarva_{lc_db}_human_{filename}.fasta",
+                reference_fasta=imgt_reference,
+            )
         dest.unlink()  # remove the original un-gapped fasta
         logging.info(
             f"Saved {filename} ({len([l for l in lines if l.startswith('>')])} sequences)."
@@ -145,13 +165,134 @@ def download_and_write_germlines(
     return all_ok
 
 
+def copy_light_chain_germlines(
+    germline_dir: Path,
+    light_chain_dir: Path,
+    light_chain_db: str,
+) -> bool:
+    """
+    Borrow IGK/IGL V and J germline references from another database.
+
+    KIARVA only provides heavy chain (IGH) sequences, so light chain V and J
+    references (already IMGT-gapped) are copied across from *light_chain_dir*
+    and renamed to follow the ``kiarva_human_*`` naming convention expected
+    by downstream tools (e.g. ``tigger-genotype.R``, ``CreateGermlines.py``).
+
+    Parameters
+    ----------
+    germline_dir : Path
+        Directory to write the renamed light chain fasta files into
+        (``germlines/kiarva/human/vdj``).
+    light_chain_dir : Path
+        Directory containing the source database's germline references
+        (e.g. ``germlines/imgt/human/vdj`` or ``germlines/ogrdb/human/vdj``).
+    light_chain_db : str
+        Name of the source database (``imgt`` or ``ogrdb``), used to look up
+        the source filenames.
+
+    Returns
+    -------
+    bool
+        ``True`` if every light chain segment was copied successfully.
+    """
+    germline_dir.mkdir(parents=True, exist_ok=True)
+    all_ok = True
+
+    for segment in LIGHT_CHAIN_SEGMENTS:
+        src = light_chain_dir / f"{light_chain_db}_human_{segment}.fasta"
+        dest = germline_dir / f"kiarva_{light_chain_db}_human_{segment}.fasta"
+
+        if not src.exists() or src.stat().st_size == 0:
+            logging.warning(
+                f"Light chain reference {src} not found or empty. "
+                f"Please run prepare_{light_chain_db}_database.py first, "
+                "or choose a different --light_chain_db."
+            )
+            all_ok = False
+            continue
+
+        shutil.copyfile(src, dest)
+        print("Writing", dest)
+        logging.info(f"Copied light chain reference {src.name} -> {dest.name}")
+        # also fix the header names to ensure that it's clean
+        seqs = {}
+        fh = open(dest, "r")
+        for header, sequence in fasta_iterator(fh):
+            parts = header.split("|")
+            if len(parts) > 3:
+                # Raw IMGT format: filter pseudo-genes
+                if parts[3] != "P":
+                    seqs[parts[1].rstrip()] = sequence.upper()
+            else:
+                # Already-processed format (GitHub backup): keep as-is
+                seqs[header.rstrip()] = sequence.upper()
+        fh.close()
+        write_fasta(seqs, dest, overwrite=True)
+
+    return all_ok
+
+
+def deduplicate_fasta(path: Path) -> None:
+    """
+    Remove duplicate FASTA records in-place.
+
+    Rules
+    -----
+    * If a header is repeated with an identical sequence, keep only the first.
+    * If a header is repeated with a different sequence, rename subsequent
+      records by appending '_1', '_2', ... to the header.
+
+    Parameters
+    ----------
+    path : Path
+        FASTA file to clean.
+    """
+    records = []
+
+    # header -> first sequence seen
+    first_sequence = {}
+
+    # header -> number of renamed variants assigned
+    variant_count = {}
+
+    with open(path) as fh:
+        for header, sequence in fasta_iterator(fh):
+
+            sequence = sequence.strip()
+
+            if header not in first_sequence:
+                first_sequence[header] = sequence
+                variant_count[header] = 0
+                records.append((header, sequence))
+                continue
+
+            # duplicate with identical sequence -> ignore
+            if first_sequence[header] == sequence:
+                continue
+
+            # duplicate with different sequence -> rename
+            variant_count[header] += 1
+            new_header = f"{header}_{variant_count[header]}"
+
+            logging.warning(
+                f"Duplicate header '{header}' has a different sequence. "
+                f"Renaming to '{new_header}'."
+            )
+
+            records.append((new_header, sequence))
+
+    with open(path, "w") as fh:
+        for header, sequence in records:
+            fh.write(f">{header}\n{sequence}\n")
+
+
 def build_igblast_fastas(germline_dir: Path, igblast_fasta_dir: Path) -> None:
     """
     Merge per-segment fasta files into the combined igblast input fastas.
 
     For each (locus, segment) pair we produce a file named::
 
-        kiarva_human_{locus}_{segment}.fasta
+        kiarva_{light_chain_db}_human_{locus}_{segment}.fasta
 
     e.g. ``kiarva_human_tr_v.fasta``, which concatenates TRAV + TRBV + TRDV
     + TRGV.  igblastn's ``-germline_db_V/D/J`` arguments accept a single
@@ -171,32 +312,37 @@ def build_igblast_fastas(germline_dir: Path, igblast_fasta_dir: Path) -> None:
     # Collect sequences by segment type across all loci
     by_segment: dict[str, dict[str, str]] = {"v": {}, "d": {}, "j": {}}
 
-    for (locus, segment), filename in KIARVA_FILES.items():
-        src = germline_dir / filename
-        if not src.exists() or src.stat().st_size == 0:
-            logging.warning(f"Skipping missing or empty file: {src.name}")
-            continue
+    for k_files, lc_db in zip(
+        [KIARVA_FILES_IMGT, KIARVA_FILES_OGRDB], ["imgt", "ogrdb"]
+    ):
+        for (locus, segment), filename in k_files.items():
+            src = germline_dir / filename
+            if not src.exists() or src.stat().st_size == 0:
+                logging.warning(f"Skipping missing or empty file: {src.name}")
+                continue
 
-        with open(src) as fh:
-            for header, sequence in fasta_iterator(fh):
-                # Strip IMGT alignment gaps if present
-                clean_seq = sequence.replace(".", "").upper().rstrip()
-                if header not in by_segment[segment]:
-                    by_segment[segment][header] = clean_seq
+            with open(src) as fh:
+                for header, sequence in fasta_iterator(fh):
+                    # Strip IMGT alignment gaps if present
+                    clean_seq = sequence.replace(".", "").upper().rstrip()
+                    if header not in by_segment[segment]:
+                        by_segment[segment][header] = clean_seq
 
-    for segment, seqs in by_segment.items():
-        out_path = igblast_fasta_dir / f"kiarva_human_ig_{segment}.fasta"
-        if not seqs:
-            # Write an empty placeholder so makeblastdb doesn't fail
-            logging.warning(
-                f"No sequences collected for segment '{segment}' — "
-                f"writing empty file: {out_path.name}"
+        for segment, seqs in by_segment.items():
+            out_path = (
+                igblast_fasta_dir / f"kiarva_{lc_db}_human_ig_{segment}.fasta"
             )
-            out_path.write_text("")
-            continue
+            if not seqs:
+                # Write an empty placeholder so makeblastdb doesn't fail
+                logging.warning(
+                    f"No sequences collected for segment '{segment}' — "
+                    f"writing empty file: {out_path.name}"
+                )
+                out_path.write_text("")
+                continue
 
-        write_fasta(seqs, out_path)
-        logging.info(f"Wrote {len(seqs)} sequences to {out_path.name}")
+            write_fasta(seqs, out_path)
+            logging.info(f"Wrote {len(seqs)} sequences to {out_path.name}")
 
 
 def build_igblast_aux(igblast_fasta_dir: Path, optional_file_dir: Path) -> None:
@@ -204,33 +350,41 @@ def build_igblast_aux(igblast_fasta_dir: Path, optional_file_dir: Path) -> None:
     Generate the igblastn auxiliary file for the KIARVA J genes.
 
     Runs ``annotate_j`` on the combined IG J fasta to produce
-    ``human_gl_kiarva.aux`` in *optional_file_dir*.
+    ``human_gl_kiarva_<lc_db>.aux`` in *optional_file_dir*.
 
     Parameters
     ----------
     igblast_fasta_dir : Path
-        Directory containing ``kiarva_human_ig_j.fasta``.
+        Directory containing ``kiarva_<lc_db>_human_ig_j.fasta``.
     optional_file_dir : Path
         Directory where the ``.aux`` file will be written.
     """
     optional_file_dir.mkdir(parents=True, exist_ok=True)
-    j_fasta = igblast_fasta_dir / "kiarva_human_ig_j.fasta"
-    aux_out = optional_file_dir / "human_gl_kiarva.aux"
+    j_fastas = [
+        igblast_fasta_dir / "kiarva_imgt_human_ig_j.fasta",
+        igblast_fasta_dir / "kiarva_ogrdb_human_ig_j.fasta",
+    ]
+    aux_outs = [
+        optional_file_dir / "human_gl_kiarva_imgt.aux",
+        optional_file_dir / "human_gl_kiarva_ogrdb.aux",
+    ]
 
-    if not j_fasta.exists() or j_fasta.stat().st_size == 0:
-        logging.warning(
-            f"J fasta not found or empty ({j_fasta}); skipping aux file generation."
+    for j_fasta, aux_out in zip(j_fastas, aux_outs):
+        logging.info(f"Generating auxiliary file: {aux_out.name}")
+        if not j_fasta.exists() or j_fasta.stat().st_size == 0:
+            logging.warning(
+                f"Skipping missing or empty J fasta file: {j_fasta.name}"
+            )
+            continue
+        cmd = ["annotate_j", str(j_fasta), str(aux_out)]
+        res = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        return
-
-    logging.info(f"Generating auxiliary file: {aux_out.name}")
-    cmd = ["annotate_j", str(j_fasta), str(aux_out)]
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if res.returncode != 0:
-        logging.warning(
-            f"annotate_j returned non-zero exit code: "
-            f"{res.stderr.decode('utf-8')}"
-        )
+        if res.returncode != 0:
+            logging.warning(
+                f"annotate_j returned non-zero exit code: "
+                f"{res.stderr.decode('utf-8')}"
+            )
     else:
         logging.info(res.stdout.decode("utf-8"))
 
@@ -291,7 +445,7 @@ def build_blast_databases(
         if fasta_file.stat().st_size == 0:
             logging.warning(f"Skipping empty fasta file: {fasta_file.name}")
             continue
-
+        deduplicate_fasta(fasta_file)
         db_out = igblastdb_dir / fasta_file.stem
         logging.info(f"Building blast database: {db_out.name}")
         cmd = [
@@ -336,6 +490,7 @@ def main():
     #   igblast/optional_file/           <- aux files
     germline_dir = out_dir / "germlines" / "kiarva" / "human" / "vdj"
     imgt_ref_dir = out_dir / "germlines" / "imgt" / "human" / "vdj"
+    # ogrdb_ref_dir = out_dir / "germlines" / "ogrdb" / "human" / "vdj"
     igblast_fasta_dir = out_dir / "igblast" / "fasta"
     igblastdb_dir = out_dir / "igblast" / "database"
     optional_file_dir = out_dir / "igblast" / "optional_file"
@@ -364,6 +519,15 @@ def main():
         logging.warning(
             "One or more downloads failed. The resulting databases may be "
             "incomplete. Re-run to retry failed files."
+        )
+    # 1b. Borrow light chain (IGK/IGL) V and J germlines, since KIARVA
+    # does not provide them.
+    for light_chain_db in ["imgt", "ogrdb"]:
+        light_chain_dir = (
+            out_dir / "germlines" / light_chain_db / "human" / "vdj"
+        )
+        copy_light_chain_germlines(
+            germline_dir, light_chain_dir, light_chain_db
         )
 
     # 2. Merge into per-segment igblast fastas

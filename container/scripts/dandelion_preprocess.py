@@ -96,6 +96,14 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--lightchain_db",
+        type=str,
+        default=None,
+        help=(
+            "Which database to use for lightchain reannotation if db='kiarva'. Defaults to imgt."
+        ),
+    )
+    parser.add_argument(
         "--strain",
         type=str,
         default=None,
@@ -212,6 +220,7 @@ def main():
             f"    --org = {args.org}\n"
             f"    --file_prefix = {args.file_prefix}\n"
             f"    --db = {args.db}\n"
+            f"    --lightchain_db = {str(args.lightchain_db)}\n"
             f"    --strain = {str(args.strain)}\n"
             f"    --sep = {args.sep}\n"
             f"    --flavour = {args.flavour}\n"
@@ -441,6 +450,7 @@ def main():
         flavour=args.flavour,
         reassign_dj=args.skip_reassign_dj,
         db=args.db,
+        lightchain_db=args.lightchain_db,
         strain=args.strain,
     )
 
@@ -467,6 +477,7 @@ def main():
                         show_plot=False,
                         filename_prefix=args.file_prefix,
                         db=args.db,
+                        lightchain_db=args.lightchain_db,
                         strain=args.strain,
                     )
                     # remove if cleaning output - the important information is
@@ -483,6 +494,7 @@ def main():
                     show_plot=False,
                     filename_prefix=args.file_prefix,
                     db=args.db,
+                    lightchain_db=args.lightchain_db,
                     strain=args.strain,
                 )
                 # remove if cleaning output - the important information is ported

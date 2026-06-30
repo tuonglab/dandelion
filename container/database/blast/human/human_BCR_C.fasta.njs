@@ -6,7 +6,7 @@
   "description": "container/database/blast/human/human_BCR_C.fasta",
   "number-of-letters": 36082,
   "number-of-sequences": 120,
-  "last-updated": "2026-06-30T18:32:00",
+  "last-updated": "2026-06-30T22:09:00",
   "number-of-volumes": 1,
   "bytes-total": 69934,
   "bytes-to-cache": 10680,

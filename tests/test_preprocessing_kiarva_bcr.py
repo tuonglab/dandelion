@@ -74,10 +74,16 @@ def test_reannotate_fails(create_testfolder, database_paths_kiarva):
 
 @pytest.mark.usefixtures("create_testfolder", "database_paths_kiarva")
 @pytest.mark.parametrize(
-    "filename,expected", [pytest.param("filtered", 6), pytest.param("all", 12)]
+    "filename,lcdb,expected",
+    [
+        pytest.param("filtered", None, 5),
+        pytest.param("filtered", "ogrdb", 5),
+        pytest.param("all", None, 10),
+        pytest.param("all", "ogrdb", 10),
+    ],
 )
 def test_reannotategenes(
-    create_testfolder, database_paths_kiarva, filename, expected
+    create_testfolder, database_paths_kiarva, filename, lcdb, expected
 ):
     """test_reannotategenes"""
     ddl.pp.reannotate_genes(
@@ -86,6 +92,7 @@ def test_reannotategenes(
         germline=database_paths_kiarva["germline"],
         filename_prefix=filename,
         db="kiarva",
+        lightchain_db=lcdb,
     )
     assert (
         len(list((create_testfolder / "dandelion" / "tmp").iterdir()))
@@ -95,14 +102,16 @@ def test_reannotategenes(
 
 @pytest.mark.usefixtures("create_testfolder", "database_paths_kiarva")
 @pytest.mark.parametrize(
-    "filename,combine,expected",
+    "filename,lcdb,combine,expected",
     [
-        pytest.param("filtered", "reassigned_filtered", 13),
-        pytest.param("all", "reassigned_all", 16),
+        pytest.param("filtered", None, "reassigned_filtered", 13),
+        pytest.param("filtered", "ogrdb", "reassigned_filtered", 13),
+        pytest.param("all", None, "reassigned_all", 16),
+        pytest.param("all", "ogrdb", "reassigned_all", 16),
     ],
 )
 def test_reassignalleles(
-    create_testfolder, database_paths_kiarva, filename, combine, expected
+    create_testfolder, database_paths_kiarva, filename, combine, lcdb, expected
 ):
     """test_reassignalleles"""
     ddl.pp.reassign_alleles(
@@ -111,6 +120,7 @@ def test_reassignalleles(
         germline=database_paths_kiarva["germline"],
         filename_prefix=filename,
         db="kiarva",
+        lightchain_db=lcdb,
         novel=True,
         save_plot=True,
         show_plot=False,
@@ -122,16 +132,18 @@ def test_reassignalleles(
 
 
 @pytest.mark.usefixtures("create_testfolder", "database_paths_kiarva")
+@pytest.mark.parametrize("lcdb", [None, "ogrdb"])
 def test_reassign_alleles_combined_number(
-    create_testfolder, database_paths_kiarva
+    create_testfolder, database_paths_kiarva, lcdb
 ):
-    """test_reassign_alleles_fails"""
+    """test_reassign_alleles"""
     ddl.pp.reassign_alleles(
         str(create_testfolder),
         combined_folder=create_testfolder / str(2),
         germline=database_paths_kiarva["germline"],
         filename_prefix="all",
         db="kiarva",
+        lightchain_db=lcdb,
         novel=True,
         save_plot=True,
         show_plot=False,
