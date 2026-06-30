@@ -216,7 +216,7 @@ def copy_light_chain_germlines(
         logging.info(f"Copied light chain reference {src.name} -> {dest.name}")
         # also fix the header names to ensure that it's clean
         seqs = {}
-        fh = open(dest, "r")
+        fh = open(dest)
         for header, sequence in fasta_iterator(fh):
             parts = header.split("|")
             if len(parts) > 3:
