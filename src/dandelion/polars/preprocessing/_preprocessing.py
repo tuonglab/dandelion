@@ -2075,7 +2075,7 @@ def run_igblastn(
     loci: Literal["ig", "tr"] = "ig",
     evalue: float = 1e-4,
     min_d_match: int = 9,
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva", "ghklab"] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -2126,8 +2126,8 @@ def run_igblastn(
         sequence and the targets.
     min_d_match : int, optional
         minimum D nucleotide match.
-    db : Literal["imgt", "ogrdb"], optional
-        database to use for germline sequences.
+    db : Literal["imgt", "ogrdb", "kiarva", "ghklab"], optional
+        database to use for germline sequences. For `db="kiarva"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -2155,7 +2155,18 @@ def run_igblastn(
     else:
         dpath = dbpath / (db_org_loci + "d")
     jpath = dbpath / (db_org_loci + "j")
-    cpath = dbpath / ("imgt_" + org + "_" + loci + "_" + "c")  # only imgt
+    if db == "ogrdb" and org == "human" and loci == "ig":
+        cpath = dbpath / ("ogrdb_" + org + "_" + loci + "_" + "c")
+    else:
+        if db == "ogrdb" and org == "mouse":
+            warnings.warn(
+                "OGRDB does not provide a constant region (IGHC) germline set for mouse. "
+                "Falling back to IMGT for the -c_region_db argument.",
+                UserWarning,
+                stacklevel=2,
+            )
+        # all other cases use IMGT for the constant region database
+        cpath = dbpath / ("imgt_" + org + "_" + loci + "_" + "c")
     auxpath = igdb / "optional_file" / (org + aux)
     for fileformat in ["blast", "airr"]:
         outfile = str(fasta.stem + informat_dict[fileformat])
@@ -2242,7 +2253,7 @@ def assign_DJ(
     ),
     filename_prefix: str | None = None,
     overwrite: bool = False,
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva", "ghklab"] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -2313,8 +2324,8 @@ def assign_DJ(
         prefix of file name preceding '_contig'. `None` defaults to 'all'.
     overwrite : bool, optional
         whether or not to overwrite the assignments.
-    db : Literal["imgt", "ogrdb"], optional
-        database to use for germline sequences.
+    db : Literal["imgt", "ogrdb", "kiarva", "ghklab"], optional
+        database to use for germline sequences. For `db="kiarva"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required. `call="c"` will ignore the `db` argument and use the database provided in the `database` argument.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
