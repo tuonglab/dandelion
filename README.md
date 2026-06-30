@@ -96,7 +96,7 @@ You will need to download the database folder in this repository and place them 
 
 ```bash
 # In order to download the databases, you will need to install the receptor-utils package first:
-# pip install receptor-utils 
+# pip install receptor-utils
 python prepare_imgt_database.py
 python prepare_ogrdb_database.py
 python prepare_kiava_database.py
