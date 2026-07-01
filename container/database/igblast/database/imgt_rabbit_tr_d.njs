@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/imgt_rabbit_tr_d.fasta",
   "number-of-letters": 55,
   "number-of-sequences": 4,
-  "last-updated": "2025-03-24T15:29:00",
+  "last-updated": "2026-07-01T16:36:00",
   "number-of-volumes": 1,
   "bytes-total": 49745,
   "bytes-to-cache": 205,

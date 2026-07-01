@@ -6,10 +6,10 @@
   "description": "database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta",
   "number-of-letters": 362957,
   "number-of-sequences": 307,
-  "last-updated": "2026-07-01T11:12:00",
+  "last-updated": "2026-07-01T16:36:00",
   "number-of-volumes": 1,
-  "bytes-total": 196633,
-  "bytes-to-cache": 94787,
+  "bytes-total": 196625,
+  "bytes-to-cache": 94779,
   "files": [
     "ogrdb_human_ig_c.ndb",
     "ogrdb_human_ig_c.nhr",

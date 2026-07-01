@@ -1,0 +1,43 @@
+#Numbers are start nucleotide positions (0-based) for the coding frame 1 of mouse D genes according to Ichihara Y et al., 
+#European Journal of Immunology Volume 19, Issue 10 p. 1849-1854
+#Frame 2 starts at one position after frame 1
+#Frame 3 starts at two positions after frame 1
+
+IGHD1-1*02     2
+IGHD1-2*01     2
+IGHD1-1*01     2
+IGHD2-5*01     2
+IGHD2-13*01     2
+IGHD2-9*01     2
+IGHD2-4*01     2
+IGHD2-1*01     2
+IGHD2-14*01     2
+IGHD2-6*01     2
+IGHD2-2*01     2
+IGHD2-9*02     2
+IGHD1-3*01     2
+IGHD2-3*01     2
+IGHD2-8*01     2
+IGHD2-12*01     2
+IGHD2-10*01     2
+IGHD2-10*02     2
+IGHD2-11*01     2
+IGHD2-7*01     2
+IGHD2-11*02     2
+DFL16.1     2
+DFL16.1j     2
+DFL16.2     2
+DFL16.3     2
+DSP2.10     2
+DSP2.11     2
+DSP2.12     2
+DSP2.13     2
+DSP2.2     2
+DSP2.3     2
+DSP2.4     2
+DSP2.5     2
+DSP2.6     2
+DSP2.7     2
+DSP2.8     2
+DSP2.9     2
+DSP2.x     2

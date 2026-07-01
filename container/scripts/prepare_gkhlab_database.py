@@ -137,9 +137,6 @@ def deduplicate_fasta(path: Path) -> None:
 
             # duplicate with identical sequence -> ignore
             if first_sequence[header] == sequence:
-                logging.info(
-                    f"Removing duplicate record '{header}' from {path.name}"
-                )
                 continue
 
             # duplicate with different sequence -> rename
@@ -204,7 +201,6 @@ def download_and_write_germlines(
             continue
 
         dest.write_text("\n".join(lines) + "\n")
-        deduplicate_fasta(dest)
         # create gapped sequences
         # make sure imgt database was actually downloaded - just check the file exists and is not empty
         imgt_reference = Path(imgt_ref_dir) / (
@@ -373,7 +369,7 @@ def build_blast_databases(
         if fasta_file.stat().st_size == 0:
             logging.warning(f"Skipping empty fasta file: {fasta_file.name}")
             continue
-
+        deduplicate_fasta(fasta_file)
         db_out = igblastdb_dir / fasta_file.stem
         logging.info(f"Building blast database: {db_out.name}")
         cmd = [

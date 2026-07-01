@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/ogrdb_mouse_C3H_HeJ_ig_v.fasta",
   "number-of-letters": 28893,
   "number-of-sequences": 99,
-  "last-updated": "2026-07-01T11:13:00",
+  "last-updated": "2026-07-01T16:37:00",
   "number-of-volumes": 1,
   "bytes-total": 67127,
   "bytes-to-cache": 8617,

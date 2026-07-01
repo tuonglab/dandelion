@@ -1,423 +1,552 @@
-2025-03-24 15:26:56 - INFO: Source:  https://www.imgt.org/genedb
-2025-03-24 15:26:56 - INFO: Out directory:  /Users/uqztuong/Documents/GitHub/dandelion/container/database
-2025-03-24 15:26:56 - INFO: Download date: 2025-03-24
-2025-03-24 15:26:56 - INFO: Species:
-2025-03-24 15:26:56 - INFO:     - human
-2025-03-24 15:26:56 - INFO:         - vdj
-2025-03-24 15:27:15 - INFO:         - vdj_aa
-2025-03-24 15:27:32 - INFO:         - constant
-2025-03-24 15:27:35 - INFO:     - mouse
-2025-03-24 15:27:35 - INFO:         - vdj
-2025-03-24 15:28:12 - INFO:         - vdj_aa
-2025-03-24 15:28:48 - INFO:         - constant
-2025-03-24 15:28:51 - INFO:     - rabbit
-2025-03-24 15:28:51 - INFO:         - vdj
-2025-03-24 15:28:56 - INFO:         - vdj_aa
-2025-03-24 15:29:01 - INFO:         - constant
-2025-03-24 15:29:04 - INFO: Converting to igblast database for human
-2025-03-24 15:29:04 - INFO: Converting to igblast database for mouse
-2025-03-24 15:29:05 - INFO: Converting to igblast database for rabbit
-2025-03-24 15:29:06 - INFO:
+2026-07-01 16:36:18 - INFO: Source:  https://www.imgt.org/genedb
+2026-07-01 16:36:18 - INFO: Out directory:  /Users/uqztuong/Documents/GitHub/dandelion/container/database
+2026-07-01 16:36:18 - INFO: Download date: 2026-07-01
+2026-07-01 16:36:18 - INFO: Species:
+2026-07-01 16:36:18 - INFO:     - human
+2026-07-01 16:36:18 - INFO:         - vdj
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGHV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGHD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGLJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGLV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGHJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGKJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_IGKV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRAV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRAJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRBD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRBJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRBV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRDV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRDD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRGV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRDJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj/imgt_human_TRGJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:         - vdj_aa
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_IGHV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_IGLV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_TRAV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_IGKV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_TRDV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_TRGV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/vdj_aa/imgt_aa_human_TRBV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:         - constant
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_IGHC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_TRAC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_IGKC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_TRBC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_IGLC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_TRDC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/human/constant/imgt_human_TRGC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:     - mouse
+2026-07-01 16:36:18 - INFO:         - vdj
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGHV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGHD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGKV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGKJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGHJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGLV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRBV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRAV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_IGLJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRAJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRDV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRBD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRBJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRDD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRGJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRDJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj/imgt_mouse_TRGV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:         - vdj_aa
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_IGKV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_IGHV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_IGLV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_TRAV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_TRBV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_TRGV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/vdj_aa/imgt_aa_mouse_TRDV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:         - constant
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_IGHC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_IGKC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_IGLC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_TRAC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_TRBC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_TRDC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/mouse/constant/imgt_mouse_TRGC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:     - rabbit
+2026-07-01 16:36:18 - INFO:         - vdj
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGHD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGHV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGHJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGKV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGLJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGKJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRAV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_IGLV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRAJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRBV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRBD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRDV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRDD.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRBJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRDJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRGV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj/imgt_rabbit_TRGJ.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:         - vdj_aa
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_IGKV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_IGHV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_TRAV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_TRGV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_IGLV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_TRBV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/vdj_aa/imgt_aa_rabbit_TRDV.fasta as it already exists.
+2026-07-01 16:36:18 - INFO:         - constant
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_IGHC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_IGKC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_TRDC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_TRBC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_TRAC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_IGLC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Skipping download of database/germlines/imgt/rabbit/constant/imgt_rabbit_TRGC.fasta as it already exists.
+2026-07-01 16:36:18 - INFO: Converting to igblast database for human
+2026-07-01 16:36:18 - INFO: Converting to igblast database for mouse
+2026-07-01 16:36:18 - INFO: Converting to igblast database for rabbit
+2026-07-01 16:36:19 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:05
+Building a new DB, current time: 07/01/2026 16:36:18
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_human_ig_v
 New DB title:  database/igblast/fasta/imgt_aa_human_ig_v.fasta
 Sequence type: Protein
+Deleted existing Protein BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_human_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 706 sequences in 0.0157402 seconds.
+Adding sequences from FASTA; added 706 sequences in 0.0128541 seconds.
 
 
 
-2025-03-24 15:29:08 - INFO:
+2026-07-01 16:36:20 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:06
+Building a new DB, current time: 07/01/2026 16:36:19
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_human_tr_v
 New DB title:  database/igblast/fasta/imgt_aa_human_tr_v.fasta
 Sequence type: Protein
+Deleted existing Protein BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_human_tr_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 285 sequences in 0.201756 seconds.
+Adding sequences from FASTA; added 285 sequences in 0.114454 seconds.
 
 
 
-2025-03-24 15:29:09 - INFO:
+2026-07-01 16:36:20 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:08
+Building a new DB, current time: 07/01/2026 16:36:20
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_mouse_ig_v
 New DB title:  database/igblast/fasta/imgt_aa_mouse_ig_v.fasta
 Sequence type: Protein
+Deleted existing Protein BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_mouse_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 856 sequences in 0.00911117 seconds.
+Adding sequences from FASTA; added 856 sequences in 0.00892901 seconds.
 
 
 
-2025-03-24 15:29:11 - INFO:
+2026-07-01 16:36:21 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:09
+Building a new DB, current time: 07/01/2026 16:36:20
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_mouse_tr_v
 New DB title:  database/igblast/fasta/imgt_aa_mouse_tr_v.fasta
 Sequence type: Protein
+Deleted existing Protein BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_mouse_tr_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 387 sequences in 0.00614691 seconds.
+Adding sequences from FASTA; added 387 sequences in 0.00562215 seconds.
 
 
 
-2025-03-24 15:29:12 - INFO:
+2026-07-01 16:36:22 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:11
+Building a new DB, current time: 07/01/2026 16:36:21
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_rabbit_ig_v
 New DB title:  database/igblast/fasta/imgt_aa_rabbit_ig_v.fasta
 Sequence type: Protein
+Deleted existing Protein BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_rabbit_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 148 sequences in 0.00423098 seconds.
+Adding sequences from FASTA; added 148 sequences in 0.00389099 seconds.
 
 
 
-2025-03-24 15:29:14 - INFO:
+2026-07-01 16:36:23 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:12
+Building a new DB, current time: 07/01/2026 16:36:22
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_rabbit_tr_v
 New DB title:  database/igblast/fasta/imgt_aa_rabbit_tr_v.fasta
 Sequence type: Protein
+Deleted existing Protein BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_rabbit_tr_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 148 sequences in 0.00384116 seconds.
+Adding sequences from FASTA; added 148 sequences in 0.00394702 seconds.
 
 
 
-2025-03-24 15:29:15 - INFO:
+2026-07-01 16:36:23 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:14
+Building a new DB, current time: 07/01/2026 16:36:23
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_c
 New DB title:  database/igblast/fasta/imgt_human_ig_c.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_c
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 64 sequences in 0.149149 seconds.
+Adding sequences from FASTA; added 64 sequences in 0.111177 seconds.
 
 
 
-2025-03-24 15:29:17 - INFO:
+2026-07-01 16:36:24 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:15
+Building a new DB, current time: 07/01/2026 16:36:24
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_d
 New DB title:  database/igblast/fasta/imgt_human_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 47 sequences in 0.00289893 seconds.
+Adding sequences from FASTA; added 47 sequences in 0.00313091 seconds.
 
 
 
-2025-03-24 15:29:18 - INFO:
+2026-07-01 16:36:25 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:17
+Building a new DB, current time: 07/01/2026 16:36:24
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_j
 New DB title:  database/igblast/fasta/imgt_human_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 34 sequences in 0.00285792 seconds.
+Adding sequences from FASTA; added 34 sequences in 0.00305605 seconds.
 
 
 
-2025-03-24 15:29:20 - INFO:
+2026-07-01 16:36:26 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:18
+Building a new DB, current time: 07/01/2026 16:36:25
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_v
 New DB title:  database/igblast/fasta/imgt_human_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 706 sequences in 0.00852799 seconds.
+Adding sequences from FASTA; added 706 sequences in 0.00858307 seconds.
 
 
 
-2025-03-24 15:29:21 - INFO:
+2026-07-01 16:36:27 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:20
+Building a new DB, current time: 07/01/2026 16:36:26
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_c
 New DB title:  database/igblast/fasta/imgt_human_tr_c.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_c
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 21 sequences in 0.149205 seconds.
+Adding sequences from FASTA; added 21 sequences in 0.11553 seconds.
 
 
 
-2025-03-24 15:29:23 - INFO:
+2026-07-01 16:36:27 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:21
+Building a new DB, current time: 07/01/2026 16:36:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_d
 New DB title:  database/igblast/fasta/imgt_human_tr_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 6 sequences in 0.00315785 seconds.
+Adding sequences from FASTA; added 6 sequences in 0.0028801 seconds.
 
 
 
-2025-03-24 15:29:24 - INFO:
+2026-07-01 16:36:28 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:23
+Building a new DB, current time: 07/01/2026 16:36:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_j
 New DB title:  database/igblast/fasta/imgt_human_tr_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 97 sequences in 0.14843 seconds.
+Adding sequences from FASTA; added 97 sequences in 0.112478 seconds.
 
 
 
-2025-03-24 15:29:26 - INFO:
+2026-07-01 16:36:29 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:25
+Building a new DB, current time: 07/01/2026 16:36:28
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_v
 New DB title:  database/igblast/fasta/imgt_human_tr_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 285 sequences in 0.151361 seconds.
+Adding sequences from FASTA; added 285 sequences in 0.115772 seconds.
 
 
 
-2025-03-24 15:29:28 - INFO:
+2026-07-01 16:36:30 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:26
+Building a new DB, current time: 07/01/2026 16:36:29
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_c
 New DB title:  database/igblast/fasta/imgt_mouse_ig_c.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_c
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 32 sequences in 0.150232 seconds.
+Adding sequences from FASTA; added 32 sequences in 0.114981 seconds.
 
 
 
-2025-03-24 15:29:29 - INFO:
+2026-07-01 16:36:31 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:28
+Building a new DB, current time: 07/01/2026 16:36:30
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_d
 New DB title:  database/igblast/fasta/imgt_mouse_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 61 sequences in 0.00321603 seconds.
+Adding sequences from FASTA; added 61 sequences in 0.00307107 seconds.
 
 
 
-2025-03-24 15:29:31 - INFO:
+2026-07-01 16:36:31 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:29
+Building a new DB, current time: 07/01/2026 16:36:31
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_j
 New DB title:  database/igblast/fasta/imgt_mouse_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 26 sequences in 0.00308704 seconds.
+Adding sequences from FASTA; added 26 sequences in 0.00303388 seconds.
 
 
 
-2025-03-24 15:29:32 - INFO:
+2026-07-01 16:36:32 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:31
+Building a new DB, current time: 07/01/2026 16:36:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_v
 New DB title:  database/igblast/fasta/imgt_mouse_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 856 sequences in 0.0102222 seconds.
+Adding sequences from FASTA; added 856 sequences in 0.00995779 seconds.
 
 
 
-2025-03-24 15:29:34 - INFO:
+2026-07-01 16:36:33 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:33
+Building a new DB, current time: 07/01/2026 16:36:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_c
 New DB title:  database/igblast/fasta/imgt_mouse_tr_c.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_c
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 15 sequences in 0.149593 seconds.
+Adding sequences from FASTA; added 15 sequences in 0.112841 seconds.
 
 
 
-2025-03-24 15:29:36 - INFO:
+2026-07-01 16:36:34 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:34
+Building a new DB, current time: 07/01/2026 16:36:33
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_d
 New DB title:  database/igblast/fasta/imgt_mouse_tr_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 5 sequences in 0.00268102 seconds.
+Adding sequences from FASTA; added 5 sequences in 0.0029161 seconds.
 
 
 
-2025-03-24 15:29:37 - INFO:
+2026-07-01 16:36:35 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:36
+Building a new DB, current time: 07/01/2026 16:36:34
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_j
 New DB title:  database/igblast/fasta/imgt_mouse_tr_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 96 sequences in 0.00340414 seconds.
+Adding sequences from FASTA; added 96 sequences in 0.0130692 seconds.
 
 
 
-2025-03-24 15:29:38 - INFO:
+2026-07-01 16:36:35 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:37
+Building a new DB, current time: 07/01/2026 16:36:35
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_v
 New DB title:  database/igblast/fasta/imgt_mouse_tr_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 387 sequences in 0.0061779 seconds.
+Adding sequences from FASTA; added 387 sequences in 0.00599384 seconds.
 
 
 
-2025-03-24 15:29:40 - INFO:
+2026-07-01 16:36:36 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:39
+Building a new DB, current time: 07/01/2026 16:36:35
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_c
 New DB title:  database/igblast/fasta/imgt_rabbit_ig_c.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_c
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 41 sequences in 0.147847 seconds.
+Adding sequences from FASTA; added 41 sequences in 0.110472 seconds.
 
 
 
-2025-03-24 15:29:42 - INFO:
+2026-07-01 16:36:37 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:40
+Building a new DB, current time: 07/01/2026 16:36:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_d
 New DB title:  database/igblast/fasta/imgt_rabbit_ig_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 11 sequences in 0.00269318 seconds.
+Adding sequences from FASTA; added 11 sequences in 0.0028832 seconds.
 
 
 
-2025-03-24 15:29:43 - INFO:
+2026-07-01 16:36:38 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:42
+Building a new DB, current time: 07/01/2026 16:36:37
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_j
 New DB title:  database/igblast/fasta/imgt_rabbit_ig_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 34 sequences in 0.00288892 seconds.
+Adding sequences from FASTA; added 34 sequences in 0.00308108 seconds.
 
 
 
-2025-03-24 15:29:45 - INFO:
+2026-07-01 16:36:38 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:43
+Building a new DB, current time: 07/01/2026 16:36:38
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_v
 New DB title:  database/igblast/fasta/imgt_rabbit_ig_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 148 sequences in 0.00407696 seconds.
+Adding sequences from FASTA; added 148 sequences in 0.00401115 seconds.
 
 
 
-2025-03-24 15:29:46 - INFO:
+2026-07-01 16:36:39 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:45
+Building a new DB, current time: 07/01/2026 16:36:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_c
 New DB title:  database/igblast/fasta/imgt_rabbit_tr_c.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_c
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 8 sequences in 0.150644 seconds.
+Adding sequences from FASTA; added 8 sequences in 0.112086 seconds.
 
 
 
-2025-03-24 15:29:48 - INFO:
+2026-07-01 16:36:40 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:46
+Building a new DB, current time: 07/01/2026 16:36:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_d
 New DB title:  database/igblast/fasta/imgt_rabbit_tr_d.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 4 sequences in 0.00260305 seconds.
+Adding sequences from FASTA; added 4 sequences in 0.00277114 seconds.
 
 
 
-2025-03-24 15:29:49 - INFO:
+2026-07-01 16:36:41 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:48
+Building a new DB, current time: 07/01/2026 16:36:40
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_j
 New DB title:  database/igblast/fasta/imgt_rabbit_tr_j.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 75 sequences in 0.00316811 seconds.
+Adding sequences from FASTA; added 75 sequences in 0.00333285 seconds.
 
 
 
-2025-03-24 15:29:51 - INFO:
+2026-07-01 16:36:42 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:29:50
+Building a new DB, current time: 07/01/2026 16:36:41
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_v
 New DB title:  database/igblast/fasta/imgt_rabbit_tr_v.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 148 sequences in 0.00397897 seconds.
+Adding sequences from FASTA; added 148 sequences in 0.00397992 seconds.
 
 
 
-2025-03-24 15:29:51 - INFO: Downloading IMGT BCR constant sequences for blast database for human
-2025-03-24 15:30:03 - INFO: Downloading IMGT BCR constant sequences for blast database for mouse
-2025-03-24 15:30:12 - INFO: Downloading IMGT BCR constant sequences for blast database for rabbit
-2025-03-24 15:30:18 - INFO: Converting to blast database for human
-2025-03-24 15:30:20 - INFO:
+2026-07-01 16:36:42 - INFO: Downloading IMGT BCR constant sequences for blast database for human
+2026-07-01 16:36:42 - INFO: Skipping download of human_BCR_C as it already exists.
+2026-07-01 16:36:42 - INFO: Downloading IMGT BCR constant sequences for blast database for mouse
+2026-07-01 16:36:42 - INFO: Skipping download of mouse_BCR_C as it already exists.
+2026-07-01 16:36:42 - INFO: Downloading IMGT BCR constant sequences for blast database for rabbit
+2026-07-01 16:36:42 - INFO: Skipping download of rabbit_BCR_C as it already exists.
+2026-07-01 16:36:42 - INFO: Converting to blast database for human
+2026-07-01 16:36:43 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:30:19
+Building a new DB, current time: 07/01/2026 16:36:42
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/human/human_BCR_C.fasta
 New DB title:  database/blast/human/human_BCR_C.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/human/human_BCR_C.fasta
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 120 sequences in 0.166104 seconds.
+Adding sequences from FASTA; added 120 sequences in 0.112422 seconds.
 
 
 
-2025-03-24 15:30:20 - INFO: Converting to blast database for mouse
-2025-03-24 15:30:22 - INFO:
+2026-07-01 16:36:43 - INFO: Converting to blast database for mouse
+2026-07-01 16:36:43 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:30:20
+Building a new DB, current time: 07/01/2026 16:36:43
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/mouse/mouse_BCR_C.fasta
 New DB title:  database/blast/mouse/mouse_BCR_C.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/mouse/mouse_BCR_C.fasta
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 39 sequences in 0.156579 seconds.
+Adding sequences from FASTA; added 39 sequences in 0.111207 seconds.
 
 
 
-2025-03-24 15:30:22 - INFO: Converting to blast database for rabbit
-2025-03-24 15:30:23 - INFO:
+2026-07-01 16:36:43 - INFO: Converting to blast database for rabbit
+2026-07-01 16:36:44 - INFO: 
 
-Building a new DB, current time: 03/24/2025 15:30:22
+Building a new DB, current time: 07/01/2026 16:36:44
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/rabbit/rabbit_BCR_C.fasta
 New DB title:  database/blast/rabbit/rabbit_BCR_C.fasta
 Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/rabbit/rabbit_BCR_C.fasta
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 44 sequences in 0.153755 seconds.
+Adding sequences from FASTA; added 44 sequences in 0.114184 seconds.
 
 
 
-2025-03-24 15:30:23 - INFO: Download finished: 2025-03-24 15:30:23.997925
-2025-03-24 15:30:23 - INFO: Total execution time: 0:03:27.794523
+2026-07-01 16:36:44 - INFO: Download finished: 2026-07-01 16:36:44.848814
+2026-07-01 16:36:44 - INFO: Total execution time: 0:00:26.737484
