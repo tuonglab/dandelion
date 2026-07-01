@@ -12,7 +12,7 @@
 2026-07-01 11:10:19 - INFO: Downloading human OGRDB IGHC set from https://ogrdb.airr-community.org/download_germline_set/Homo%20sapiens/IGHC/published/ungapped_ex
 2026-07-01 11:10:21 - INFO: Saved IGHC fasta to database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta
 2026-07-01 11:10:21 - INFO: Building OGRDB IGHC blast database at database/igblast/database/ogrdb_human_ig_c
-2026-07-01 11:10:23 - INFO: 
+2026-07-01 11:10:23 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:10:21
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/scripts/database/igblast/database/ogrdb_human_ig_c
