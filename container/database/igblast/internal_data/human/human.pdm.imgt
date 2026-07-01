@@ -1,5 +1,5 @@
-#gene/allele name, FWR1 start, FWR1 stop, CDR1 start, CDR1 stop, FWR2 start, FWR2 stop, CDR2 start, CDR2 stop, FWR2 start, FWR2 stop, chain type, coding frame start. 
-#FWR/CDR positions are 1-based while the coding frame start positions are 0-based 
+#gene/allele name, FWR1 start, FWR1 stop, CDR1 start, CDR1 stop, FWR2 start, FWR2 stop, CDR2 start, CDR2 stop, FWR2 start, FWR2 stop, chain type, coding frame start.
+#FWR/CDR positions are 1-based while the coding frame start positions are 0-based
 A1	1	26	27	37	38	54	55	57	58	93	VK	0
 A10	1	26	27	32	33	49	50	52	53	88	VK	0
 A11	1	26	27	33	34	50	51	53	54	89	VK	0

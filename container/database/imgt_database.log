@@ -110,7 +110,7 @@
 2026-07-01 16:36:18 - INFO: Converting to igblast database for human
 2026-07-01 16:36:18 - INFO: Converting to igblast database for mouse
 2026-07-01 16:36:18 - INFO: Converting to igblast database for rabbit
-2026-07-01 16:36:19 - INFO: 
+2026-07-01 16:36:19 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:18
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_human_ig_v
@@ -123,7 +123,7 @@ Adding sequences from FASTA; added 706 sequences in 0.0128541 seconds.
 
 
 
-2026-07-01 16:36:20 - INFO: 
+2026-07-01 16:36:20 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:19
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_human_tr_v
@@ -136,7 +136,7 @@ Adding sequences from FASTA; added 285 sequences in 0.114454 seconds.
 
 
 
-2026-07-01 16:36:20 - INFO: 
+2026-07-01 16:36:20 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:20
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_mouse_ig_v
@@ -149,7 +149,7 @@ Adding sequences from FASTA; added 856 sequences in 0.00892901 seconds.
 
 
 
-2026-07-01 16:36:21 - INFO: 
+2026-07-01 16:36:21 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:20
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_mouse_tr_v
@@ -162,7 +162,7 @@ Adding sequences from FASTA; added 387 sequences in 0.00562215 seconds.
 
 
 
-2026-07-01 16:36:22 - INFO: 
+2026-07-01 16:36:22 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:21
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_rabbit_ig_v
@@ -175,7 +175,7 @@ Adding sequences from FASTA; added 148 sequences in 0.00389099 seconds.
 
 
 
-2026-07-01 16:36:23 - INFO: 
+2026-07-01 16:36:23 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:22
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_aa_rabbit_tr_v
@@ -188,7 +188,7 @@ Adding sequences from FASTA; added 148 sequences in 0.00394702 seconds.
 
 
 
-2026-07-01 16:36:23 - INFO: 
+2026-07-01 16:36:23 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:23
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_c
@@ -201,7 +201,7 @@ Adding sequences from FASTA; added 64 sequences in 0.111177 seconds.
 
 
 
-2026-07-01 16:36:24 - INFO: 
+2026-07-01 16:36:24 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:24
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_d
@@ -214,7 +214,7 @@ Adding sequences from FASTA; added 47 sequences in 0.00313091 seconds.
 
 
 
-2026-07-01 16:36:25 - INFO: 
+2026-07-01 16:36:25 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:24
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_j
@@ -227,7 +227,7 @@ Adding sequences from FASTA; added 34 sequences in 0.00305605 seconds.
 
 
 
-2026-07-01 16:36:26 - INFO: 
+2026-07-01 16:36:26 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:25
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_ig_v
@@ -240,7 +240,7 @@ Adding sequences from FASTA; added 706 sequences in 0.00858307 seconds.
 
 
 
-2026-07-01 16:36:27 - INFO: 
+2026-07-01 16:36:27 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:26
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_c
@@ -253,7 +253,7 @@ Adding sequences from FASTA; added 21 sequences in 0.11553 seconds.
 
 
 
-2026-07-01 16:36:27 - INFO: 
+2026-07-01 16:36:27 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_d
@@ -266,7 +266,7 @@ Adding sequences from FASTA; added 6 sequences in 0.0028801 seconds.
 
 
 
-2026-07-01 16:36:28 - INFO: 
+2026-07-01 16:36:28 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_j
@@ -279,7 +279,7 @@ Adding sequences from FASTA; added 97 sequences in 0.112478 seconds.
 
 
 
-2026-07-01 16:36:29 - INFO: 
+2026-07-01 16:36:29 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:28
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_human_tr_v
@@ -292,7 +292,7 @@ Adding sequences from FASTA; added 285 sequences in 0.115772 seconds.
 
 
 
-2026-07-01 16:36:30 - INFO: 
+2026-07-01 16:36:30 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:29
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_c
@@ -305,7 +305,7 @@ Adding sequences from FASTA; added 32 sequences in 0.114981 seconds.
 
 
 
-2026-07-01 16:36:31 - INFO: 
+2026-07-01 16:36:31 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:30
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_d
@@ -318,7 +318,7 @@ Adding sequences from FASTA; added 61 sequences in 0.00307107 seconds.
 
 
 
-2026-07-01 16:36:31 - INFO: 
+2026-07-01 16:36:31 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:31
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_j
@@ -331,7 +331,7 @@ Adding sequences from FASTA; added 26 sequences in 0.00303388 seconds.
 
 
 
-2026-07-01 16:36:32 - INFO: 
+2026-07-01 16:36:32 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_ig_v
@@ -344,7 +344,7 @@ Adding sequences from FASTA; added 856 sequences in 0.00995779 seconds.
 
 
 
-2026-07-01 16:36:33 - INFO: 
+2026-07-01 16:36:33 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_c
@@ -357,7 +357,7 @@ Adding sequences from FASTA; added 15 sequences in 0.112841 seconds.
 
 
 
-2026-07-01 16:36:34 - INFO: 
+2026-07-01 16:36:34 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:33
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_d
@@ -370,7 +370,7 @@ Adding sequences from FASTA; added 5 sequences in 0.0029161 seconds.
 
 
 
-2026-07-01 16:36:35 - INFO: 
+2026-07-01 16:36:35 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:34
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_j
@@ -383,7 +383,7 @@ Adding sequences from FASTA; added 96 sequences in 0.0130692 seconds.
 
 
 
-2026-07-01 16:36:35 - INFO: 
+2026-07-01 16:36:35 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:35
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_mouse_tr_v
@@ -396,7 +396,7 @@ Adding sequences from FASTA; added 387 sequences in 0.00599384 seconds.
 
 
 
-2026-07-01 16:36:36 - INFO: 
+2026-07-01 16:36:36 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:35
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_c
@@ -409,7 +409,7 @@ Adding sequences from FASTA; added 41 sequences in 0.110472 seconds.
 
 
 
-2026-07-01 16:36:37 - INFO: 
+2026-07-01 16:36:37 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_d
@@ -422,7 +422,7 @@ Adding sequences from FASTA; added 11 sequences in 0.0028832 seconds.
 
 
 
-2026-07-01 16:36:38 - INFO: 
+2026-07-01 16:36:38 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:37
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_j
@@ -435,7 +435,7 @@ Adding sequences from FASTA; added 34 sequences in 0.00308108 seconds.
 
 
 
-2026-07-01 16:36:38 - INFO: 
+2026-07-01 16:36:38 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:38
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_ig_v
@@ -448,7 +448,7 @@ Adding sequences from FASTA; added 148 sequences in 0.00401115 seconds.
 
 
 
-2026-07-01 16:36:39 - INFO: 
+2026-07-01 16:36:39 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_c
@@ -461,7 +461,7 @@ Adding sequences from FASTA; added 8 sequences in 0.112086 seconds.
 
 
 
-2026-07-01 16:36:40 - INFO: 
+2026-07-01 16:36:40 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_d
@@ -474,7 +474,7 @@ Adding sequences from FASTA; added 4 sequences in 0.00277114 seconds.
 
 
 
-2026-07-01 16:36:41 - INFO: 
+2026-07-01 16:36:41 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:40
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_j
@@ -487,7 +487,7 @@ Adding sequences from FASTA; added 75 sequences in 0.00333285 seconds.
 
 
 
-2026-07-01 16:36:42 - INFO: 
+2026-07-01 16:36:42 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:41
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/imgt_rabbit_tr_v
@@ -507,7 +507,7 @@ Adding sequences from FASTA; added 148 sequences in 0.00397992 seconds.
 2026-07-01 16:36:42 - INFO: Downloading IMGT BCR constant sequences for blast database for rabbit
 2026-07-01 16:36:42 - INFO: Skipping download of rabbit_BCR_C as it already exists.
 2026-07-01 16:36:42 - INFO: Converting to blast database for human
-2026-07-01 16:36:43 - INFO: 
+2026-07-01 16:36:43 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:42
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/human/human_BCR_C.fasta
@@ -521,7 +521,7 @@ Adding sequences from FASTA; added 120 sequences in 0.112422 seconds.
 
 
 2026-07-01 16:36:43 - INFO: Converting to blast database for mouse
-2026-07-01 16:36:43 - INFO: 
+2026-07-01 16:36:43 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:43
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/mouse/mouse_BCR_C.fasta
@@ -535,7 +535,7 @@ Adding sequences from FASTA; added 39 sequences in 0.111207 seconds.
 
 
 2026-07-01 16:36:43 - INFO: Converting to blast database for rabbit
-2026-07-01 16:36:44 - INFO: 
+2026-07-01 16:36:44 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:36:44
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/blast/rabbit/rabbit_BCR_C.fasta

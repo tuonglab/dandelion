@@ -475,10 +475,10 @@ Warning: reference sequence AJ879487|IGHJ6*04|Homo_sapiens|F|J-REGION|39..101|63
 2026-07-01 16:38:08 - INFO: --- Generating igblastn auxiliary file ---
 2026-07-01 16:38:08 - INFO: Generating auxiliary file: human_gl_kiarva_imgt.aux
 2026-07-01 16:38:08 - INFO: Generating auxiliary file: human_gl_kiarva_ogrdb.aux
-2026-07-01 16:38:09 - INFO: 
+2026-07-01 16:38:09 - INFO:
 2026-07-01 16:38:09 - INFO: --- Building blast databases ---
 2026-07-01 16:38:09 - INFO: Building blast database: kiarva_imgt_human_ig_d
-2026-07-01 16:38:09 - INFO: 
+2026-07-01 16:38:09 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:38:09
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_d
@@ -492,7 +492,7 @@ Adding sequences from FASTA; added 51 sequences in 0.00814414 seconds.
 
 
 2026-07-01 16:38:09 - INFO: Building blast database: kiarva_imgt_human_ig_j
-2026-07-01 16:38:10 - INFO: 
+2026-07-01 16:38:10 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:38:10
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_j
@@ -506,7 +506,7 @@ Adding sequences from FASTA; added 31 sequences in 0.0031929 seconds.
 
 
 2026-07-01 16:38:10 - INFO: Building blast database: kiarva_imgt_human_ig_v
-2026-07-01 16:38:11 - INFO: 
+2026-07-01 16:38:11 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:38:10
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_v
@@ -520,7 +520,7 @@ Adding sequences from FASTA; added 760 sequences in 0.00924301 seconds.
 
 
 2026-07-01 16:38:11 - INFO: Building blast database: kiarva_ogrdb_human_ig_d
-2026-07-01 16:38:12 - INFO: 
+2026-07-01 16:38:12 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:38:11
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_d
@@ -534,7 +534,7 @@ Adding sequences from FASTA; added 51 sequences in 0.0036459 seconds.
 
 
 2026-07-01 16:38:12 - INFO: Building blast database: kiarva_ogrdb_human_ig_j
-2026-07-01 16:38:13 - INFO: 
+2026-07-01 16:38:13 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:38:12
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_j
@@ -548,7 +548,7 @@ Adding sequences from FASTA; added 31 sequences in 0.00313592 seconds.
 
 
 2026-07-01 16:38:13 - INFO: Building blast database: kiarva_ogrdb_human_ig_v
-2026-07-01 16:38:13 - INFO: 
+2026-07-01 16:38:13 - INFO:
 
 Building a new DB, current time: 07/01/2026 16:38:13
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_v

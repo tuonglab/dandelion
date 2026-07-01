@@ -1,4 +1,4 @@
-#Numbers are start nucleotide positions (0-based) for the coding frame 1 of mouse D genes according to Ichihara Y et al., 
+#Numbers are start nucleotide positions (0-based) for the coding frame 1 of mouse D genes according to Ichihara Y et al.,
 #European Journal of Immunology Volume 19, Issue 10 p. 1849-1854
 #Frame 2 starts at one position after frame 1
 #Frame 3 starts at two positions after frame 1
