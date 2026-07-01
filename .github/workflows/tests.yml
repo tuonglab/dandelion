@@ -161,47 +161,43 @@ jobs:
           # also ensure rpy2 is installed
           pip install rpy2
 
-      - name: Test what is actually in the runner environment
+      - name: Test with pytest
+        env:
+          DANDELION_BACKEND: ${{ matrix.config.backend || 'auto' }}
         run: |
-          ls /home/runner/work/dandelion/dandelion
-          ls /home/runner/work/dandelion/dandelion/container/database/igblast/database/
-      # - name: Test with pytest
-      #   env:
-      #     DANDELION_BACKEND: ${{ matrix.config.backend || 'auto' }}
-      #   run: |
-      #     if [ "$DANDELION_BACKEND" = "pandas" ]; then
-      #       pytest --ignore-glob='*polars*'
-      #     else
-      #       pytest
-      #     fi
+          if [ "$DANDELION_BACKEND" = "pandas" ]; then
+            pytest --ignore-glob='*polars*'
+          else
+            pytest
+          fi
 
-      # - name: Show coverage
-      #   run: |
-      #     coverage report
+      - name: Show coverage
+        run: |
+          coverage report
 
-      # - name: Upload coverage to Codecov
-      #   if:
-      #     matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
-      #     '3.13' && github.repository == 'tuonglab/dandelion'
-      #   uses: codecov/codecov-action@v1
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     files: ./coverage.xml
-      #     directory: ./coverage/reports/
-      #     env_vars: ${{ format('OS={0},PYTHON={1}', matrix.config.os,
-      #       matrix.config.python-version) }}
-      #     flags: ${{ matrix.config.os }}-${{ matrix.config.python-version }}-${{
-      #       matrix.config.backend || 'auto' }}
-      #     name: codecov-umbrella
-      #     fail_ci_if_error: false
-      #     path_to_write_report: ./coverage/codecov_report.txt
-      #     verbose: true
+      - name: Upload coverage to Codecov
+        if:
+          matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
+          '3.13' && github.repository == 'tuonglab/dandelion'
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          directory: ./coverage/reports/
+          env_vars: ${{ format('OS={0},PYTHON={1}', matrix.config.os,
+            matrix.config.python-version) }}
+          flags: ${{ matrix.config.os }}-${{ matrix.config.python-version }}-${{
+            matrix.config.backend || 'auto' }}
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          path_to_write_report: ./coverage/codecov_report.txt
+          verbose: true
 
-      # - name: Upload test results to Codecov
-      #   if:
-      #     matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
-      #     '3.13' && github.repository == 'tuonglab/dandelion' && !cancelled()
-      #   uses: codecov/test-results-action@v1
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     files: ./junit.xml
+      - name: Upload test results to Codecov
+        if:
+          matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
+          '3.13' && github.repository == 'tuonglab/dandelion' && !cancelled()
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./junit.xml
