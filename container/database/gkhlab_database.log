@@ -201,10 +201,10 @@ Warning: reference sequence M16016|TRGJP2*01|Homo_sapiens|F|J-REGION|29..88|60: 
 2026-07-01 11:15:36 - INFO: Wrote 105 sequences to gkhlab_human_tr_j.fasta
 2026-07-01 11:15:36 - INFO: --- Generating igblastn auxiliary file ---
 2026-07-01 11:15:36 - INFO: Generating auxiliary file: human_gl_gkhlab.aux
-2026-07-01 11:15:36 - INFO: 
+2026-07-01 11:15:36 - INFO:
 2026-07-01 11:15:36 - INFO: --- Building blast databases ---
 2026-07-01 11:15:36 - INFO: Building blast database: gkhlab_human_tr_d
-2026-07-01 11:15:38 - INFO: 
+2026-07-01 11:15:38 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:15:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/gkhlab_human_tr_d
@@ -217,7 +217,7 @@ Adding sequences from FASTA; added 6 sequences in 0.00286698 seconds.
 
 
 2026-07-01 11:15:38 - INFO: Building blast database: gkhlab_human_tr_j
-2026-07-01 11:15:39 - INFO: 
+2026-07-01 11:15:39 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:15:38
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/gkhlab_human_tr_j
@@ -230,7 +230,7 @@ Adding sequences from FASTA; added 105 sequences in 0.145449 seconds.
 
 
 2026-07-01 11:15:39 - INFO: Building blast database: gkhlab_human_tr_v
-2026-07-01 11:15:41 - INFO: 
+2026-07-01 11:15:41 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:15:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/gkhlab_human_tr_v

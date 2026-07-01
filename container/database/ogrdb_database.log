@@ -12,7 +12,7 @@
 2026-07-01 11:12:11 - INFO: Downloading human OGRDB IGHC set from https://ogrdb.airr-community.org/download_germline_set/Homo%20sapiens/IGHC/published/ungapped_ex
 2026-07-01 11:12:13 - INFO: Saved IGHC fasta to database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta
 2026-07-01 11:12:13 - INFO: Building OGRDB IGHC blast database at database/igblast/database/ogrdb_human_ig_c
-2026-07-01 11:12:15 - INFO: 
+2026-07-01 11:12:15 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:12:13
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_c
@@ -72,9 +72,9 @@ Adding sequences from FASTA; added 307 sequences in 0.152684 seconds.
 2026-07-01 11:12:44 - INFO: Downloading Mus_musculus_IGLJ (all strains)_rev_1_gapped.fasta.
 2026-07-01 11:13:17 - INFO: Converting to igblast database for mouse
 2026-07-01 11:13:17 - INFO: Preparing auxiliary files for igblast
-2026-07-01 11:13:18 - INFO: 
-2026-07-01 11:13:18 - INFO: 
-2026-07-01 11:13:19 - INFO: 
+2026-07-01 11:13:18 - INFO:
+2026-07-01 11:13:18 - INFO:
+2026-07-01 11:13:19 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:18
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_d
@@ -86,7 +86,7 @@ Adding sequences from FASTA; added 53 sequences in 0.16367 seconds.
 
 
 
-2026-07-01 11:13:21 - INFO: 
+2026-07-01 11:13:21 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:19
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_j
@@ -98,7 +98,7 @@ Adding sequences from FASTA; added 24 sequences in 0.00285196 seconds.
 
 
 
-2026-07-01 11:13:22 - INFO: 
+2026-07-01 11:13:22 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:21
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_v
@@ -110,7 +110,7 @@ Adding sequences from FASTA; added 379 sequences in 0.00644493 seconds.
 
 
 
-2026-07-01 11:13:23 - INFO: 
+2026-07-01 11:13:23 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:22
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_129S1_SvImJ_ig_j
@@ -122,7 +122,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00295115 seconds.
 
 
 
-2026-07-01 11:13:24 - INFO: 
+2026-07-01 11:13:24 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:23
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_129S1_SvImJ_ig_v
@@ -134,7 +134,7 @@ Adding sequences from FASTA; added 94 sequences in 0.00341797 seconds.
 
 
 
-2026-07-01 11:13:26 - INFO: 
+2026-07-01 11:13:26 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:25
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_AKR_J_ig_j
@@ -146,7 +146,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00316215 seconds.
 
 
 
-2026-07-01 11:13:27 - INFO: 
+2026-07-01 11:13:27 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:26
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_AKR_J_ig_v
@@ -158,7 +158,7 @@ Adding sequences from FASTA; added 88 sequences in 0.00388598 seconds.
 
 
 
-2026-07-01 11:13:29 - INFO: 
+2026-07-01 11:13:29 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_A_J_ig_j
@@ -170,7 +170,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00279307 seconds.
 
 
 
-2026-07-01 11:13:30 - INFO: 
+2026-07-01 11:13:30 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:29
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_A_J_ig_v
@@ -182,7 +182,7 @@ Adding sequences from FASTA; added 105 sequences in 0.00374198 seconds.
 
 
 
-2026-07-01 11:13:32 - INFO: 
+2026-07-01 11:13:32 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:30
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_j
@@ -194,7 +194,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00290298 seconds.
 
 
 
-2026-07-01 11:13:33 - INFO: 
+2026-07-01 11:13:33 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_v
@@ -206,7 +206,7 @@ Adding sequences from FASTA; added 101 sequences in 0.00351691 seconds.
 
 
 
-2026-07-01 11:13:34 - INFO: 
+2026-07-01 11:13:34 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:33
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_d
@@ -218,7 +218,7 @@ Adding sequences from FASTA; added 10 sequences in 0.00289607 seconds.
 
 
 
-2026-07-01 11:13:36 - INFO: 
+2026-07-01 11:13:36 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:34
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_j
@@ -230,7 +230,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00281215 seconds.
 
 
 
-2026-07-01 11:13:37 - INFO: 
+2026-07-01 11:13:37 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_BALB_c_ig_v
@@ -242,7 +242,7 @@ Adding sequences from FASTA; added 164 sequences in 0.00467491 seconds.
 
 
 
-2026-07-01 11:13:39 - INFO: 
+2026-07-01 11:13:39 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:37
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C3H_HeJ_ig_j
@@ -254,7 +254,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00283694 seconds.
 
 
 
-2026-07-01 11:13:40 - INFO: 
+2026-07-01 11:13:40 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C3H_HeJ_ig_v
@@ -266,7 +266,7 @@ Adding sequences from FASTA; added 99 sequences in 0.00364804 seconds.
 
 
 
-2026-07-01 11:13:41 - INFO: 
+2026-07-01 11:13:41 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:40
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6J_ig_j
@@ -278,7 +278,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00300312 seconds.
 
 
 
-2026-07-01 11:13:43 - INFO: 
+2026-07-01 11:13:43 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:41
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6J_ig_v
@@ -290,7 +290,7 @@ Adding sequences from FASTA; added 94 sequences in 0.00440788 seconds.
 
 
 
-2026-07-01 11:13:44 - INFO: 
+2026-07-01 11:13:44 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:43
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_d
@@ -302,7 +302,7 @@ Adding sequences from FASTA; added 8 sequences in 0.00294805 seconds.
 
 
 
-2026-07-01 11:13:45 - INFO: 
+2026-07-01 11:13:45 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:44
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_j
@@ -314,7 +314,7 @@ Adding sequences from FASTA; added 22 sequences in 0.0029521 seconds.
 
 
 
-2026-07-01 11:13:47 - INFO: 
+2026-07-01 11:13:47 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:45
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_C57BL_6_ig_v
@@ -326,7 +326,7 @@ Adding sequences from FASTA; added 102 sequences in 0.00378489 seconds.
 
 
 
-2026-07-01 11:13:48 - INFO: 
+2026-07-01 11:13:48 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:47
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_d
@@ -338,7 +338,7 @@ Adding sequences from FASTA; added 9 sequences in 0.00311494 seconds.
 
 
 
-2026-07-01 11:13:49 - INFO: 
+2026-07-01 11:13:49 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:48
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_j
@@ -350,7 +350,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00302982 seconds.
 
 
 
-2026-07-01 11:13:50 - INFO: 
+2026-07-01 11:13:50 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:49
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CAST_EiJ_ig_v
@@ -362,7 +362,7 @@ Adding sequences from FASTA; added 184 sequences in 0.00442004 seconds.
 
 
 
-2026-07-01 11:13:52 - INFO: 
+2026-07-01 11:13:52 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:50
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CBA_J_ig_j
@@ -374,7 +374,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00289989 seconds.
 
 
 
-2026-07-01 11:13:53 - INFO: 
+2026-07-01 11:13:53 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:52
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_CBA_J_ig_v
@@ -386,7 +386,7 @@ Adding sequences from FASTA; added 85 sequences in 0.00365686 seconds.
 
 
 
-2026-07-01 11:13:54 - INFO: 
+2026-07-01 11:13:54 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:53
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_1J_ig_j
@@ -398,7 +398,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00306511 seconds.
 
 
 
-2026-07-01 11:13:56 - INFO: 
+2026-07-01 11:13:56 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:54
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_1J_ig_v
@@ -410,7 +410,7 @@ Adding sequences from FASTA; added 107 sequences in 0.00423908 seconds.
 
 
 
-2026-07-01 11:13:57 - INFO: 
+2026-07-01 11:13:57 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:56
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_2J_ig_j
@@ -422,7 +422,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00303721 seconds.
 
 
 
-2026-07-01 11:13:58 - INFO: 
+2026-07-01 11:13:58 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:57
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_DBA_2J_ig_v
@@ -434,7 +434,7 @@ Adding sequences from FASTA; added 103 sequences in 0.00382185 seconds.
 
 
 
-2026-07-01 11:14:00 - INFO: 
+2026-07-01 11:14:00 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:13:58
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_d
@@ -446,7 +446,7 @@ Adding sequences from FASTA; added 11 sequences in 0.00302315 seconds.
 
 
 
-2026-07-01 11:14:01 - INFO: 
+2026-07-01 11:14:01 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:00
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_j
@@ -458,7 +458,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00303793 seconds.
 
 
 
-2026-07-01 11:14:03 - INFO: 
+2026-07-01 11:14:03 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:01
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_LEWES_EiJ_ig_v
@@ -470,7 +470,7 @@ Adding sequences from FASTA; added 169 sequences in 0.00430512 seconds.
 
 
 
-2026-07-01 11:14:04 - INFO: 
+2026-07-01 11:14:04 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:03
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MRL_MpJ_ig_j
@@ -482,7 +482,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00302386 seconds.
 
 
 
-2026-07-01 11:14:05 - INFO: 
+2026-07-01 11:14:05 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:04
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MRL_MpJ_ig_v
@@ -494,7 +494,7 @@ Adding sequences from FASTA; added 75 sequences in 0.00361109 seconds.
 
 
 
-2026-07-01 11:14:07 - INFO: 
+2026-07-01 11:14:07 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:06
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_d
@@ -506,7 +506,7 @@ Adding sequences from FASTA; added 9 sequences in 0.00298309 seconds.
 
 
 
-2026-07-01 11:14:08 - INFO: 
+2026-07-01 11:14:08 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:07
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_j
@@ -518,7 +518,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00302005 seconds.
 
 
 
-2026-07-01 11:14:09 - INFO: 
+2026-07-01 11:14:09 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:08
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_MSM_MsJ_ig_v
@@ -530,7 +530,7 @@ Adding sequences from FASTA; added 172 sequences in 0.00430918 seconds.
 
 
 
-2026-07-01 11:14:11 - INFO: 
+2026-07-01 11:14:11 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:09
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_d
@@ -542,7 +542,7 @@ Adding sequences from FASTA; added 9 sequences in 0.00289893 seconds.
 
 
 
-2026-07-01 11:14:12 - INFO: 
+2026-07-01 11:14:12 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:11
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_j
@@ -554,7 +554,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00300407 seconds.
 
 
 
-2026-07-01 11:14:14 - INFO: 
+2026-07-01 11:14:14 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:12
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOD_ShiLtJ_ig_v
@@ -566,7 +566,7 @@ Adding sequences from FASTA; added 149 sequences in 0.00405288 seconds.
 
 
 
-2026-07-01 11:14:15 - INFO: 
+2026-07-01 11:14:15 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:14
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOR_LtJ_ig_j
@@ -578,7 +578,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00292993 seconds.
 
 
 
-2026-07-01 11:14:17 - INFO: 
+2026-07-01 11:14:17 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:15
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NOR_LtJ_ig_v
@@ -590,7 +590,7 @@ Adding sequences from FASTA; added 83 sequences in 0.003546 seconds.
 
 
 
-2026-07-01 11:14:18 - INFO: 
+2026-07-01 11:14:18 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:17
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NZB_BlNJ_ig_j
@@ -602,7 +602,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00317311 seconds.
 
 
 
-2026-07-01 11:14:20 - INFO: 
+2026-07-01 11:14:20 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:18
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_NZB_BlNJ_ig_v
@@ -614,7 +614,7 @@ Adding sequences from FASTA; added 108 sequences in 0.00376201 seconds.
 
 
 
-2026-07-01 11:14:21 - INFO: 
+2026-07-01 11:14:21 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:20
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_d
@@ -626,7 +626,7 @@ Adding sequences from FASTA; added 10 sequences in 0.00283384 seconds.
 
 
 
-2026-07-01 11:14:22 - INFO: 
+2026-07-01 11:14:22 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:21
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_j
@@ -638,7 +638,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00294781 seconds.
 
 
 
-2026-07-01 11:14:24 - INFO: 
+2026-07-01 11:14:24 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:22
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_PWD_PhJ_ig_v
@@ -650,7 +650,7 @@ Adding sequences from FASTA; added 184 sequences in 0.00445104 seconds.
 
 
 
-2026-07-01 11:14:25 - INFO: 
+2026-07-01 11:14:25 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:24
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_SJL_J_ig_j
@@ -662,7 +662,7 @@ Adding sequences from FASTA; added 18 sequences in 0.00296402 seconds.
 
 
 
-2026-07-01 11:14:27 - INFO: 
+2026-07-01 11:14:27 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:25
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_SJL_J_ig_v
@@ -674,7 +674,7 @@ Adding sequences from FASTA; added 70 sequences in 0.00360084 seconds.
 
 
 
-2026-07-01 11:14:28 - INFO: 
+2026-07-01 11:14:28 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:27
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_d
@@ -686,7 +686,7 @@ Adding sequences from FASTA; added 10 sequences in 0.00290203 seconds.
 
 
 
-2026-07-01 11:14:29 - INFO: 
+2026-07-01 11:14:29 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:28
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_j
@@ -698,7 +698,7 @@ Adding sequences from FASTA; added 22 sequences in 0.003021 seconds.
 
 
 
-2026-07-01 11:14:31 - INFO: 
+2026-07-01 11:14:31 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:29
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_balbc_ig_v
@@ -710,7 +710,7 @@ Adding sequences from FASTA; added 265 sequences in 0.00527692 seconds.
 
 
 
-2026-07-01 11:14:32 - INFO: 
+2026-07-01 11:14:32 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:31
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_d
@@ -722,7 +722,7 @@ Adding sequences from FASTA; added 8 sequences in 0.00292087 seconds.
 
 
 
-2026-07-01 11:14:33 - INFO: 
+2026-07-01 11:14:33 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:32
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_j
@@ -734,7 +734,7 @@ Adding sequences from FASTA; added 22 sequences in 0.00297999 seconds.
 
 
 
-2026-07-01 11:14:35 - INFO: 
+2026-07-01 11:14:35 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:33
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_c57bl6_ig_v
@@ -746,7 +746,7 @@ Adding sequences from FASTA; added 196 sequences in 0.00447416 seconds.
 
 
 
-2026-07-01 11:14:36 - INFO: 
+2026-07-01 11:14:36 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:35
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_d
@@ -758,7 +758,7 @@ Adding sequences from FASTA; added 66 sequences in 0.00335717 seconds.
 
 
 
-2026-07-01 11:14:38 - INFO: 
+2026-07-01 11:14:38 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_j
@@ -770,7 +770,7 @@ Adding sequences from FASTA; added 46 sequences in 0.00308204 seconds.
 
 
 
-2026-07-01 11:14:39 - INFO: 
+2026-07-01 11:14:39 - INFO:
 
 Building a new DB, current time: 07/01/2026 11:14:38
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_mouse_ig_v
