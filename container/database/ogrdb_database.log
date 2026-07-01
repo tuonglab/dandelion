@@ -1,0 +1,51 @@
+2026-07-01 11:12:06 - INFO: Source:  https://ogrdb.airr-community.org
+2026-07-01 11:12:06 - INFO: Out directory:  /Users/uqztuong/Documents/GitHub/dandelion/container/database
+2026-07-01 11:12:06 - INFO: Download date: 2026-07-01
+2026-07-01 11:12:06 - INFO: Species:
+2026-07-01 11:12:06 - INFO:     - human
+2026-07-01 11:12:08 - INFO: Downloading Homo_sapiens_IGH_VDJ_rev_10_gapped.fasta.
+2026-07-01 11:12:08 - INFO: Downloading Homo_sapiens_IGKappa_VJ_rev_5_gapped.fasta.
+2026-07-01 11:12:09 - INFO: Downloading Homo_sapiens_IGLambda_VJ_rev_4_gapped.fasta.
+2026-07-01 11:12:11 - INFO: Downloading Homo_sapiens_IGHC_rev_1_gapped.fasta.
+2026-07-01 11:12:11 - INFO: Converting to igblast database for human
+2026-07-01 11:12:11 - INFO: Downloading OGRDB human IGHC germline set
+2026-07-01 11:12:11 - INFO: Downloading human OGRDB IGHC set from https://ogrdb.airr-community.org/download_germline_set/Homo%20sapiens/IGHC/published/ungapped_ex
+2026-07-01 11:12:13 - INFO: Saved IGHC fasta to database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta
+2026-07-01 11:12:13 - INFO: Building OGRDB IGHC blast database at database/igblast/database/ogrdb_human_ig_c
+2026-07-01 11:12:15 - INFO: 
+
+Building a new DB, current time: 07/01/2026 11:12:13
+New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/ogrdb_human_ig_c
+New DB title:  database/germlines/ogrdb/human/Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 3000000000B
+Adding sequences from FASTA; added 307 sequences in 0.152684 seconds.
+
+
+
+2026-07-01 11:12:15 - INFO:     - mouse
+2026-07-01 11:12:17 - INFO: Downloading Mus_musculus_BALB/c IGH_rev_3_gapped.fasta.
+2026-07-01 11:12:17 - INFO: Downloading Mus_musculus_C57BL/6 IGH_rev_5_gapped.fasta.
+2026-07-01 11:12:18 - INFO: Downloading Mus_musculus_129S1/SvImJ IGLV_rev_3_gapped.fasta.
+2026-07-01 11:12:18 - INFO: Downloading Mus_musculus_A/J IGLV_rev_2_gapped.fasta.
+2026-07-01 11:12:19 - INFO: Downloading Mus_musculus_AKR/J IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:19 - INFO: Downloading Mus_musculus_BALB/c/ByJ IGLV_rev_2_gapped.fasta.
+2026-07-01 11:12:20 - INFO: Downloading Mus_musculus_C3H/HeJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:20 - INFO: Downloading Mus_musculus_C57BL/6J IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:21 - INFO: Downloading Mus_musculus_CAST/EiJ IGLV_rev_2_gapped.fasta.
+2026-07-01 11:12:21 - INFO: Downloading Mus_musculus_CBA/J IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:22 - INFO: Downloading Mus_musculus_DBA/1J IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:22 - INFO: Downloading Mus_musculus_DBA/2J IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:23 - INFO: Downloading Mus_musculus_LEWES/EiJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:23 - INFO: Downloading Mus_musculus_MRL/MpJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:24 - INFO: Downloading Mus_musculus_MSM/MsJ IGLV_rev_2_gapped.fasta.
+2026-07-01 11:12:25 - INFO: Downloading Mus_musculus_NOD/ShiLtJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:25 - INFO: Downloading Mus_musculus_NOR/LtJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:26 - INFO: Downloading Mus_musculus_NZB/BlNJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:26 - INFO: Downloading Mus_musculus_PWD/PhJ IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:27 - INFO: Downloading Mus_musculus_SJL/J IGLV_rev_1_gapped.fasta.
+2026-07-01 11:12:27 - INFO: Downloading Mus_musculus_129S1/SvImJ IGKV_rev_2_gapped.fasta.
+2026-07-01 11:12:28 - INFO: Downloading Mus_musculus_AKR/J IGKV_rev_1_gapped.fasta.
+2026-07-01 11:12:29 - INFO: Downloading Mus_musculus_BALB/c/ByJ IGKV_rev_1_gapped.fasta.
+2026-07-01 11:12:29 - INFO: Downloading Mus_musculus_C3H/HeJ IGKV_rev_1_gapped.fasta.
