@@ -161,6 +161,30 @@ jobs:
           # also ensure rpy2 is installed
           pip install rpy2
 
+      - name: Diagnose igblast database files
+        run: |
+          set -x
+          FILE="container/database/igblast/database/ogrdb_mouse_BALB_c_ByJ_ig_v.nhr"
+
+          echo "=== ls -la ==="
+          ls -la "$FILE"
+
+          echo "=== file type ==="
+          file "$FILE"
+
+          echo "=== first 200 bytes (hex/ascii) ==="
+          head -c 200 "$FILE" | xxd | head -20
+
+          echo "=== git attributes for this file ==="
+          git check-attr -a "$FILE"
+
+          echo "=== repo .gitattributes (filtered) ==="
+          cat .gitattributes 2>/dev/null | grep -i -E "database|\.n[a-z]{2}|lfs" || echo "no matches / no .gitattributes"
+
+          echo "=== is git-lfs installed / any lfs-tracked files in repo? ==="
+          git lfs version || echo "git-lfs not installed on runner"
+          git lfs ls-files | head -20 || echo "no lfs files tracked (or lfs not initialized)"
+
       - name: Test with pytest
         env:
           DANDELION_BACKEND: ${{ matrix.config.backend || 'auto' }}
