@@ -928,7 +928,7 @@ def reannotate_genes(
     reassign_dj: bool = True,
     overwrite: bool = True,
     dust: str | None = "no",
-    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"] = "imgt",
     lightchain_db: Literal["imgt", "ogrdb"] | None = None,
     strain: (
         Literal[
@@ -1031,10 +1031,10 @@ def reannotate_genes(
         dustmasker options. Filter query sequence with DUST
         Format: 'yes', or 'no' to disable. Accepts str.
         If None, defaults to `20 64 1`.
-    db : Literal["imgt", "ogrdb", "kiarva", "gkhlab"], optional
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"], optional
         database to use for igblastn. Defaults to 'imgt'.
     lightchain_db : Literal["imgt", "ogrdb"] | None, optional
-        database to use for light chain annotation if. None defaults to `db`. However, if `db` is 'kiarva' or 'gkhlab', `None` defaults to 'imgt' but this option can also be set to 'ogrdb' if desired.
+        database to use for light chain annotation if. None defaults to `db`. However, if `db` is 'kiarva_imgt', 'kiarva_ogrdb' or 'gkhlab', `None` defaults to 'imgt' but this option can also be set to 'ogrdb' if desired.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -1333,7 +1333,7 @@ def reassign_alleles(
     v_germline: str | None = None,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
-    db: Literal["imgt", "ogrdb", "kiarva"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb"] = "imgt",
     lightchain_db: Literal["imgt", "ogrdb"] | None = None,
     strain: (
         Literal[
@@ -1396,10 +1396,10 @@ def reassign_alleles(
         variable.
     org : Literal["human", "mouse"], optional
         organism of germline database.
-    db : Literal["imgt", "ogrdb", "kiarva"], optional
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb"], optional
         database to use for germline sequences.
     lightchain_db : Literal["imgt", "ogrdb"] | None, optional
-        database to use for light chains. Only for `db="kiarva"`, `None` defaults to 'imgt' but this option can also be set to 'ogrdb' if desired.
+        database to use for light chains. Only for `db="kiarva_imgt"` or `db="kiarva_ogrdb"`, `None` defaults to 'imgt' but this option can also be set to 'ogrdb' if desired.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -2145,8 +2145,8 @@ def run_igblastn(
         sequence and the targets.
     min_d_match : int, optional
         minimum D nucleotide match.
-    db : Literal["imgt", "ogrdb", "kiarva", "gkhlab"], optional
-        database to use for germline sequences. For `db="kiarva"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required.
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"], optional
+        database to use for germline sequences. For `db="kiarva_<db>"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -2272,7 +2272,9 @@ def assign_DJ(
     ),
     filename_prefix: str | None = None,
     overwrite: bool = False,
-    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
+    db: Literal[
+        "imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"
+    ] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -2343,10 +2345,8 @@ def assign_DJ(
         prefix of file name preceding '_contig'. `None` defaults to 'all'.
     overwrite : bool, optional
         whether or not to overwrite the assignments.
-    db : Literal["imgt", "ogrdb", "kiarva", "gkhlab"], optional
-        database to use for germline sequences. For `db="kiarva"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required. `call="c"` will ignore the `db` argument and use the database provided in the `database` argument.
-    lightchain_db : Literal["imgt", "ogrdb"] | None, optional
-        database to use for light chain germline sequences. Only for `db="kiarva"`.
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"], optional
+        database to use for germline sequences. For `db="kiarva_<db>"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required. `call="c"` will ignore the `db` argument and use the database provided in the `database` argument.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -2398,7 +2398,9 @@ def run_blastn(
     ),
     dust: str | None = None,
     word_size: int | None = None,
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal[
+        "imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"
+    ] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -2465,8 +2467,8 @@ def run_blastn(
     word_size : int | None, optional
         Word size for wordfinder algorithm (length of best perfect match).
         Must be >=4. `None` defaults to 4.
-    db : Literal["imgt", "ogrdb"], optional
-        database to use for germline sequences.
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"], optional
+        database to use for germline sequences. For `db="kiarva_<db>"`, `mode="ig"` and `org="human"` is required. For `db="gkhlab"`, `mode="tr"` and `org="human"` is required.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
