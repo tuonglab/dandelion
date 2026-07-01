@@ -1,11 +1,11 @@
-2026-06-30 18:26:23 - INFO: Source:        https://gkhlab.gitlab.io/tcr/sequences
-2026-06-30 18:26:23 - INFO: Out directory: /Users/uqztuong/Documents/GitHub/dandelion/container/database
-2026-06-30 18:26:23 - INFO: Download date: 2026-06-30
-2026-06-30 18:26:23 - INFO: Species: human (TCR VDJ only)
-2026-06-30 18:26:23 - INFO: --- Downloading GKHlab TCR germline sequences ---
-2026-06-30 18:26:23 - INFO: Downloading TRAV.fasta ...
-2026-06-30 18:26:24 - INFO: Adding IMGT gaps to sequences in TRAV.fasta
-2026-06-30 18:26:25 - INFO: Warning: reference sequence U32544|TRAV1-2*02|Homo_sapiens|[F]|V-REGION|302..477|176: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:24 - INFO: Source:        https://gkhlab.gitlab.io/tcr/sequences
+2026-07-01 11:15:24 - INFO: Out directory: /Users/uqztuong/Documents/GitHub/dandelion/container/database
+2026-07-01 11:15:24 - INFO: Download date: 2026-07-01
+2026-07-01 11:15:24 - INFO: Species: human (TCR VDJ only)
+2026-07-01 11:15:24 - INFO: --- Downloading GKHlab TCR germline sequences ---
+2026-07-01 11:15:24 - INFO: Downloading TRAV.fasta ...
+2026-07-01 11:15:26 - INFO: Adding IMGT gaps to sequences in TRAV.fasta
+2026-07-01 11:15:26 - INFO: Warning: reference sequence U32544|TRAV1-2*02|Homo_sapiens|[F]|V-REGION|302..477|176: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence L11162|TRAV13-1*03|Homo_sapiens|[F]|V-REGION|222..455|234: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence L09758|TRAV14/DV4*04|Homo_sapiens|[F]|V-REGION|1..271|271: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence L11160|TRAV26-2*02|Homo_sapiens|[F]|V-REGION|509..725|217: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -21,10 +21,10 @@ TRAV19*01_S1366: Stop codon in V-REGION before 2nd cysteine
 TRAV34*01_S2006: Stop codon in V-REGION before 2nd cysteine
 TRAV1-2*03_S6094: Stop codon in V-REGION before 2nd cysteine, Second cysteine not found
 
-2026-06-30 18:26:25 - INFO: Saved TRAV.fasta (135 sequences).
-2026-06-30 18:26:25 - INFO: Downloading TRAJ.fasta ...
-2026-06-30 18:26:26 - INFO: Adding IMGT gaps to sequences in TRAJ.fasta
-2026-06-30 18:26:26 - INFO: Warning: reference sequence X02884|TRAJ1*01|Homo_sapiens|ORF|J-REGION|2363..2424|62: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:26 - INFO: Saved TRAV.fasta (135 sequences).
+2026-07-01 11:15:26 - INFO: Downloading TRAJ.fasta ...
+2026-07-01 11:15:27 - INFO: Adding IMGT gaps to sequences in TRAJ.fasta
+2026-07-01 11:15:27 - INFO: Warning: reference sequence X02884|TRAJ1*01|Homo_sapiens|ORF|J-REGION|2363..2424|62: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M94081|TRAJ10*01|Homo_sapiens|F|J-REGION|73699..73762|64: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M94081|TRAJ11*01|Homo_sapiens|F|J-REGION|72706..72765|60: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X02885|TRAJ12*01|Homo_sapiens|F|J-REGION|53..112|60: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -96,10 +96,10 @@ Warning: reference sequence M94081|TRAJ8*01|Homo_sapiens|F|J-REGION|76346..76405
 Warning: reference sequence IMGT000024|TRAJ8*02|Homo_sapiens|P|J-REGION|924242..924301|60: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M94081|TRAJ9*01|Homo_sapiens|F|J-REGION|75756..75816|61: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:26 - INFO: Saved TRAJ.fasta (74 sequences).
-2026-06-30 18:26:26 - INFO: Downloading TRBV.fasta ...
-2026-06-30 18:26:28 - INFO: Adding IMGT gaps to sequences in TRBV.fasta
-2026-06-30 18:26:28 - INFO: Removing L36092|TRBV1*01|Homo_sapiens|P|V-REGION|91723..92006|284 from reference: First cysteine not found
+2026-07-01 11:15:27 - INFO: Saved TRAJ.fasta (74 sequences).
+2026-07-01 11:15:27 - INFO: Downloading TRBV.fasta ...
+2026-07-01 11:15:28 - INFO: Adding IMGT gaps to sequences in TRBV.fasta
+2026-07-01 11:15:29 - INFO: Removing L36092|TRBV1*01|Homo_sapiens|P|V-REGION|91723..92006|284 from reference: First cysteine not found
 Removing X07224|TRBV12-1*01|Homo_sapiens|P|V-REGION|378..667|290 from reference: Stop codon in V-REGION before 2nd cysteine
 Removing X06936|TRBV12-2*01|Homo_sapiens|P|V-REGION|388..677|290 from reference: Stop codon in V-REGION before 2nd cysteine
 Removing U03115|TRBV16*02|Homo_sapiens|P|V-REGION|68672..68961|290 from reference: Stop codon in V-REGION before 2nd cysteine
@@ -130,17 +130,17 @@ TRBV30*02_S9206: Stop codon in V-REGION before 2nd cysteine
 TRBV6-8*01_S2439: Stop codon in V-REGION before 2nd cysteine
 TRBV6-8*01_S7864: Stop codon in V-REGION before 2nd cysteine
 
-2026-06-30 18:26:28 - INFO: Saved TRBV.fasta (131 sequences).
-2026-06-30 18:26:28 - INFO: Downloading TRBD.fasta ...
-2026-06-30 18:26:29 - INFO: Adding IMGT gaps to sequences in TRBD.fasta
-2026-06-30 18:26:29 - INFO: Warning: reference sequence K02545|TRBD1*01|Homo_sapiens|F|D-REGION|82..93|12: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:29 - INFO: Saved TRBV.fasta (131 sequences).
+2026-07-01 11:15:29 - INFO: Downloading TRBD.fasta ...
+2026-07-01 11:15:30 - INFO: Adding IMGT gaps to sequences in TRBD.fasta
+2026-07-01 11:15:30 - INFO: Warning: reference sequence K02545|TRBD1*01|Homo_sapiens|F|D-REGION|82..93|12: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X02987|TRBD2*01|Homo_sapiens|F|D-REGION|140..155|16: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M14159|TRBD2*02|Homo_sapiens|F|D-REGION|569..584|16: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:29 - INFO: Saved TRBD.fasta (3 sequences).
-2026-06-30 18:26:29 - INFO: Downloading TRBJ.fasta ...
-2026-06-30 18:26:30 - INFO: Adding IMGT gaps to sequences in TRBJ.fasta
-2026-06-30 18:26:30 - INFO: Warning: reference sequence K02545|TRBJ1-1*01|Homo_sapiens|F|J-REGION|749..796|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:30 - INFO: Saved TRBD.fasta (3 sequences).
+2026-07-01 11:15:30 - INFO: Downloading TRBJ.fasta ...
+2026-07-01 11:15:31 - INFO: Adding IMGT gaps to sequences in TRBJ.fasta
+2026-07-01 11:15:31 - INFO: Warning: reference sequence K02545|TRBJ1-1*01|Homo_sapiens|F|J-REGION|749..796|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence K02545|TRBJ1-2*01|Homo_sapiens|F|J-REGION|886..933|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M14158|TRBJ1-3*01|Homo_sapiens|F|J-REGION|1499..1548|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M14158|TRBJ1-4*01|Homo_sapiens|F|J-REGION|2095..2145|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -157,90 +157,90 @@ Warning: reference sequence X02987|TRBJ2-6*01|Homo_sapiens|F|J-REGION|1673..1725
 Warning: reference sequence M14159|TRBJ2-7*01|Homo_sapiens|F|J-REGION|2316..2362|47: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X02987|TRBJ2-7*02|Homo_sapiens|ORF|J-REGION|1890..1936|47: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:30 - INFO: Saved TRBJ.fasta (19 sequences).
-2026-06-30 18:26:30 - INFO: Downloading TRDV.fasta ...
-2026-06-30 18:26:31 - INFO: Adding IMGT gaps to sequences in TRDV.fasta
-2026-06-30 18:26:31 - INFO: Warning: reference sequence L09758|TRAV14/DV4*04|Homo_sapiens|[F]|V-REGION|1..271|271: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:31 - INFO: Saved TRBJ.fasta (19 sequences).
+2026-07-01 11:15:31 - INFO: Downloading TRDV.fasta ...
+2026-07-01 11:15:32 - INFO: Adding IMGT gaps to sequences in TRDV.fasta
+2026-07-01 11:15:32 - INFO: Warning: reference sequence L09758|TRAV14/DV4*04|Homo_sapiens|[F]|V-REGION|1..271|271: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:31 - INFO: Saved TRDV.fasta (6 sequences).
-2026-06-30 18:26:31 - INFO: Downloading TRDD.fasta ...
-2026-06-30 18:26:31 - INFO: Adding IMGT gaps to sequences in TRDD.fasta
-2026-06-30 18:26:32 - INFO: Warning: reference sequence M23325|TRDD1*01|Homo_sapiens|F|D-REGION|54..61|8: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:32 - INFO: Saved TRDV.fasta (6 sequences).
+2026-07-01 11:15:32 - INFO: Downloading TRDD.fasta ...
+2026-07-01 11:15:33 - INFO: Adding IMGT gaps to sequences in TRDD.fasta
+2026-07-01 11:15:33 - INFO: Warning: reference sequence M23325|TRDD1*01|Homo_sapiens|F|D-REGION|54..61|8: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M22153|TRDD2*01|Homo_sapiens|F|D-REGION|34..42|9: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M22152|TRDD3*01|Homo_sapiens|F|D-REGION|214..226|13: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:32 - INFO: Saved TRDD.fasta (3 sequences).
-2026-06-30 18:26:32 - INFO: Downloading TRDJ.fasta ...
-2026-06-30 18:26:32 - INFO: Adding IMGT gaps to sequences in TRDJ.fasta
-2026-06-30 18:26:33 - INFO: Warning: reference sequence M20289|TRDJ1*01|Homo_sapiens|F|J-REGION|51..101|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:33 - INFO: Saved TRDD.fasta (3 sequences).
+2026-07-01 11:15:33 - INFO: Downloading TRDJ.fasta ...
+2026-07-01 11:15:34 - INFO: Adding IMGT gaps to sequences in TRDJ.fasta
+2026-07-01 11:15:34 - INFO: Warning: reference sequence M20289|TRDJ1*01|Homo_sapiens|F|J-REGION|51..101|51: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence L36386|TRDJ2*01|Homo_sapiens|F|J-REGION|39..92|54: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M21508|TRDJ3*01|Homo_sapiens|F|J-REGION|735..793|59: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence AJ249814|TRDJ4*01|Homo_sapiens|F|J-REGION|1..48|48: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:33 - INFO: Saved TRDJ.fasta (5 sequences).
-2026-06-30 18:26:33 - INFO: Downloading TRGV.fasta ...
-2026-06-30 18:26:33 - INFO: Adding IMGT gaps to sequences in TRGV.fasta
-2026-06-30 18:26:33 - INFO: Removing Y11227|TRGV11*01|Homo_sapiens|ORF|V-REGION|155..463|309 from reference: First cysteine not found
+2026-07-01 11:15:34 - INFO: Saved TRDJ.fasta (5 sequences).
+2026-07-01 11:15:34 - INFO: Downloading TRGV.fasta ...
+2026-07-01 11:15:35 - INFO: Adding IMGT gaps to sequences in TRGV.fasta
+2026-07-01 11:15:35 - INFO: Removing Y11227|TRGV11*01|Homo_sapiens|ORF|V-REGION|155..463|309 from reference: First cysteine not found
 Removing AF159056|TRGV11*02|Homo_sapiens|ORF|V-REGION|81990..82298|309 from reference: First cysteine not found
 Removing X07208|TRGVA*01|Homo_sapiens|P|V-REGION|134..418|285 from reference: Stop codon in V-REGION before 2nd cysteine
 
-2026-06-30 18:26:33 - INFO: Saved TRGV.fasta (27 sequences).
-2026-06-30 18:26:33 - INFO: Downloading TRGJ.fasta ...
-2026-06-30 18:26:35 - INFO: Adding IMGT gaps to sequences in TRGJ.fasta
-2026-06-30 18:26:35 - INFO: Warning: reference sequence M12960|TRGJ1*01|Homo_sapiens|F|J-REGION|157..206|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:35 - INFO: Saved TRGV.fasta (27 sequences).
+2026-07-01 11:15:35 - INFO: Downloading TRGJ.fasta ...
+2026-07-01 11:15:36 - INFO: Adding IMGT gaps to sequences in TRGJ.fasta
+2026-07-01 11:15:36 - INFO: Warning: reference sequence M12960|TRGJ1*01|Homo_sapiens|F|J-REGION|157..206|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence IMGT000011|TRGJ1*02|Homo_sapiens|F|J-REGION|118516..118565|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M12961|TRGJ2*01|Homo_sapiens|F|J-REGION|157..206|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M12950|TRGJP*01|Homo_sapiens|F|J-REGION|29..90|62: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X08084|TRGJP1*01|Homo_sapiens|F|J-REGION|29..88|60: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence M16016|TRGJP2*01|Homo_sapiens|F|J-REGION|29..88|60: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 18:26:35 - INFO: Saved TRGJ.fasta (7 sequences).
-2026-06-30 18:26:35 - INFO: --- Building merged igblast fasta files ---
-2026-06-30 18:26:35 - INFO: Wrote 299 sequences to gkhlab_human_tr_v.fasta
-2026-06-30 18:26:35 - INFO: Wrote 6 sequences to gkhlab_human_tr_d.fasta
-2026-06-30 18:26:35 - INFO: Wrote 105 sequences to gkhlab_human_tr_j.fasta
-2026-06-30 18:26:35 - INFO: --- Generating igblastn auxiliary file ---
-2026-06-30 18:26:35 - INFO: Generating auxiliary file: human_gl_gkhlab.aux
-2026-06-30 18:26:35 - INFO:
-2026-06-30 18:26:35 - INFO: --- Building blast databases ---
-2026-06-30 18:26:35 - INFO: Building blast database: gkhlab_human_tr_d
-2026-06-30 18:26:37 - INFO:
+2026-07-01 11:15:36 - INFO: Saved TRGJ.fasta (7 sequences).
+2026-07-01 11:15:36 - INFO: --- Building merged igblast fasta files ---
+2026-07-01 11:15:36 - INFO: Wrote 299 sequences to gkhlab_human_tr_v.fasta
+2026-07-01 11:15:36 - INFO: Wrote 6 sequences to gkhlab_human_tr_d.fasta
+2026-07-01 11:15:36 - INFO: Wrote 105 sequences to gkhlab_human_tr_j.fasta
+2026-07-01 11:15:36 - INFO: --- Generating igblastn auxiliary file ---
+2026-07-01 11:15:36 - INFO: Generating auxiliary file: human_gl_gkhlab.aux
+2026-07-01 11:15:36 - INFO:
+2026-07-01 11:15:36 - INFO: --- Building blast databases ---
+2026-07-01 11:15:36 - INFO: Building blast database: gkhlab_human_tr_d
+2026-07-01 11:15:38 - INFO:
 
-Building a new DB, current time: 06/30/2026 18:26:35
+Building a new DB, current time: 07/01/2026 11:15:36
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/gkhlab_human_tr_d
 New DB title:  database/igblast/fasta/gkhlab_human_tr_d.fasta
 Sequence type: Nucleotide
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 6 sequences in 0.00281 seconds.
+Adding sequences from FASTA; added 6 sequences in 0.00286698 seconds.
 
 
 
-2026-06-30 18:26:37 - INFO: Building blast database: gkhlab_human_tr_j
-2026-06-30 18:26:38 - INFO:
+2026-07-01 11:15:38 - INFO: Building blast database: gkhlab_human_tr_j
+2026-07-01 11:15:39 - INFO:
 
-Building a new DB, current time: 06/30/2026 18:26:37
+Building a new DB, current time: 07/01/2026 11:15:38
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/gkhlab_human_tr_j
 New DB title:  database/igblast/fasta/gkhlab_human_tr_j.fasta
 Sequence type: Nucleotide
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 105 sequences in 0.149693 seconds.
+Adding sequences from FASTA; added 105 sequences in 0.145449 seconds.
 
 
 
-2026-06-30 18:26:38 - INFO: Building blast database: gkhlab_human_tr_v
-2026-06-30 18:26:40 - INFO:
+2026-07-01 11:15:39 - INFO: Building blast database: gkhlab_human_tr_v
+2026-07-01 11:15:41 - INFO:
 
-Building a new DB, current time: 06/30/2026 18:26:39
+Building a new DB, current time: 07/01/2026 11:15:39
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/gkhlab_human_tr_v
 New DB title:  database/igblast/fasta/gkhlab_human_tr_v.fasta
 Sequence type: Nucleotide
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 299 sequences in 0.00535583 seconds.
+Adding sequences from FASTA; added 299 sequences in 0.00561285 seconds.
 
 
 
-2026-06-30 18:26:40 - INFO: Download finished: 2026-06-30 18:26:40.784043
-2026-06-30 18:26:40 - INFO: Total execution time: 0:00:16.969502
+2026-07-01 11:15:41 - INFO: Download finished: 2026-07-01 11:15:41.027536
+2026-07-01 11:15:41 - INFO: Total execution time: 0:00:16.739128

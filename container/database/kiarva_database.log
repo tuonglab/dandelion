@@ -1,11 +1,11 @@
-2026-06-30 21:54:01 - INFO: Source:        https://kiarva.scilifelab.se/api/fasta
-2026-06-30 21:54:01 - INFO: Out directory: /Users/uqztuong/Documents/GitHub/dandelion/container/database
-2026-06-30 21:54:01 - INFO: Download date: 2026-06-30
-2026-06-30 21:54:01 - INFO: Species: human (BCR VDJ only)
-2026-06-30 21:54:01 - INFO: --- Downloading KIARVA BCR germline sequences ---
-2026-06-30 21:54:01 - INFO: Downloading IGHV ...
-2026-06-30 21:54:04 - INFO: Adding IMGT gaps to sequences in IGHV
-2026-06-30 21:54:09 - INFO: Warning: reference sequence X60503|IGHV1-18*02|Homo_sapiens|F|V-REGION|142..417|276: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:14:45 - INFO: Source:        https://kiarva.scilifelab.se/api/fasta
+2026-07-01 11:14:45 - INFO: Out directory: /Users/uqztuong/Documents/GitHub/dandelion/container/database
+2026-07-01 11:14:45 - INFO: Download date: 2026-07-01
+2026-07-01 11:14:45 - INFO: Species: human (BCR VDJ only)
+2026-07-01 11:14:45 - INFO: --- Downloading KIARVA BCR germline sequences ---
+2026-07-01 11:14:45 - INFO: Downloading IGHV ...
+2026-07-01 11:14:50 - INFO: Adding IMGT gaps to sequences in IGHV
+2026-07-01 11:14:55 - INFO: Warning: reference sequence X60503|IGHV1-18*02|Homo_sapiens|F|V-REGION|142..417|276: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Removing KF698736|IGHV1-38-4*01|Homo_sapiens|ORF|V-REGION|391..686|296 from reference: Second cysteine not found
 Removing AB019437|IGHV1-68*01|Homo_sapiens|P|V-REGION|129383..129678|296 from reference: Second cysteine not found
 Removing MK540648|IGHV1-68*02|Homo_sapiens|P|V-REGION|31744..32039|296 from reference: Second cysteine not found
@@ -161,8 +161,8 @@ IGHV5-51*03_S5843: Second cysteine not found
 IGHV6-1*03: Stop codon in V-REGION before 2nd cysteine
 IGHV7-4-1*02_S0157: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found, Second cysteine not found
 
-2026-06-30 21:54:09 - INFO: Adding IMGT gaps to sequences in IGHV
-2026-06-30 21:54:14 - INFO: Warning: reference sequence X60503|IGHV1-18*02|Homo_sapiens|F|V-REGION|142..417|276: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:14:55 - INFO: Adding IMGT gaps to sequences in IGHV
+2026-07-01 11:15:00 - INFO: Warning: reference sequence X60503|IGHV1-18*02|Homo_sapiens|F|V-REGION|142..417|276: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Removing KF698736|IGHV1-38-4*01|Homo_sapiens|ORF|V-REGION|391..686|296 from reference: Second cysteine not found
 Removing AB019437|IGHV1-68*01|Homo_sapiens|P|V-REGION|129383..129678|296 from reference: Second cysteine not found
 Removing MK540648|IGHV1-68*02|Homo_sapiens|P|V-REGION|31744..32039|296 from reference: Second cysteine not found
@@ -318,10 +318,10 @@ IGHV5-51*03_S5843: Second cysteine not found
 IGHV6-1*03: Stop codon in V-REGION before 2nd cysteine
 IGHV7-4-1*02_S0157: Stop codon in V-REGION before 2nd cysteine, First cysteine not found, Conserved Trp not found, Second cysteine not found
 
-2026-06-30 21:54:14 - INFO: Saved IGHV (561 sequences).
-2026-06-30 21:54:14 - INFO: Downloading IGHD ...
-2026-06-30 21:54:15 - INFO: Adding IMGT gaps to sequences in IGHD
-2026-06-30 21:54:15 - INFO: Warning: reference sequence X97051|IGHD1-1*01|Homo_sapiens|F|D-REGION|33714..33730|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:00 - INFO: Saved IGHV (561 sequences).
+2026-07-01 11:15:00 - INFO: Downloading IGHD ...
+2026-07-01 11:15:01 - INFO: Adding IMGT gaps to sequences in IGHD
+2026-07-01 11:15:01 - INFO: Warning: reference sequence X97051|IGHD1-1*01|Homo_sapiens|F|D-REGION|33714..33730|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X13972|IGHD1-14*01|Homo_sapiens|ORF|D-REGION|14518..14534|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X97051|IGHD1-20*01|Homo_sapiens|F|D-REGION|62015..62031|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X97051|IGHD1-26*01|Homo_sapiens|F|D-REGION|72169..72188|20: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -370,8 +370,8 @@ Warning: reference sequence X97051|IGHD6-25*01|Homo_sapiens|F|D-REGION|71666..71
 Warning: reference sequence X13972|IGHD6-6*01|Homo_sapiens|F|D-REGION|4762..4779|18: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence J00256|IGHD7-27*01|Homo_sapiens|F|D-REGION|621..631|11: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 21:54:15 - INFO: Adding IMGT gaps to sequences in IGHD
-2026-06-30 21:54:15 - INFO: Warning: reference sequence X97051|IGHD1-1*01|Homo_sapiens|F|D-REGION|33714..33730|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:01 - INFO: Adding IMGT gaps to sequences in IGHD
+2026-07-01 11:15:02 - INFO: Warning: reference sequence X97051|IGHD1-1*01|Homo_sapiens|F|D-REGION|33714..33730|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X13972|IGHD1-14*01|Homo_sapiens|ORF|D-REGION|14518..14534|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X97051|IGHD1-20*01|Homo_sapiens|F|D-REGION|62015..62031|17: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X97051|IGHD1-26*01|Homo_sapiens|F|D-REGION|72169..72188|20: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -420,10 +420,10 @@ Warning: reference sequence X97051|IGHD6-25*01|Homo_sapiens|F|D-REGION|71666..71
 Warning: reference sequence X13972|IGHD6-6*01|Homo_sapiens|F|D-REGION|4762..4779|18: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence J00256|IGHD7-27*01|Homo_sapiens|F|D-REGION|621..631|11: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 21:54:15 - INFO: Saved IGHD (51 sequences).
-2026-06-30 21:54:15 - INFO: Downloading IGHJ ...
-2026-06-30 21:54:17 - INFO: Adding IMGT gaps to sequences in IGHJ
-2026-06-30 21:54:17 - INFO: Warning: reference sequence J00256|IGHJ1*01|Homo_sapiens|F|J-REGION|723..774|52: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:02 - INFO: Saved IGHD (51 sequences).
+2026-07-01 11:15:02 - INFO: Downloading IGHJ ...
+2026-07-01 11:15:03 - INFO: Adding IMGT gaps to sequences in IGHJ
+2026-07-01 11:15:03 - INFO: Warning: reference sequence J00256|IGHJ1*01|Homo_sapiens|F|J-REGION|723..774|52: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence J00256|IGHJ2*01|Homo_sapiens|F|J-REGION|932..984|53: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence J00256|IGHJ3*01|Homo_sapiens|F|J-REGION|1537..1586|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X86355|IGHJ3*02|Homo_sapiens|F|J-REGION|1107..1156|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -439,8 +439,8 @@ Warning: reference sequence M25625|IGHJ6*02|Homo_sapiens|F|J-REGION|1480..1542|6
 Warning: reference sequence M63030|IGHJ6*03|Homo_sapiens|F|J-REGION|58..120|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence AJ879487|IGHJ6*04|Homo_sapiens|F|J-REGION|39..101|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 21:54:17 - INFO: Adding IMGT gaps to sequences in IGHJ
-2026-06-30 21:54:17 - INFO: Warning: reference sequence J00256|IGHJ1*01|Homo_sapiens|F|J-REGION|723..774|52: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
+2026-07-01 11:15:03 - INFO: Adding IMGT gaps to sequences in IGHJ
+2026-07-01 11:15:03 - INFO: Warning: reference sequence J00256|IGHJ1*01|Homo_sapiens|F|J-REGION|723..774|52: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence J00256|IGHJ2*01|Homo_sapiens|F|J-REGION|932..984|53: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence J00256|IGHJ3*01|Homo_sapiens|F|J-REGION|1537..1586|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence X86355|IGHJ3*02|Homo_sapiens|F|J-REGION|1107..1156|50: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
@@ -456,110 +456,104 @@ Warning: reference sequence M25625|IGHJ6*02|Homo_sapiens|F|J-REGION|1480..1542|6
 Warning: reference sequence M63030|IGHJ6*03|Homo_sapiens|F|J-REGION|58..120|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 Warning: reference sequence AJ879487|IGHJ6*04|Homo_sapiens|F|J-REGION|39..101|63: Sequence truncated before second cysteine (if you don't want to use this as a reference sequence, please remove it from the file)
 
-2026-06-30 21:54:17 - INFO: Saved IGHJ (12 sequences).
-2026-06-30 21:54:17 - INFO: Copied light chain reference imgt_human_IGKV.fasta -> kiarva_imgt_human_IGKV.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference imgt_human_IGKJ.fasta -> kiarva_imgt_human_IGKJ.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference imgt_human_IGLV.fasta -> kiarva_imgt_human_IGLV.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference imgt_human_IGLJ.fasta -> kiarva_imgt_human_IGLJ.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference ogrdb_human_IGKV.fasta -> kiarva_ogrdb_human_IGKV.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference ogrdb_human_IGKJ.fasta -> kiarva_ogrdb_human_IGKJ.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference ogrdb_human_IGLV.fasta -> kiarva_ogrdb_human_IGLV.fasta
-2026-06-30 21:54:17 - INFO: Copied light chain reference ogrdb_human_IGLJ.fasta -> kiarva_ogrdb_human_IGLJ.fasta
-2026-06-30 21:54:17 - INFO: --- Building merged igblast fasta files ---
-2026-06-30 21:54:17 - INFO: Wrote 760 sequences to kiarva_imgt_human_ig_v.fasta
-2026-06-30 21:54:17 - INFO: Wrote 51 sequences to kiarva_imgt_human_ig_d.fasta
-2026-06-30 21:54:17 - INFO: Wrote 31 sequences to kiarva_imgt_human_ig_j.fasta
-2026-06-30 21:54:17 - INFO: Wrote 781 sequences to kiarva_ogrdb_human_ig_v.fasta
-2026-06-30 21:54:17 - INFO: Wrote 51 sequences to kiarva_ogrdb_human_ig_d.fasta
-2026-06-30 21:54:17 - INFO: Wrote 31 sequences to kiarva_ogrdb_human_ig_j.fasta
-2026-06-30 21:54:17 - INFO: --- Generating igblastn auxiliary file ---
-2026-06-30 21:54:17 - INFO: Generating auxiliary file: human_gl_kiarva_imgt.aux
-2026-06-30 21:54:17 - INFO: Generating auxiliary file: human_gl_kiarva_ogrdb.aux
-2026-06-30 21:54:18 - INFO:
-2026-06-30 21:54:18 - INFO: --- Building blast databases ---
-2026-06-30 21:54:18 - INFO: Building blast database: kiarva_imgt_human_ig_d
-2026-06-30 21:54:19 - INFO:
+2026-07-01 11:15:03 - INFO: Saved IGHJ (12 sequences).
+2026-07-01 11:15:03 - INFO: Copied light chain reference imgt_human_IGKV.fasta -> kiarva_imgt_human_IGKV.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference imgt_human_IGKJ.fasta -> kiarva_imgt_human_IGKJ.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference imgt_human_IGLV.fasta -> kiarva_imgt_human_IGLV.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference imgt_human_IGLJ.fasta -> kiarva_imgt_human_IGLJ.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference ogrdb_human_IGKV.fasta -> kiarva_ogrdb_human_IGKV.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference ogrdb_human_IGKJ.fasta -> kiarva_ogrdb_human_IGKJ.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference ogrdb_human_IGLV.fasta -> kiarva_ogrdb_human_IGLV.fasta
+2026-07-01 11:15:03 - INFO: Copied light chain reference ogrdb_human_IGLJ.fasta -> kiarva_ogrdb_human_IGLJ.fasta
+2026-07-01 11:15:03 - INFO: --- Building merged igblast fasta files ---
+2026-07-01 11:15:03 - INFO: Wrote 760 sequences to kiarva_imgt_human_ig_v.fasta
+2026-07-01 11:15:03 - INFO: Wrote 51 sequences to kiarva_imgt_human_ig_d.fasta
+2026-07-01 11:15:03 - INFO: Wrote 31 sequences to kiarva_imgt_human_ig_j.fasta
+2026-07-01 11:15:03 - INFO: Wrote 781 sequences to kiarva_ogrdb_human_ig_v.fasta
+2026-07-01 11:15:03 - INFO: Wrote 51 sequences to kiarva_ogrdb_human_ig_d.fasta
+2026-07-01 11:15:03 - INFO: Wrote 31 sequences to kiarva_ogrdb_human_ig_j.fasta
+2026-07-01 11:15:03 - INFO: --- Generating igblastn auxiliary file ---
+2026-07-01 11:15:03 - INFO: Generating auxiliary file: human_gl_kiarva_imgt.aux
+2026-07-01 11:15:04 - INFO: Generating auxiliary file: human_gl_kiarva_ogrdb.aux
+2026-07-01 11:15:04 - INFO:
+2026-07-01 11:15:04 - INFO: --- Building blast databases ---
+2026-07-01 11:15:04 - INFO: Building blast database: kiarva_imgt_human_ig_d
+2026-07-01 11:15:05 - INFO:
 
-Building a new DB, current time: 06/30/2026 21:54:18
+Building a new DB, current time: 07/01/2026 11:15:04
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_d
 New DB title:  database/igblast/fasta/kiarva_imgt_human_ig_d.fasta
 Sequence type: Nucleotide
-Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 51 sequences in 0.00711608 seconds.
+Adding sequences from FASTA; added 51 sequences in 0.00322199 seconds.
 
 
 
-2026-06-30 21:54:19 - INFO: Building blast database: kiarva_imgt_human_ig_j
-2026-06-30 21:54:20 - INFO:
+2026-07-01 11:15:05 - INFO: Building blast database: kiarva_imgt_human_ig_j
+2026-07-01 11:15:07 - INFO:
 
-Building a new DB, current time: 06/30/2026 21:54:19
+Building a new DB, current time: 07/01/2026 11:15:05
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_j
 New DB title:  database/igblast/fasta/kiarva_imgt_human_ig_j.fasta
 Sequence type: Nucleotide
-Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 31 sequences in 0.00317693 seconds.
+Adding sequences from FASTA; added 31 sequences in 0.00314522 seconds.
 
 
 
-2026-06-30 21:54:20 - INFO: Building blast database: kiarva_imgt_human_ig_v
-2026-06-30 21:54:22 - INFO:
+2026-07-01 11:15:07 - INFO: Building blast database: kiarva_imgt_human_ig_v
+2026-07-01 11:15:08 - INFO:
 
-Building a new DB, current time: 06/30/2026 21:54:21
+Building a new DB, current time: 07/01/2026 11:15:07
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_v
 New DB title:  database/igblast/fasta/kiarva_imgt_human_ig_v.fasta
 Sequence type: Nucleotide
-Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_imgt_human_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 760 sequences in 0.00981402 seconds.
+Adding sequences from FASTA; added 760 sequences in 0.00937915 seconds.
 
 
 
-2026-06-30 21:54:22 - INFO: Building blast database: kiarva_ogrdb_human_ig_d
-2026-06-30 21:54:23 - INFO:
+2026-07-01 11:15:08 - INFO: Building blast database: kiarva_ogrdb_human_ig_d
+2026-07-01 11:15:09 - INFO:
 
-Building a new DB, current time: 06/30/2026 21:54:22
+Building a new DB, current time: 07/01/2026 11:15:08
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_d
 New DB title:  database/igblast/fasta/kiarva_ogrdb_human_ig_d.fasta
 Sequence type: Nucleotide
-Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_d
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 51 sequences in 0.00354505 seconds.
+Adding sequences from FASTA; added 51 sequences in 0.00316906 seconds.
 
 
 
-2026-06-30 21:54:23 - INFO: Building blast database: kiarva_ogrdb_human_ig_j
-2026-06-30 21:54:28 - INFO:
+2026-07-01 11:15:09 - INFO: Building blast database: kiarva_ogrdb_human_ig_j
+2026-07-01 11:15:11 - INFO:
 
-Building a new DB, current time: 06/30/2026 21:54:23
+Building a new DB, current time: 07/01/2026 11:15:09
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_j
 New DB title:  database/igblast/fasta/kiarva_ogrdb_human_ig_j.fasta
 Sequence type: Nucleotide
-Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_j
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 31 sequences in 0.00311995 seconds.
+Adding sequences from FASTA; added 31 sequences in 0.0030849 seconds.
 
 
 
-2026-06-30 21:54:28 - INFO: Building blast database: kiarva_ogrdb_human_ig_v
-2026-06-30 21:54:30 - INFO:
+2026-07-01 11:15:11 - INFO: Building blast database: kiarva_ogrdb_human_ig_v
+2026-07-01 11:15:12 - INFO:
 
-Building a new DB, current time: 06/30/2026 21:54:28
+Building a new DB, current time: 07/01/2026 11:15:11
 New DB name:   /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_v
 New DB title:  database/igblast/fasta/kiarva_ogrdb_human_ig_v.fasta
 Sequence type: Nucleotide
-Deleted existing Nucleotide BLAST database named /Users/uqztuong/Documents/GitHub/dandelion/container/database/igblast/database/kiarva_ogrdb_human_ig_v
 Keep MBits: T
 Maximum file size: 3000000000B
-Adding sequences from FASTA; added 781 sequences in 0.011148 seconds.
+Adding sequences from FASTA; added 781 sequences in 0.0100391 seconds.
 
 
 
-2026-06-30 21:54:30 - INFO: Download finished: 2026-06-30 21:54:30.086208
-2026-06-30 21:54:30 - INFO: Total execution time: 0:00:28.595380
+2026-07-01 11:15:12 - INFO: Download finished: 2026-07-01 11:15:12.753291
+2026-07-01 11:15:12 - INFO: Total execution time: 0:00:27.612766
