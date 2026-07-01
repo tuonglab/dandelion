@@ -928,7 +928,9 @@ def reannotate_genes(
     reassign_dj: bool = True,
     overwrite: bool = True,
     dust: str | None = "no",
-    db: Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"] = "imgt",
+    db: Literal[
+        "imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"
+    ] = "imgt",
     lightchain_db: Literal["imgt", "ogrdb"] | None = None,
     strain: (
         Literal[
