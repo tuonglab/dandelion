@@ -6,11 +6,11 @@ import scipy.sparse
 
 from anndata import AnnData
 from pathlib import Path
-from typing import Dict
 
 from dandelion.base.io import read_h5ddl
 
-DATABASE_PATH = Path("container") / "database"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATABASE_PATH = PROJECT_ROOT / "container" / "database"
 HBLASTDB_PATH = DATABASE_PATH / "blast" / "human"
 
 
