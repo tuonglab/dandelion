@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from dandelion.polars.preprocessing._preprocessing import (
+    annotate_functionality,
     assign_isotype,
     assign_isotypes,
     check_contigs,
@@ -18,6 +19,7 @@ from dandelion.external.immcantation.polars.changeo import (
 from dandelion.external.scanpy import recipe_scanpy_qc
 
 __all__ = [
+    "annotate_functionality",
     "assign_isotype",
     "assign_isotypes",
     "calculate_threshold",

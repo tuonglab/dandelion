@@ -1,7 +1,9 @@
 import os
 import json
+import re
 import shutil
 import warnings
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -62,6 +64,7 @@ from dandelion.utilities._utilities import (
     set_blast_env,
     check_data,
     lib_type,
+    set_germline_env,
     fasta_iterator,
     write_fasta,
 )
@@ -4124,6 +4127,181 @@ def safe_json_load(s: list | str | None) -> list:
     if not s:  # empty string or None
         return []  # fallback empty list
     return json.loads(s)
+
+
+def _resolve_germline_vdj_dir(
+    germline_db: Path | str | None,
+    org: Literal["human", "mouse"],
+) -> Path:
+    """Resolve user-provided germline path to a VDJ FASTA directory."""
+    if germline_db is None:
+        _, gml, _ = set_germline_env(germline=None, org=org, db="imgt")
+        vdj_dir = Path(gml)
+    else:
+        p = Path(germline_db)
+        if p.is_file():
+            raise ValueError(
+                "`germline_db` must point to a directory, not a file."
+            )
+        if p.name.lower() == "vdj":
+            vdj_dir = p
+        elif p.name.lower() == org.lower() and (p / "vdj").is_dir():
+            vdj_dir = p / "vdj"
+        elif p.name.lower() in {"imgt", "ogrdb", "kiarva", "gkhlab"}:
+            vdj_dir = p / org / "vdj"
+        elif (p / "vdj").is_dir():
+            vdj_dir = p / "vdj"
+        else:
+            found = None
+            for db_name in ["imgt", "ogrdb", "kiarva", "gkhlab"]:
+                candidate = p / db_name / org / "vdj"
+                if candidate.is_dir():
+                    found = candidate
+                    break
+            vdj_dir = p if found is None else found
+
+    if not vdj_dir.is_dir():
+        raise FileNotFoundError(
+            "Unable to locate a germline VDJ directory from `germline_db`."
+        )
+    return vdj_dir
+
+
+def _load_germline_functionality_map(
+    vdj_dir: Path,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Load gene->functionality map from IMGT-style FASTA headers."""
+    fasta_files = sorted(
+        set(vdj_dir.glob("*.fasta"))
+        | set(vdj_dir.glob("*.fa"))
+        | set(vdj_dir.glob("*.fna"))
+    )
+    if len(fasta_files) == 0:
+        raise FileNotFoundError(
+            "No FASTA files were found in the resolved germline VDJ directory: "
+            + str(vdj_dir)
+        )
+
+    exact_map: dict[str, str] = {}
+    no_allele_map: dict[str, set[str]] = defaultdict(set)
+
+    for fasta_file in fasta_files:
+        with open(fasta_file, "r") as fh:
+            for header, _ in fasta_iterator(fh):
+                parts = header.split("|")
+                if len(parts) < 4:
+                    continue
+                gene = parts[1].strip()
+                functionality = parts[3].strip().strip("()")
+                if gene == "" or functionality == "":
+                    continue
+
+                if gene not in exact_map:
+                    exact_map[gene] = functionality
+
+                gene_no_allele = re.sub(r"\*[0-9]+$", "", gene)
+                no_allele_map[gene_no_allele].add(functionality)
+
+    collapsed_map = {
+        g: ",".join(sorted(fset)) for g, fset in no_allele_map.items()
+    }
+    return exact_map, collapsed_map
+
+
+def _lookup_gene_functionality(
+    gene_call: str | None,
+    exact_map: dict[str, str],
+    no_allele_map: dict[str, str],
+) -> str | None:
+    """Map a call like 'IGHV1-18*01,IGHV1-18*02' to a functionality code."""
+    if gene_call is None:
+        return None
+
+    gene = str(gene_call).strip()
+    if gene == "" or gene.lower() in {"none", "nan"}:
+        return None
+    gene = gene.split(",")[0].strip()
+
+    if gene in exact_map:
+        return exact_map[gene]
+
+    gene_no_allele = re.sub(r"\*[0-9]+$", "", gene)
+    return no_allele_map.get(gene_no_allele)
+
+
+def annotate_functionality(
+    vdj: DandelionPolars,
+    germline_db: Path | str | None = None,
+    org: Literal["human", "mouse"] = "human",
+) -> DandelionPolars:
+    """Annotate V/D/J gene functionality from germline reference FASTA headers.
+
+    Parameters
+    ----------
+    vdj : DandelionPolars
+        DandelionPolars object containing AIRR-style calls in `.data`.
+    germline_db : Path | str | None, optional
+        Path to germline database root, `db/org`, or `db/org/vdj`.
+        If None, resolves from the `GERMLINE` environment variable using
+        IMGT defaults for the selected organism.
+    org : Literal["human", "mouse"], optional
+        Organism used when resolving default/reference directory layout.
+
+    Returns
+    -------
+    DandelionPolars
+        The same `vdj` object with additional columns:
+        `v_call_functionality`, `d_call_functionality`, and
+        `j_call_functionality`.
+    """
+    if not isinstance(vdj, DandelionPolars):
+        raise TypeError("`vdj` must be a DandelionPolars object.")
+
+    vdj_dir = _resolve_germline_vdj_dir(germline_db=germline_db, org=org)
+    exact_map, no_allele_map = _load_germline_functionality_map(vdj_dir)
+
+    dat = vdj._data
+    if isinstance(dat, pl.LazyFrame):
+        dat = dat.collect(engine="streaming")
+
+    if isinstance(dat, pd.DataFrame):
+        dat = dat.copy()
+        for call_col in ["v_call", "d_call", "j_call"]:
+            out_col = call_col.replace("_call", "_call_functionality")
+            if call_col in dat.columns:
+                dat[out_col] = dat[call_col].map(
+                    lambda x: _lookup_gene_functionality(
+                        gene_call=x,
+                        exact_map=exact_map,
+                        no_allele_map=no_allele_map,
+                    )
+                )
+            else:
+                dat[out_col] = None
+        vdj.data = dat
+        return vdj
+
+    exprs = []
+    for call_col in ["v_call", "d_call", "j_call"]:
+        out_col = call_col.replace("_call", "_call_functionality")
+        if call_col in dat.collect_schema():
+            exprs.append(
+                pl.col(call_col)
+                .map_elements(
+                    lambda x: _lookup_gene_functionality(
+                        gene_call=x,
+                        exact_map=exact_map,
+                        no_allele_map=no_allele_map,
+                    ),
+                    return_dtype=pl.String,
+                )
+                .alias(out_col)
+            )
+        else:
+            exprs.append(pl.lit(None, dtype=pl.String).alias(out_col))
+
+    vdj.data = dat.with_columns(exprs)
+    return vdj
 
 
 def check_contigs(
