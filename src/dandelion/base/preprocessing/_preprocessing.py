@@ -4885,7 +4885,7 @@ def _load_germline_functionality_map(
     no_allele_map: dict[str, set[str]] = defaultdict(set)
 
     for fasta_file in fasta_files:
-        with open(fasta_file, "r") as fh:
+        with open(fasta_file) as fh:
             for header, _ in fasta_iterator(fh):
                 parts = header.split("|")
                 if len(parts) < 4:

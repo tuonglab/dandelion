@@ -30,7 +30,7 @@ def main():
             f"The specified FASTA file does not exist: {fasta_file}"
         )
 
-    fh = open(fasta_file, "r")
+    fh = open(fasta_file)
     rows = []
 
     for header, sequence in fasta_iterator(fh):
