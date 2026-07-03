@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/kiarva_imgt_human_ig_d.fasta",
   "number-of-letters": 1259,
   "number-of-sequences": 51,
-  "last-updated": "2026-07-01T16:38:00",
+  "last-updated": "2026-07-02T15:25:00",
   "number-of-volumes": 1,
   "bytes-total": 55188,
   "bytes-to-cache": 1112,

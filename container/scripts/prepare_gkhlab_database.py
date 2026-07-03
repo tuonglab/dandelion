@@ -50,6 +50,7 @@ GKHLAB_FILES: dict[tuple[str, str], str] = {
     ("trg", "v"): "gkhlab_human_TRGV.fasta",
     ("trg", "j"): "gkhlab_human_TRGJ.fasta",
 }
+IMGT_TCR_CONSTANT_SEGMENTS = ["TRAC", "TRBC", "TRDC", "TRGC"]
 
 
 def parse_args():
@@ -308,6 +309,51 @@ def build_igblast_fastas(germline_dir: Path, igblast_fasta_dir: Path) -> None:
         logging.info(f"Wrote {len(seqs)} sequences to {out_path.name}")
 
 
+def _read_constant_fasta(path: Path) -> dict[str, str]:
+    """Read and normalize IMGT constant fasta records for igblast usage."""
+    seqs = {}
+    if not path.exists() or path.stat().st_size == 0:
+        return seqs
+    fh = open(path)
+    for header, sequence in fasta_iterator(fh):
+        parts = header.split("|")
+        if len(parts) > 3:
+            if parts[3] != "P":
+                seqs[parts[1].rstrip()] = sequence.replace(".", "").upper()
+        else:
+            seqs[header.rstrip()] = sequence.replace(".", "").upper()
+    fh.close()
+    return seqs
+
+
+def build_constant_fasta(out_dir: Path, igblast_fasta_dir: Path) -> None:
+    """
+    Build a unified GKHlab TCR constant fasta from IMGT constants.
+
+    Output
+    ------
+    ``gkhlab_human_tr_c.fasta`` containing TRAC + TRBC + TRDC + TRGC.
+    """
+    imgt_constant_dir = out_dir / "germlines" / "imgt" / "human" / "constant"
+    seqs = {}
+    for segment in IMGT_TCR_CONSTANT_SEGMENTS:
+        seqs.update(
+            _read_constant_fasta(
+                imgt_constant_dir / f"imgt_human_{segment}.fasta"
+            )
+        )
+
+    out_path = igblast_fasta_dir / "gkhlab_human_tr_c.fasta"
+    if len(seqs) == 0:
+        logging.warning(
+            "Could not build gkhlab_human_tr_c.fasta: no IMGT TCR constant sequences found."
+        )
+        return
+
+    write_fasta(seqs, out_path, overwrite=True)
+    logging.info(f"Wrote {len(seqs)} sequences to {out_path.name}")
+
+
 def build_igblast_aux(igblast_fasta_dir: Path, optional_file_dir: Path) -> None:
     """
     Generate the igblastn auxiliary file for the GKHlab J genes.
@@ -447,6 +493,10 @@ def main():
     # 2. Merge into per-segment igblast fastas
     logging.info("--- Building merged igblast fasta files ---")
     build_igblast_fastas(germline_dir, igblast_fasta_dir)
+
+    # 2b. Add unified TCR constant fasta.
+    logging.info("--- Building unified constant-region fasta file ---")
+    build_constant_fasta(out_dir, igblast_fasta_dir)
 
     # 3. Generate auxiliary J annotation file
     logging.info("--- Generating igblastn auxiliary file ---")

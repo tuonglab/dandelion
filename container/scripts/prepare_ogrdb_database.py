@@ -25,6 +25,12 @@ OGRDB_IGHC_URL = (
     "https://ogrdb.airr-community.org/download_germline_set/"
     "Homo%20sapiens/IGHC/published/ungapped_ex"
 )
+IMGT_HUMAN_LIGHT_CHAIN_CONSTANT_FILES = {
+    "IGKC": "imgt_human_IGKC.fasta",
+    "IGLC": "imgt_human_IGLC.fasta",
+}
+IMGT_IG_LIGHT_CHAIN_CONSTANT_SEGMENTS = ["IGKC", "IGLC"]
+IMGT_TR_CONSTANT_SEGMENTS = ["TRAC", "TRBC", "TRDC", "TRGC"]
 
 
 def parse_args():
@@ -162,7 +168,7 @@ def download_germline_and_process(
         Path to write fasta file to.
     """
     if os.path.exists(file_path / "vdj"):
-        logging.info(f"Skipping download of files as it already exists.")
+        logging.info("Skipping download of files as it already exists.")
         return
     set_ids, _ = return_ogrdb_info(species)
     for set_id in set_ids:
@@ -204,7 +210,7 @@ def process_ogrdb_fasta(species: str, file_path: str | Path):
     """
     new_file_path = file_path / "vdj"
     if os.path.exists(new_file_path):
-        logging.info(f"Skipping download of files as it already exists.")
+        logging.info("Skipping download of files as it already exists.")
         return
     # generate the split v/d/j files
     # find the "all" file first
@@ -369,7 +375,7 @@ def download_ogrdb_ighc(out_dir: str | Path) -> Path | None:
         Path to the downloaded fasta, or None on failure.
     """
     fasta_name = "Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta"
-    germline_dir = Path(out_dir) / "germlines" / "ogrdb" / "human"
+    germline_dir = Path(out_dir) / "germlines" / "ogrdb" / "human" / "constant"
     germline_dir.mkdir(parents=True, exist_ok=True)
     fasta_path = germline_dir / fasta_name
 
@@ -396,14 +402,33 @@ def download_ogrdb_ighc(out_dir: str | Path) -> Path | None:
     return fasta_path
 
 
-def build_ogrdb_ighc_blastdb(
+def _read_constant_fasta(path: Path) -> dict[str, str]:
+    """Read a constant fasta and normalize headers for igblast databases."""
+    seqs = {}
+    if not path.exists() or path.stat().st_size == 0:
+        return seqs
+    fh = open(path)
+    for header, sequence in fasta_iterator(fh):
+        parts = header.split("|")
+        if len(parts) > 3:
+            # Raw IMGT format: filter pseudo-genes and keep the gene name field.
+            if parts[3] != "P":
+                seqs[parts[1].rstrip()] = sequence.replace(".", "").upper()
+        else:
+            seqs[header.rstrip()] = sequence.replace(".", "").upper()
+    fh.close()
+    return seqs
+
+
+def build_ogrdb_human_ig_constant_fasta(
     fasta_path: Path,
     out_dir: str | Path,
-    makeblastdb: str | Path,
-) -> None:
+) -> Path | None:
     """
-    Run makeblastdb on the OGRDB IGHC fasta and place the database under
-    <out_dir>/blast/database/ as ``ogrdb_human_ig_c``.
+    Create a unified OGRDB human IG constant fasta for igblast.
+
+    The output contains OGRDB IGHC (heavy chain) plus IGKC/IGLC from IMGT,
+    written to ``<out_dir>/igblast/fasta/ogrdb_human_ig_c.fasta``.
 
     Parameters
     ----------
@@ -411,33 +436,145 @@ def build_ogrdb_ighc_blastdb(
         Path to the downloaded IGHC fasta.
     out_dir : str | Path
         Root database output directory.
-    makeblastdb : str | Path
-        Path to the makeblastdb binary.
-    """
-    igblastdb_out = Path(out_dir) / "igblast" / "database"
-    igblastdb_out.mkdir(parents=True, exist_ok=True)
-    db_name = igblastdb_out / "ogrdb_human_ig_c"
 
-    logging.info(f"Building OGRDB IGHC blast database at {db_name}")
-    cmd = [
-        str(makeblastdb),
-        "-parse_seqids",
-        "-dbtype",
-        "nucl",
-        "-input_type",
-        "fasta",
-        "-in",
-        str(fasta_path),
-        "-out",
-        str(db_name),
-    ]
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    logging.info(res.stdout.decode("utf-8"))
-    if res.returncode != 0:
-        logging.warning(
-            f"makeblastdb for IGHC returned non-zero exit code: "
-            f"{res.stderr.decode('utf-8')}"
+    Returns
+    -------
+    Path | None
+        Path to the merged constant fasta, or None if no sequences are found.
+    """
+    igblast_out = Path(out_dir) / "igblast" / "fasta"
+    igblast_out.mkdir(parents=True, exist_ok=True)
+    out_fasta = igblast_out / "ogrdb_human_ig_c.fasta"
+
+    seqs = _read_constant_fasta(fasta_path)
+    imgt_constant_dir = (
+        Path(out_dir) / "germlines" / "imgt" / "human" / "constant"
+    )
+    for chain, filename in IMGT_HUMAN_LIGHT_CHAIN_CONSTANT_FILES.items():
+        imgt_file = imgt_constant_dir / filename
+        light_chain_seqs = _read_constant_fasta(imgt_file)
+        if len(light_chain_seqs) == 0:
+            logging.warning(
+                f"IMGT {chain} constant file missing or empty: {imgt_file}. "
+                "Unified OGRDB constant fasta may be incomplete."
+            )
+            continue
+        for header, sequence in light_chain_seqs.items():
+            if header not in seqs:
+                seqs[header] = sequence
+
+    if len(seqs) == 0:
+        logging.warning("No constant sequences found for ogrdb_human_ig_c.")
+        return None
+
+    write_fasta(seqs, out_fasta, overwrite=True)
+    logging.info(
+        f"Wrote unified constant fasta with {len(seqs)} sequences to {out_fasta}"
+    )
+    return out_fasta
+
+
+def build_ogrdb_constant_fastas(
+    out_dir: str | Path,
+    human_ighc_fasta: Path | None = None,
+) -> None:
+    """
+    Build unified OGRDB constant fasta files for human/mouse and IG/TR.
+
+    Outputs are written to ``<out_dir>/igblast/fasta``:
+    * ``ogrdb_human_ig_c.fasta``
+    * ``ogrdb_mouse_ig_c.fasta``
+    * ``ogrdb_human_tr_c.fasta``
+    * ``ogrdb_mouse_tr_c.fasta``
+
+    Notes
+    -----
+    OGRDB only provides human IGHC constants. Missing constants are borrowed
+    from IMGT so all expected ``ogrdb_*_c`` databases can be built.
+    """
+    out_dir = Path(out_dir)
+    igblast_out = out_dir / "igblast" / "fasta"
+    igblast_out.mkdir(parents=True, exist_ok=True)
+
+    for species in ["human", "mouse"]:
+        imgt_constant_dir = (
+            out_dir / "germlines" / "imgt" / species / "constant"
         )
+
+        # Build IG constants.
+        ig_seqs: dict[str, str] = {}
+        if species == "human" and human_ighc_fasta is not None:
+            ig_seqs.update(_read_constant_fasta(human_ighc_fasta))
+        else:
+            ig_seqs.update(
+                _read_constant_fasta(
+                    imgt_constant_dir / f"imgt_{species}_IGHC.fasta"
+                )
+            )
+        for segment in IMGT_IG_LIGHT_CHAIN_CONSTANT_SEGMENTS:
+            ig_seqs.update(
+                _read_constant_fasta(
+                    imgt_constant_dir / f"imgt_{species}_{segment}.fasta"
+                )
+            )
+
+        ig_out = igblast_out / f"ogrdb_{species}_ig_c.fasta"
+        if len(ig_seqs) > 0:
+            write_fasta(ig_seqs, ig_out, overwrite=True)
+            logging.info(
+                f"Wrote unified constant fasta with {len(ig_seqs)} sequences to {ig_out}"
+            )
+
+            # For mouse, also mirror constants to every available strain-specific
+            # OGRDB IG FASTA prefix so makeblastdb produces matching *_ig_c DBs.
+            if species == "mouse":
+                strain_labels = set()
+                for fasta_file in igblast_out.iterdir():
+                    if (
+                        not fasta_file.is_file()
+                        or fasta_file.suffix != ".fasta"
+                    ):
+                        continue
+                    match = re.match(
+                        r"^ogrdb_mouse_(.+)_ig_[vdj]$", fasta_file.stem
+                    )
+                    if match is not None:
+                        strain_labels.add(match.group(1))
+
+                for strain in sorted(strain_labels):
+                    strain_out = (
+                        igblast_out / f"ogrdb_mouse_{strain}_ig_c.fasta"
+                    )
+                    write_fasta(ig_seqs, strain_out, overwrite=True)
+                if len(strain_labels) > 0:
+                    logging.info(
+                        "Wrote strain-specific mouse IG constant fastas for "
+                        + f"{len(strain_labels)} strains."
+                    )
+        else:
+            logging.warning(
+                f"No IG constant sequences found for {species}; skipping {ig_out.name}."
+            )
+
+        # Build TR constants from IMGT.
+        tr_seqs: dict[str, str] = {}
+        for segment in IMGT_TR_CONSTANT_SEGMENTS:
+            tr_seqs.update(
+                _read_constant_fasta(
+                    imgt_constant_dir / f"imgt_{species}_{segment}.fasta"
+                )
+            )
+
+        tr_out = igblast_out / f"ogrdb_{species}_tr_c.fasta"
+        if len(tr_seqs) > 0:
+            write_fasta(tr_seqs, tr_out, overwrite=True)
+            logging.info(
+                f"Wrote unified constant fasta with {len(tr_seqs)} sequences to {tr_out}"
+            )
+        else:
+            logging.warning(
+                f"No TR constant sequences found for {species}; skipping {tr_out.name}."
+            )
 
 
 def main():
@@ -471,9 +608,10 @@ def main():
     logging.info(f"Source:  {source}")
     logging.info(f"Out directory:  {Path(args.outdir).absolute()}")
     logging.info(f"Download date: {start_time.strftime('%Y-%m-%d')}")
-    logging.info(f"Species:")
+    logging.info("Species:")
 
     # For each species
+    human_ighc_fasta = None
     for species in [
         "human",
         "mouse",
@@ -527,17 +665,21 @@ def main():
                     fh.close()
             write_fasta(seqs, out_file)
         if species == "human":
-            # Download and build blast DB for OGRDB human IGHC (no mouse equivalent)
-            logging.info("Downloading OGRDB human IGHC germline set")
+            # Download OGRDB IGHC and merge with IMGT IGKC/IGLC constants.
+            logging.info("Preparing unified OGRDB human IG constant fasta")
             ighc_fasta = download_ogrdb_ighc(out_dir)
             if ighc_fasta is not None:
-                build_ogrdb_ighc_blastdb(ighc_fasta, out_dir, makeblastdb)
+                human_ighc_fasta = ighc_fasta
+                build_ogrdb_human_ig_constant_fasta(ighc_fasta, out_dir)
             else:
                 logging.warning(
-                    "OGRDB IGHC download failed – ogrdb_human_ig_c blast database "
-                    "will not be available. Constant gene annotation with db='ogrdb' "
+                    "OGRDB IGHC download failed – unified ogrdb_human_ig_c fasta "
+                    "cannot be created. Constant gene annotation with db='ogrdb' "
                     "will fall back to IMGT."
                 )
+
+    logging.info("Preparing unified OGRDB constant-region fasta files")
+    build_ogrdb_constant_fastas(out_dir, human_ighc_fasta=human_ighc_fasta)
 
     logging.info("Preparing auxiliary files for igblast")
     copy_ogrdb_aux_to_igblast(

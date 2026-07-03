@@ -56,6 +56,7 @@ KIARVA_FILES_OGRDB = {
 # Light chain segments that need to be borrowed from another germline
 # database, since KIARVA does not provide them.
 LIGHT_CHAIN_SEGMENTS = ["IGKV", "IGKJ", "IGLV", "IGLJ"]
+OGRDB_IGHC_FASTA = "Homo_sapiens_IGHC_rev_1_ungapped_ex.fasta"
 
 
 def parse_args():
@@ -309,12 +310,11 @@ def build_igblast_fastas(germline_dir: Path, igblast_fasta_dir: Path) -> None:
     """
     igblast_fasta_dir.mkdir(parents=True, exist_ok=True)
 
-    # Collect sequences by segment type across all loci
-    by_segment: dict[str, dict[str, str]] = {"v": {}, "d": {}, "j": {}}
-
     for k_files, lc_db in zip(
         [KIARVA_FILES_IMGT, KIARVA_FILES_OGRDB], ["imgt", "ogrdb"]
     ):
+        # Collect sequences by segment type across all loci for each light-chain DB.
+        by_segment: dict[str, dict[str, str]] = {"v": {}, "d": {}, "j": {}}
         for (locus, segment), filename in k_files.items():
             src = germline_dir / filename
             if not src.exists() or src.stat().st_size == 0:
@@ -343,6 +343,82 @@ def build_igblast_fastas(germline_dir: Path, igblast_fasta_dir: Path) -> None:
 
             write_fasta(seqs, out_path)
             logging.info(f"Wrote {len(seqs)} sequences to {out_path.name}")
+
+
+def _read_constant_fasta(path: Path) -> dict[str, str]:
+    """Read and normalize constant FASTA records for igblast usage."""
+    seqs = {}
+    if not path.exists() or path.stat().st_size == 0:
+        return seqs
+    fh = open(path)
+    for header, sequence in fasta_iterator(fh):
+        parts = header.split("|")
+        if len(parts) > 3:
+            if parts[3] != "P":
+                seqs[parts[1].rstrip()] = sequence.replace(".", "").upper()
+        else:
+            seqs[header.rstrip()] = sequence.replace(".", "").upper()
+    fh.close()
+    return seqs
+
+
+def build_constant_fastas(out_dir: Path, igblast_fasta_dir: Path) -> None:
+    """
+    Build KIARVA unified constant fasta files for IMGT and OGRDB variants.
+
+    Outputs
+    -------
+    * ``kiarva_imgt_human_ig_c.fasta``: IMGT IGHC + IGKC + IGLC
+    * ``kiarva_ogrdb_human_ig_c.fasta``: OGRDB IGHC + IMGT IGKC + IGLC
+      (falls back to IMGT IGHC if OGRDB IGHC is unavailable)
+    """
+    igblast_fasta_dir.mkdir(parents=True, exist_ok=True)
+
+    imgt_constant_dir = out_dir / "germlines" / "imgt" / "human" / "constant"
+    ogrdb_constant_dir = out_dir / "germlines" / "ogrdb" / "human" / "constant"
+
+    imgt_heavy = _read_constant_fasta(
+        imgt_constant_dir / "imgt_human_IGHC.fasta"
+    )
+    imgt_light = {}
+    for segment in ["IGKC", "IGLC"]:
+        imgt_light.update(
+            _read_constant_fasta(
+                imgt_constant_dir / f"imgt_human_{segment}.fasta"
+            )
+        )
+
+    kiarva_imgt = {}
+    kiarva_imgt.update(imgt_heavy)
+    kiarva_imgt.update(imgt_light)
+    if len(kiarva_imgt) > 0:
+        out_imgt = igblast_fasta_dir / "kiarva_imgt_human_ig_c.fasta"
+        write_fasta(kiarva_imgt, out_imgt, overwrite=True)
+        logging.info(f"Wrote {len(kiarva_imgt)} sequences to {out_imgt.name}")
+    else:
+        logging.warning(
+            "Could not build kiarva_imgt_human_ig_c.fasta: no IMGT constant sequences found."
+        )
+
+    ogrdb_heavy = _read_constant_fasta(ogrdb_constant_dir / OGRDB_IGHC_FASTA)
+    if len(ogrdb_heavy) == 0:
+        logging.warning(
+            "OGRDB IGHC constant file not found or empty; falling back to IMGT IGHC "
+            "for kiarva_ogrdb_human_ig_c.fasta."
+        )
+        ogrdb_heavy = imgt_heavy
+
+    kiarva_ogrdb = {}
+    kiarva_ogrdb.update(ogrdb_heavy)
+    kiarva_ogrdb.update(imgt_light)
+    if len(kiarva_ogrdb) > 0:
+        out_ogrdb = igblast_fasta_dir / "kiarva_ogrdb_human_ig_c.fasta"
+        write_fasta(kiarva_ogrdb, out_ogrdb, overwrite=True)
+        logging.info(f"Wrote {len(kiarva_ogrdb)} sequences to {out_ogrdb.name}")
+    else:
+        logging.warning(
+            "Could not build kiarva_ogrdb_human_ig_c.fasta: no constant sequences found."
+        )
 
 
 def build_igblast_aux(igblast_fasta_dir: Path, optional_file_dir: Path) -> None:
@@ -533,6 +609,10 @@ def main():
     # 2. Merge into per-segment igblast fastas
     logging.info("--- Building merged igblast fasta files ---")
     build_igblast_fastas(germline_dir, igblast_fasta_dir)
+
+    # 2b. Build unified constant-region fastas.
+    logging.info("--- Building unified constant-region fasta files ---")
+    build_constant_fastas(out_dir, igblast_fasta_dir)
 
     # 3. Generate auxiliary J annotation file
     logging.info("--- Generating igblastn auxiliary file ---")

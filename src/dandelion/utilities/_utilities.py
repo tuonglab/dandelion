@@ -1618,7 +1618,7 @@ def set_germline_env(
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
     input_file: Path | str | None = None,
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
 ) -> tuple[dict[str, str], Path, Path]:
     """
     Set the paths to germline database and environment variables and relevant input files.
@@ -1631,7 +1631,7 @@ def set_germline_env(
         organism for germline sequences.
     input_file : Path | str | None, optional
         path to input file.
-    db : Literal["imgt", "ogrdb"], optional
+    db : Literal["imgt", "ogrdb", "kiarva", "gkhlab"], optional
         database to use. Defaults to imgt.
     Returns
     -------
@@ -1646,7 +1646,7 @@ def set_germline_env(
     env = os.environ.copy()
     if germline is None:
         try:
-            gml = Path(env["GERMLINE"])
+            gml = Path(env["GERMLINE"]).resolve()
         except KeyError:
             raise KeyError(
                 "Environmental variable $GERMLINE is missing. "
@@ -1654,9 +1654,9 @@ def set_germline_env(
             )
         gml = gml / db / org / "vdj"
     else:
-        gml = env["GERMLINE"] = Path(germline)
+        gml = env["GERMLINE"] = Path(germline).resolve()
     if input_file is not None:
-        input_file = Path(input_file)
+        input_file = Path(input_file).resolve()
     return env, gml, input_file
 
 
@@ -1687,16 +1687,16 @@ def set_igblast_env(
     env = os.environ.copy()
     if igblast_db is None:
         try:
-            igdb = Path(env["IGDATA"])
+            igdb = Path(env["IGDATA"]).resolve()
         except KeyError:
             raise KeyError(
                 "Environmental variable $IGDATA is missing. "
                 "Please 'export IGDATA=/path/to/database/igblast/'"
             )
     else:
-        igdb = env["IGDATA"] = Path(igblast_db)
+        igdb = env["IGDATA"] = Path(igblast_db).resolve()
     if input_file is not None:
-        input_file = Path(input_file)
+        input_file = Path(input_file).resolve()
     return env, igdb, input_file
 
 
@@ -1726,17 +1726,104 @@ def set_blast_env(
     env = os.environ.copy()
     if blast_db is None:
         try:
-            bdb = Path(env["BLASTDB"])
+            bdb = Path(env["BLASTDB"]).resolve()
         except KeyError:
             raise KeyError(
                 "Environmental variable $BLASTDB is missing. "
                 "Please 'export BLASTDB=/path/to/database/blast/'"
             )
     else:
-        bdb = env["BLASTDB"] = Path(blast_db)
+        bdb = env["BLASTDB"] = Path(blast_db).resolve()
     if input_file is not None:
-        input_file = Path(input_file)
+        input_file = Path(input_file).resolve()
     return env, bdb, input_file
+
+
+def _resolve_germline_vdj_dir(
+    germline: Path | str | None,
+    org: Literal["human", "mouse"],
+    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
+) -> Path:
+    """Resolve user-provided germline path to a VDJ FASTA directory."""
+    _, gml, _ = set_germline_env(germline=germline, org=org, db=db)
+    if germline is not None:
+        # first check if there are already VDJ FASTA files in the provided path
+        if (
+            any(gml.glob("*.fasta"))
+            or any(gml.glob("*.fa"))
+            or any(gml.glob("*.fna"))
+        ):
+            vdj_dir = gml
+        else:
+            # resolve it using org and db
+            vdj_dir = gml / db / org / "vdj"
+            # check if there are VDJ FASTA files in the resolved path
+            if (
+                not any(vdj_dir.glob("*.fasta"))
+                and not any(vdj_dir.glob("*.fa"))
+                and not any(vdj_dir.glob("*.fna"))
+            ):
+                raise FileNotFoundError(
+                    "Unable to locate a germline VDJ directory from `germline`."
+                )
+
+    return vdj_dir
+
+
+def _load_germline_functionality_map(
+    vdj_dir: Path,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Load gene->functionality map from IMGT-style FASTA headers."""
+    fasta_files = sorted(
+        set(vdj_dir.glob("*.fasta"))
+        | set(vdj_dir.glob("*.fa"))
+        | set(vdj_dir.glob("*.fna"))
+    )
+    exact_map: dict[str, str] = {}
+    no_allele_map: dict[str, set[str]] = defaultdict(set)
+
+    for fasta_file in fasta_files:
+        with open(fasta_file) as fh:
+            for header, _ in fasta_iterator(fh):
+                parts = header.split("|")
+                if len(parts) < 4:
+                    continue
+                gene = parts[1].strip()
+                functionality = parts[3].strip().strip("()")
+                if gene == "" or functionality == "":
+                    continue
+
+                if gene not in exact_map:
+                    exact_map[gene] = functionality
+
+                gene_no_allele = re.sub(r"\*[0-9]+$", "", gene)
+                no_allele_map[gene_no_allele].add(functionality)
+
+    collapsed_map = {
+        g: ",".join(sorted(fset)) for g, fset in no_allele_map.items()
+    }
+    return exact_map, collapsed_map
+
+
+def _lookup_gene_functionality(
+    gene_call: str | None,
+    exact_map: dict[str, str],
+    no_allele_map: dict[str, str],
+) -> str | None:
+    """Map a call like 'IGHV1-18*01,IGHV1-18*02' to a functionality code."""
+    if pd.isnull(gene_call):
+        return None
+
+    gene = str(gene_call).strip()
+    if gene == "" or gene.lower() in {"none", "nan"}:
+        return None
+    gene = gene.split(",")[0].strip()
+
+    if gene in exact_map:
+        return exact_map[gene]
+
+    gene_no_allele = re.sub(r"\*[0-9]+$", "", gene)
+    return no_allele_map.get(gene_no_allele)
 
 
 def check_data(

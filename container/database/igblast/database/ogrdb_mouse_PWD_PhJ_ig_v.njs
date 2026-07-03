@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/ogrdb_mouse_PWD_PhJ_ig_v.fasta",
   "number-of-letters": 53639,
   "number-of-sequences": 184,
-  "last-updated": "2026-07-01T16:37:00",
+  "last-updated": "2026-07-02T15:24:00",
   "number-of-volumes": 1,
   "bytes-total": 90577,
   "bytes-to-cache": 15885,

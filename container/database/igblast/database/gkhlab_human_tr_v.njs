@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/gkhlab_human_tr_v.fasta",
   "number-of-letters": 85256,
   "number-of-sequences": 299,
-  "last-updated": "2026-07-01T16:41:00",
+  "last-updated": "2026-07-02T15:26:00",
   "number-of-volumes": 1,
   "bytes-total": 114837,
   "bytes-to-cache": 25229,

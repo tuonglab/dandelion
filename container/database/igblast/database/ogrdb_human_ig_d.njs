@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/ogrdb_human_ig_d.fasta",
   "number-of-letters": 25190,
   "number-of-sequences": 53,
-  "last-updated": "2026-07-01T16:36:00",
+  "last-updated": "2026-07-02T15:23:00",
   "number-of-volumes": 1,
   "bytes-total": 61196,
   "bytes-to-cache": 7104,

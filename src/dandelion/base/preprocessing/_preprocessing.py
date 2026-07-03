@@ -3,7 +3,6 @@ import json
 import re
 import shutil
 import warnings
-from collections import defaultdict
 
 import anndata as ad
 import numpy as np
@@ -72,11 +71,13 @@ from dandelion.utilities._utilities import (
     sanitize_data,
     sanitize_column,
     lib_type,
-    set_germline_env,
     set_igblast_env,
     set_blast_env,
     check_data,
     Tree,
+    _resolve_germline_vdj_dir,
+    _load_germline_functionality_map,
+    _lookup_gene_functionality,
 )
 from dandelion.base.tools._tools import transfer
 
@@ -1917,18 +1918,19 @@ def run_igblastn(
     else:
         dpath = dbpath / (db_org_loci + "d")
     jpath = dbpath / (db_org_loci + "j")
-    if db == "ogrdb" and org == "human" and loci == "ig":
-        cpath = dbpath / ("ogrdb_" + org + "_" + loci + "_" + "c")
+    if db == "ogrdb" and org == "human":
+        cpath = dbpath / f"ogrdb_human_{loci}_c"
+    elif db == "ogrdb" and org == "mouse":
+        cpath = dbpath / f"ogrdb_{org}{_strain}_{loci}_c"
+    elif db in {"kiarva_imgt", "kiarva_ogrdb"}:
+        # These databases only exist for human IG
+        cpath = dbpath / f"{db}_human_ig_c"
+    elif db == "gkhlab":
+        # This database only exists for human TR
+        cpath = dbpath / "gkhlab_human_tr_c"
     else:
-        if db == "ogrdb" and org == "mouse":
-            warnings.warn(
-                "OGRDB does not provide a constant region (IGHC) germline set for mouse. "
-                "Falling back to IMGT for the -c_region_db argument.",
-                UserWarning,
-                stacklevel=2,
-            )
         # all other cases use IMGT for the constant region database
-        cpath = dbpath / ("imgt_" + org + "_" + loci + "_" + "c")
+        cpath = dbpath / f"imgt_{org}_{loci}_c"
     auxpath = igdb / "optional_file" / (org + aux)
     for fileformat in ["blast", "airr"]:
         outfile = str(fasta.stem + informat_dict[fileformat])
@@ -2868,6 +2870,7 @@ def check_contigs(
     filter_missing: bool = True,
     filter_extra: bool = True,
     filter_ambiguous: bool = False,
+    filter_pseudo: dict[str, list[str]] | None = None,
     save: str | None = None,
     verbose: bool = True,
     **kwargs,
@@ -2930,6 +2933,11 @@ def check_contigs(
         whether or not to remove contigs that are marked as extra.
     filter_ambiguous : bool, optional
         whether or not to remove contigs that are marked as ambiguous. This step is only for cleaning up the `.data` slot as the ambiguous contigs are not passed to the `.metadata` slot anyway.
+    filter_pseudo : dict[str, list[str]], optional
+        Dictionary specifying how rows/contigs would be filtered based on gene functionality. Keys are "v", "d", "j" and values are lists of functionality strings to filter out.
+        For instance, to only keep functional genes, you would set `filter_pseudo={"v": ["P", "ORF"], "d": ["P", "ORF"], "j": ["P", "ORF"]}`.
+        None defaults to no filtering based on gene functionality. Requires that functionality columns (`v_call_functionality`, `d_call_functionality`, `j_call_functionality`) are present in the AIRR table,
+        populated by `ddl.pp.annotate_functionality`.
     save : str | None, optional
         Only used if a pandas data frame or dandelion object is provided. Specifying will save the formatted vdj table
         with a `_checked.tsv` suffix extension.
@@ -2977,6 +2985,35 @@ def check_contigs(
     if acceptable is not None:
         dat = dat[dat.locus.isin(acceptable)].copy()
 
+    # Filter out contigs based on gene functionality calls, if requested
+    # and if the relevant functionality columns are present (e.g. from a
+    # prior gene functionality annotation step). This runs before
+    # MarkAmbiguousContigs so that dropped contigs aren't considered when
+    # assessing ambiguity/dominance.
+    _default_filter_pseudo: dict[str, list[str]] = {"v": [], "d": [], "j": []}
+    if filter_pseudo is not None:
+        _default_filter_pseudo.update(filter_pseudo)
+    filter_pseudo = _default_filter_pseudo
+
+    if any(len(drop_values) > 0 for drop_values in filter_pseudo.values()):
+        for gene, drop_values in filter_pseudo.items():
+            if not drop_values:
+                continue
+            func_col = f"{gene}_call_functionality"
+            if func_col not in dat.columns:
+                if verbose:
+                    logg.info(
+                        f"'{func_col}' column not found; skipping "
+                        f"functionality-based filtering for {gene}_call."
+                    )
+                continue
+            drop_upper = {str(v).upper() for v in drop_values}
+            call_upper = dat[func_col].astype(str).str.upper()
+            is_missing = dat[func_col].isnull() | (
+                dat[func_col].astype(str) == ""
+            )
+            dat = dat[is_missing | ~call_upper.isin(drop_upper)].copy()
+
     barcode = list(set(dat.cell_id))
 
     if adata is not None:
@@ -2996,6 +3033,7 @@ def check_contigs(
         obs = pd.DataFrame(index=barcode)
         adata_ = ad.AnnData(obs=obs)
         adata_.obs["has_contig"] = "True"
+
     contig_status = MarkAmbiguousContigs(
         dat,
         umi_foldchange_cutoff,
@@ -4828,110 +4866,11 @@ def safe_json_load(s: list | str | None) -> list:
     return json.loads(s)
 
 
-def _resolve_germline_vdj_dir(
-    germline_db: Path | str | None,
-    org: Literal["human", "mouse"],
-) -> Path:
-    """Resolve user-provided germline path to a VDJ FASTA directory."""
-    if germline_db is None:
-        _, gml, _ = set_germline_env(germline=None, org=org, db="imgt")
-        vdj_dir = Path(gml)
-    else:
-        p = Path(germline_db)
-        if p.is_file():
-            raise ValueError(
-                "`germline_db` must point to a directory, not a file."
-            )
-        if p.name.lower() == "vdj":
-            vdj_dir = p
-        elif p.name.lower() == org.lower() and (p / "vdj").is_dir():
-            vdj_dir = p / "vdj"
-        elif p.name.lower() in {"imgt", "ogrdb", "kiarva", "gkhlab"}:
-            vdj_dir = p / org / "vdj"
-        elif (p / "vdj").is_dir():
-            vdj_dir = p / "vdj"
-        else:
-            found = None
-            for db_name in ["imgt", "ogrdb", "kiarva", "gkhlab"]:
-                candidate = p / db_name / org / "vdj"
-                if candidate.is_dir():
-                    found = candidate
-                    break
-            vdj_dir = p if found is None else found
-
-    if not vdj_dir.is_dir():
-        raise FileNotFoundError(
-            "Unable to locate a germline VDJ directory from `germline_db`."
-        )
-    return vdj_dir
-
-
-def _load_germline_functionality_map(
-    vdj_dir: Path,
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Load gene->functionality map from IMGT-style FASTA headers."""
-    fasta_files = sorted(
-        set(vdj_dir.glob("*.fasta"))
-        | set(vdj_dir.glob("*.fa"))
-        | set(vdj_dir.glob("*.fna"))
-    )
-    if len(fasta_files) == 0:
-        raise FileNotFoundError(
-            "No FASTA files were found in the resolved germline VDJ directory: "
-            + str(vdj_dir)
-        )
-
-    exact_map: dict[str, str] = {}
-    no_allele_map: dict[str, set[str]] = defaultdict(set)
-
-    for fasta_file in fasta_files:
-        with open(fasta_file) as fh:
-            for header, _ in fasta_iterator(fh):
-                parts = header.split("|")
-                if len(parts) < 4:
-                    continue
-                gene = parts[1].strip()
-                functionality = parts[3].strip().strip("()")
-                if gene == "" or functionality == "":
-                    continue
-
-                if gene not in exact_map:
-                    exact_map[gene] = functionality
-
-                gene_no_allele = re.sub(r"\*[0-9]+$", "", gene)
-                no_allele_map[gene_no_allele].add(functionality)
-
-    collapsed_map = {
-        g: ",".join(sorted(fset)) for g, fset in no_allele_map.items()
-    }
-    return exact_map, collapsed_map
-
-
-def _lookup_gene_functionality(
-    gene_call: str | None,
-    exact_map: dict[str, str],
-    no_allele_map: dict[str, str],
-) -> str | None:
-    """Map a call like 'IGHV1-18*01,IGHV1-18*02' to a functionality code."""
-    if pd.isnull(gene_call):
-        return None
-
-    gene = str(gene_call).strip()
-    if gene == "" or gene.lower() in {"none", "nan"}:
-        return None
-    gene = gene.split(",")[0].strip()
-
-    if gene in exact_map:
-        return exact_map[gene]
-
-    gene_no_allele = re.sub(r"\*[0-9]+$", "", gene)
-    return no_allele_map.get(gene_no_allele)
-
-
 def annotate_functionality(
     vdj: Dandelion,
-    germline_db: Path | str | None = None,
+    germline: Path | str | None = None,
     org: Literal["human", "mouse"] = "human",
+    db: Literal["imgt", "ogrdb", "kiarva", "gkhlab"] = "imgt",
 ) -> Dandelion:
     """Annotate V/D/J gene functionality from germline reference FASTA headers.
 
@@ -4939,12 +4878,14 @@ def annotate_functionality(
     ----------
     vdj : Dandelion
         Dandelion object containing AIRR-style calls in `.data`.
-    germline_db : Path | str | None, optional
+    germline : Path | str | None, optional
         Path to germline database root, `db/org`, or `db/org/vdj`.
         If None, resolves from the `GERMLINE` environment variable using
         IMGT defaults for the selected organism.
     org : Literal["human", "mouse"], optional
         Organism used when resolving default/reference directory layout.
+    db : Literal["imgt", "ogrdb", "kiarva", "gkhlab"], optional
+        Database to use. Defaults to "imgt".
 
     Returns
     -------
@@ -4956,7 +4897,7 @@ def annotate_functionality(
     if not isinstance(vdj, Dandelion):
         raise TypeError("`vdj` must be a Dandelion object.")
 
-    vdj_dir = _resolve_germline_vdj_dir(germline_db=germline_db, org=org)
+    vdj_dir = _resolve_germline_vdj_dir(germline=germline, org=org, db=db)
     exact_map, no_allele_map = _load_germline_functionality_map(vdj_dir)
 
     dat = vdj.data.copy()
