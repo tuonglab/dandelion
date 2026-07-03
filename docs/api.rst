@@ -8,6 +8,7 @@ Preprocessing: `pp`
 .. autosummary::
    :toctree: .
 
+   annotate_functionality
    assign_isotype
    assign_isotypes
    check_contigs
@@ -119,6 +120,7 @@ Preprocessing: `pp`
 .. autosummary::
    :toctree: .
 
+   annotate_functionality
    assign_isotype
    assign_isotypes
    check_contigs
