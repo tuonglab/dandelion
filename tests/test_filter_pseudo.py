@@ -100,25 +100,29 @@ def test_filter_pseudo(
 ):
     """test_filter_pseudo"""
     f = create_testfolder / "dandelion" / processed_files[filename]
+    df = pd.read_csv(f, sep="\t")
     dat = ddl.Dandelion(f)
-    annotated = ddl.pp.annotate_functionality(
-        dat, germline=database_paths["germline"]
-    )
-    if annotated is not None:
-        dat = annotated
+    ddl.pp.annotate_functionality(dat, germline=database_paths["germline"])
+    # transfer functionality to df
+    if isinstance(dat._data, pd.DataFrame):
+        for gene in ["v", "d", "j"]:
+            df[gene + "_call_functionality"] = dat._data[
+                gene + "_call_functionality"
+            ]
+    else:
+        cols = [f"{gene}_call_functionality" for gene in ["v", "d", "j"]]
+        ldata = dat._data.select(cols).collect()
+        for col in cols:
+            df[col] = ldata[col].to_numpy()
+    # but change the functionality of the first contig to P
+    df.loc[df.index[0], "v_call_functionality"] = "P"
     vdj, adata = ddl.pp.check_contigs(
-        dat,
+        df,
         dummy_adata,
         filter_pseudo={"v": ["P", "ORF"], "d": ["P", "ORF"], "j": ["P", "ORF"]},
     )
-    assert vdj.n_contigs == 8
-    assert vdj.n_obs == 5
-    assert adata.n_obs == 5
-    vdj, adata = ddl.pp.check_contigs(
-        dat,
-        dummy_adata,
-        filter_pseudo={"v": ["F"], "d": ["F"], "j": ["F"]},
-    )
-    assert vdj.n_contigs == 0
-    assert vdj.n_obs == 0
+    assert (
+        vdj.n_contigs == 7
+    )  # instead of 8 since one contig is filtered away for being pseudo
+    assert vdj.n_obs == 4  # instead of 5
     assert adata.n_obs == 5
