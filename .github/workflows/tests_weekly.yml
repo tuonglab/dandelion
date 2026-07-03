@@ -91,24 +91,35 @@ jobs:
                   cut -d'"' -f2 | tr -d '/' | sort -V | tail -n1)
           echo "igver=$IGVER" >> $GITHUB_OUTPUT
 
-      - name: Download and extract IgBlast
+      - name: Cache IgBlast
+        id: cache-igblast
+        uses: actions/cache@v4
+        with:
+          path: igblast
+          key: igblast-${{ runner.os }}-${{ steps.get_version.outputs.igver }}
+
+      - name: Download IgBlast
+        if: steps.cache-igblast.outputs.cache-hit != 'true'
         shell: bash
         run: |
           IGVER=${{ steps.get_version.outputs.igver }}
 
-          if [[ "${{ matrix.config.os }}" == "ubuntu-latest" ]]; then
-            OSNAME="linux"
-            EXT="tar.gz"
-          elif [[ "${{ matrix.config.os }}" == "macos-latest" ]]; then
-            OSNAME="macosx"
-            EXT="tar.gz"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            OSNAME=linux
+          else
+            OSNAME=macosx
           fi
 
-          FILE=ncbi-igblast-$IGVER-x64-$OSNAME.$EXT
-          wget https://ftp.ncbi.nih.gov/blast/executables/igblast/release/LATEST/$FILE
-          tar -xzf $FILE
-          echo "PATH=$(pwd)/ncbi-igblast-$IGVER/bin:$PATH" >> $GITHUB_ENV
-          rm -f $FILE
+          FILE=ncbi-igblast-$IGVER-x64-$OSNAME.tar.gz
+
+          wget https://ftp.ncbi.nlm.nih.gov/blast/executables/igblast/release/LATEST/$FILE
+
+          mkdir igblast
+          tar -xzf "$FILE" -C igblast --strip-components=1
+
+      - name: Add IgBlast to PATH
+        run: |
+          echo "$(pwd)/igblast/bin" >> "$GITHUB_PATH"
 
       - name: Display Python version
         run: |
