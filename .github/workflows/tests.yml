@@ -112,7 +112,7 @@ jobs:
         id: get_version
         shell: bash
         run: |
-          IGVER=$(curl -s https://ftp.ncbi.nlm.nih.gov/blast/executables/igblast/release/ | \
+          IGVER=$(curl -fsSL https://ftp.ncbi.nlm.nih.gov/blast/executables/igblast/release/ | \
                   grep -Eo 'href="[0-9]+\.[0-9]+\.[0-9]+/' | \
                   cut -d'"' -f2 | tr -d '/' | sort -V | tail -n1)
           echo "igver=$IGVER" >> $GITHUB_OUTPUT
