@@ -44,7 +44,7 @@ def test_annotate_functionality(backend, path_mode, database_paths):
     else:
         germline_db = database_paths["germline"].parents[2]
 
-    ddl.pp.annotate_functionality(vdj, germline_db=germline_db, org="human")
+    ddl.pp.annotate_functionality(vdj, germline=germline_db, org="human")
 
     dat = vdj._data
     if isinstance(dat, pl.LazyFrame):
