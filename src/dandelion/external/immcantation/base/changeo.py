@@ -217,7 +217,9 @@ def creategermlines(
     org: Literal["human", "mouse"] = "human",
     genotyped_fasta: str | None = None,
     mode: Literal["heavy", "light"] | None = None,
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal[
+        "imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"
+    ] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -263,8 +265,8 @@ def creategermlines(
     mode : Literal["heavy", "light"] | None, optional
         whether to run on heavy or light mode. If left as None, heavy and
         light will be run together.
-    db : Literal["imgt", "ogrdb"], optional
-        `imgt` or `ogrdb` reference database.
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"], optional
+        `imgt`, `ogrdb`, `kiarva_imgt`, `kiarva_ogrdb` or `gkhlab` reference database for running CreateGermlines.py.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.
@@ -282,47 +284,47 @@ def creategermlines(
         if mode == "heavy":
             if genotyped_fasta is None:
                 gml_ref = [
-                    str(gml / ("imgt_" + org + _strain + "_IGHV.fasta")),
+                    str(gml / (db + "_" + org + _strain + "_IGHV.fasta")),
                 ]
             else:
                 gml_ref = [
                     str(genotyped_fasta),
                 ]
             gml_ref += [
-                str(gml / ("imgt_" + org + _strain + "_IGHJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGHJ.fasta")),
             ]
             _strainD = "" if strain not in NO_DS else _strain
             gml_ref += [
-                str(gml / ("imgt_" + org + _strainD + "_IGHD.fasta")),
+                str(gml / (db + "_" + org + _strainD + "_IGHD.fasta")),
             ]
         elif mode == "light":
             gml_ref = [
-                str(gml / ("imgt_" + org + _strain + "_IGKV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGKJ.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLJ.fasta")),
             ]
         elif mode is None:
             if genotyped_fasta is None:
                 gml_ref = [
-                    str(gml / ("imgt_" + org + _strain + "_IGHV.fasta")),
+                    str(gml / (db + "_" + org + _strain + "_IGHV.fasta")),
                 ]
             else:
                 gml_ref = [
                     str(genotyped_fasta),
                 ]
             gml_ref += [
-                str(gml / ("imgt_" + org + _strain + "_IGHJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGHJ.fasta")),
             ]
             _strainD = "" if strain not in NO_DS else _strain
             gml_ref += [
-                str(gml / ("imgt_" + org + _strainD + "_IGHD.fasta")),
+                str(gml / (db + "_" + org + _strainD + "_IGHD.fasta")),
             ]
             gml_ref += [
-                str(gml / ("imgt_" + org + _strain + "_IGKV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGKJ.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLV.fasta")),
-                str(gml / ("imgt_" + org + _strain + "_IGLJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGKJ.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLV.fasta")),
+                str(gml / (db + "_" + org + _strain + "_IGLJ.fasta")),
             ]
     else:
         if not isinstance(germline, list):
@@ -739,7 +741,9 @@ def create_germlines(
     vdj: Dandelion | pd.DataFrame | str,
     germline: str | None = None,
     org: Literal["human", "mouse"] = "human",
-    db: Literal["imgt", "ogrdb"] = "imgt",
+    db: Literal[
+        "imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"
+    ] = "imgt",
     strain: (
         Literal[
             "c57bl6",
@@ -783,8 +787,8 @@ def create_germlines(
         path to germline database folder. `None` defaults to  environmental variable.
     org : Literal["human", "mouse"], optional
         organism of germline database.
-    db : Literal["imgt", "ogrdb"], optional
-        `imgt` or `ogrdb` reference database.
+    db : Literal["imgt", "ogrdb", "kiarva_imgt", "kiarva_ogrdb", "gkhlab"], optional
+        `imgt`, `ogrdb`, `kiarva_imgt`, `kiarva_ogrdb` or `gkhlab` reference database for running CreateGermlines.py.
     strain : Literal["c57bl6", "balbc", "129S1_SvImJ", "AKR_J", "A_J", "BALB_c_ByJ", "BALB_c", "C3H_HeJ", "C57BL_6J", "C57BL_6", "CAST_EiJ", "CBA_J", "DBA_1J", "DBA_2J", "LEWES_EiJ", "MRL_MpJ", "MSM_MsJ", "NOD_ShiLtJ", "NOR_LtJ", "NZB_BlNJ", "PWD_PhJ", "SJL_J"] | None, optional
         strain of mouse to use for germline sequences. Only for `db="ogrdb"`. Note that only "c57bl6", "balbc", "CAST_EiJ", "LEWES_EiJ", "MSM_MsJ", "NOD_ShiLt_J" and "PWD_PhJ" contains both heavy chain and light chain germline sequences as a set.
         The rest will not allow igblastn and MakeDB.py to generate a successful airr table (check the failed file). "c57bl6" and "balbc" are merged databases of "C57BL_6" with "C57BL_6J" and "BALB_c" with "BALB_c_ByJ" respectively. None defaults to all combined.

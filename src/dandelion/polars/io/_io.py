@@ -136,9 +136,14 @@ def read_zipddl(
             with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_h5:
                 tmp_h5.write(arr.tobytes())
                 tmp_h5.flush()
-                # Use your helper
                 df = _read_h5_csr_matrix_zarr(tmp_h5.name, as_df=True)
                 g = _create_graph(df, adjust_adjacency=0, fillna=0)
+                # Recover encoded zero-weight edges written as a tiny
+                # positive sentinel to survive sparse serialization.
+                tiny_weight = 1e-12
+                for _, _, edge_data in g.edges(data=True):
+                    if abs(edge_data.get("weight", 0.0)) <= tiny_weight:
+                        edge_data["weight"] = 0.0
                 graphs.append(g)
         constructor["graph"] = tuple(graphs)
 

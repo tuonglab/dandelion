@@ -3387,7 +3387,13 @@ class DandelionPolars:
                 with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_h5:
                     # Convert NetworkX graph to CSR adjacency
                     G_df = nx.to_pandas_adjacency(g, nonedge=np.nan)
+                    # Add a tiny weight to zero edges to avoid issues with sparse representation
+                    tiny_weight = 1e-12
+                    zero_edge_mask = G_df.notna() & G_df.eq(0)
+                    if zero_edge_mask.to_numpy().any():
+                        G_df = G_df.mask(zero_edge_mask, tiny_weight)
                     G_x = csr_matrix(G_df.to_numpy())
+
                     with h5py.File(tmp_h5.name, "w") as hf:
                         hf.create_dataset("data", data=G_x.data)
                         hf.create_dataset("indices", data=G_x.indices)
