@@ -31,7 +31,7 @@ def generate_layout(
         "fa2",
     ] = "mod_fr2",
     expanded_only: bool = False,
-    graphs: tuple[nx.Graph, nx.Graph] = None,
+    graphs: tuple[nx.Graph, nx.Graph] | tuple[ig.Graph, ig.Graph] | None = None,
     singleton_mass: float = 0.5,
     backend: Literal["networkx", "igraph"] = "networkx",
     **kwargs,
@@ -48,6 +48,11 @@ def generate_layout(
                 G, G_ = _build_graphs_networkx(vertices, edges, min_size)
     else:
         G, G_ = graphs
+    if isinstance(G, ig.Graph):
+        # Convert igraph to networkx for layout computation
+        G = G.to_networkx()
+    if isinstance(G_, ig.Graph):
+        G_ = G_.to_networkx()
     if compute_layout:
         if layout_method == "mod_fr":
             if not expanded_only:
