@@ -73,6 +73,7 @@ def generate_network(
     memory_safety_fraction: float = 0.3,
     compress: bool = True,
     random_state: int | np.random.RandomState | None = None,
+    backend: Literal["networkx", "igraph"] = "networkx",
     **kwargs,
 ) -> DandelionPolars | tuple[DandelionPolars, AnnData]:
     """
@@ -208,6 +209,7 @@ def generate_network(
                     expanded_only=expanded_only,
                     graphs=(vdj.graph[0], vdj.graph[1]),
                     singleton_mass=singleton_mass,
+                    backend=backend,
                     **kwargs,
                 )
 
@@ -643,15 +645,14 @@ def generate_network(
                 )
                 edge_listx = _dedup_edges_pl(edge_listx)
             else:
-                edge_listx = pl.LazyFrame(
-                    columns=["source", "target", "weight", "_edge_key"],
+                edge_listx = pl.DataFrame(
                     schema={
                         "source": pl.Utf8,
                         "target": pl.Utf8,
-                        "weight": pl.Int64,
-                        "_edge_key": pl.Utf8,
+                        "weight": pl.Float64,
+                        "_edge_key": pl.UInt64,
                     },
-                )
+                ).lazy()
 
             exclude_keys = (
                 edge_listx.select("_edge_key")
@@ -659,6 +660,7 @@ def generate_network(
                 .get_column("_edge_key")
                 .to_list()
             )
+
             if zero_edge_dict:
                 tmp_edge_listx = pl.concat(
                     list(zero_edge_dict.values()), how="vertical"
@@ -667,20 +669,19 @@ def generate_network(
                 tmp_edge_listx = tmp_edge_listx.filter(pl.col("weight") == 0)
                 tmp_edge_listx = _dedup_edges_pl(tmp_edge_listx)
             else:
-                tmp_edge_listx = pl.LazyFrame(
-                    columns=["source", "target", "weight", "_edge_key"],
+                tmp_edge_listx = pl.DataFrame(
                     schema={
                         "source": pl.Utf8,
                         "target": pl.Utf8,
-                        "weight": pl.Int64,
-                        "_edge_key": pl.Utf8,
+                        "weight": pl.Float64,
+                        "_edge_key": pl.UInt64,
                     },
-                )
+                ).lazy()
             tmp_edge_listx = tmp_edge_listx.filter(
                 ~pl.col("_edge_key").is_in(exclude_keys)
             )
             edge_list_final = pl.concat(
-                [edge_listx, tmp_edge_listx], how="vertical"
+                [edge_listx.lazy(), tmp_edge_listx.lazy()], how="vertical"
             ).collect()
             # ===================================================================
             # FINAL LAYOUT + GRAPH CREATION
@@ -695,6 +696,7 @@ def generate_network(
                 layout_method=layout_method,
                 expanded_only=expanded_only,
                 singleton_mass=singleton_mass,
+                backend=backend,
                 **kwargs,
             )
 

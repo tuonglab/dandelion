@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import math
 
+import igraph as ig
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -1191,7 +1192,6 @@ def transfer(
                     G = vdj.graph[idx]
                 except Exception:
                     pass
-
             if G is not None:
                 graph_connectivities[idx], graph_distances[idx] = (
                     _graph_to_matrices(G, recipient, None)
@@ -1369,7 +1369,7 @@ tf = transfer  # alias for transfer
 
 
 def _graph_to_matrices(
-    G: nx.Graph | None,
+    graph: nx.Graph | ig.Graph | None,
     adata: AnnData,
     distances: csr_matrix | None = None,
 ) -> tuple[csr_matrix, csr_matrix]:
@@ -1391,42 +1391,47 @@ def _graph_to_matrices(
     n = len(target_names)
     name_to_new = {name: i for i, name in enumerate(target_names)}
 
-    # CASE A: Build distances from a NetworkX graph
-    if distances is None and G is not None:
-        edges = list(G.edges(data=True))
-        if not edges:
-            distances = csr_matrix((n, n), dtype=np.float32)
-        else:
-            # Single-pass filtering and mapping - no intermediate arrays
-            valid_edges = []
-            for u_name, v_name, edge_data in edges:
-                u_idx = name_to_new.get(u_name)
-                v_idx = name_to_new.get(v_name)
-                if u_idx is not None and v_idx is not None:
-                    weight = edge_data.get("weight", 1.0)
-                    valid_edges.append((u_idx, v_idx, weight))
-
-            if not valid_edges:
+    # CASE A: Build distances from graphs
+    if distances is None and graph is not None:
+        if isinstance(graph, ig.Graph):
+            if graph.ecount() == 0:
                 distances = csr_matrix((n, n), dtype=np.float32)
             else:
-                # Unpack and create symmetric matrix directly
-                u_idx, v_idx, weights = zip(*valid_edges)
-                u_idx = np.array(u_idx, dtype=np.int32)
-                v_idx = np.array(v_idx, dtype=np.int32)
-                weights = np.array(weights, dtype=np.float32)
-
-                # Make symmetric - concatenate once
-                rows = np.concatenate([u_idx, v_idx])
-                cols = np.concatenate([v_idx, u_idx])
-                vals = np.concatenate([weights, weights])
-                vals += 1.0
-
-                distances = csr_matrix(
-                    (vals, (rows, cols)), shape=(n, n), dtype=np.float32
+                distances = _igraph_to_scipy_sparse(
+                    graph, target_names, weight_attr="weight"
                 )
-                # Clean up immediately
-                del rows, cols, vals, u_idx, v_idx, weights, valid_edges
+                if distances.nnz > 0:
+                    distances.data += 1.0
+        else:
+            if graph.number_of_edges() == 0:
+                distances = csr_matrix((n, n), dtype=np.float32)
+            else:
+                # nodelist ensures alignment to adata.obs_names in one shot,
+                # and nodes not in target_names are simply dropped
+                present_nodes = [nm for nm in target_names if nm in graph]
+                adj = nx.to_scipy_sparse_array(
+                    graph,
+                    nodelist=present_nodes,
+                    weight="weight",
+                    format="coo",
+                    dtype=np.float32,
+                )
 
+                if len(present_nodes) == n:
+                    distances = adj.tocsr()
+                else:
+                    # remap into the full n x n space if G doesn't contain every adata cell
+                    idx_map = np.array(
+                        [name_to_new[nm] for nm in present_nodes]
+                    )
+                    rows = idx_map[adj.row]
+                    cols = idx_map[adj.col]
+                    distances = csr_matrix(
+                        (adj.data, (rows, cols)), shape=(n, n), dtype=np.float32
+                    )
+
+                if distances.nnz > 0:
+                    distances.data += 1.0
     # CASE B: distances provided as a csr_matrix with _index_names
     elif isinstance(distances, csr_matrix):
         old_names = np.array(distances._index_names)
@@ -3388,3 +3393,31 @@ def productive_ratio(
             "   'uns', 'productive_ratio'\n"
         ),
     )
+
+
+def _igraph_to_scipy_sparse(
+    Gi: ig.Graph, target_names: list[str], weight_attr="weight"
+):
+    """Helper function to convert an igraph object to a scipy sparse matrix."""
+    name_to_new = {nm: i for i, nm in enumerate(target_names)}
+    edges = Gi.get_edgelist()
+    weights = (
+        Gi.es[weight_attr]
+        if weight_attr in Gi.es.attributes()
+        else [1.0] * len(edges)
+    )
+    names = Gi.vs["name"]
+
+    u_idx = np.array([name_to_new.get(names[u], -1) for u, v in edges])
+    v_idx = np.array([name_to_new.get(names[v], -1) for u, v in edges])
+    w = np.array(weights, dtype=np.float32)
+
+    mask = (u_idx >= 0) & (v_idx >= 0)
+    u_idx, v_idx, w = u_idx[mask], v_idx[mask], w[mask]
+
+    rows = np.concatenate([u_idx, v_idx])
+    cols = np.concatenate([v_idx, u_idx])
+    vals = np.concatenate([w, w]) + 1.0
+
+    n = len(target_names)
+    return csr_matrix((vals, (rows, cols)), shape=(n, n), dtype=np.float32)

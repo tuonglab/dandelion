@@ -111,9 +111,15 @@ def test_clone_size_group_by(create_testfolder):
 
 @pytest.mark.usefixtures("create_testfolder")
 @pytest.mark.parametrize(
-    "resample,expected", [pytest.param(None, 8), pytest.param(16, 16)]
+    "resample,expected,backend",
+    [
+        pytest.param(None, 8, "networkx"),
+        pytest.param(16, 16, "networkx"),
+        pytest.param(None, 8, "igraph"),
+        pytest.param(16, 16, "igraph"),
+    ],
 )
-def test_generate_network(create_testfolder, resample, expected):
+def test_generate_network(create_testfolder, resample, expected, backend):
     """test generate network"""
     f = create_testfolder / "test.zipddl"
     f2 = create_testfolder / "test2.zipddl"
@@ -123,46 +129,57 @@ def test_generate_network(create_testfolder, resample, expected):
     adata = to_scirpy(vdj, to_mudata=False)
     if resample is not None:
         vdj, adata = generate_network(
-            vdj, adata=adata, sample=resample, layout_method="mod_fr"
+            vdj,
+            adata=adata,
+            sample=resample,
+            layout_method="mod_fr",
+            backend=backend,
         )
         assert vdj.n_obs == expected
         assert vdj.layout is not None
         assert vdj.graph is not None
     else:
-        generate_network(vdj2, layout_method="mod_fr")
+        generate_network(vdj2, layout_method="mod_fr", backend=backend)
         assert vdj2.n_obs == expected
         assert vdj2.layout is not None
         assert vdj2.graph is not None
-    _data = vdj._data.with_columns(pl.lit("1").alias("clone_id"))
+    _data = vdj._data.with_columns(pl.lit("c1").alias("clone_id"))
     _data = _data.collect() if isinstance(_data, pl.LazyFrame) else _data
     vdj = DandelionPolars(_data)
     assert vdj._data.collect_schema()["clone_id"] == pl.String
-    generate_network(vdj, layout_method="mod_fr")
+    generate_network(vdj, layout_method="mod_fr", backend=backend)
     assert vdj.layout is not None
 
 
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
 @pytest.mark.usefixtures("create_testfolder")
-def test_find_clones_key(create_testfolder):
+def test_find_clones_key(create_testfolder, backend):
     """test different clone key"""
     f = create_testfolder / "test.zipddl"
     vdj = read_zipddl(f)
     find_clones(vdj, key_added="test_clone")
     assert not vdj._metadata.collect().get_column("test_clone").is_empty()
     assert vdj._data.collect_schema()["test_clone"] == pl.String
-    generate_network(vdj, clone_key="test_clone", layout_method="mod_fr")
+    generate_network(
+        vdj,
+        clone_key="test_clone",
+        layout_method="mod_fr",
+        backend=backend,
+    )
     assert vdj.layout is not None
     assert vdj.graph is not None
 
 
 @pytest.mark.usefixtures("create_testfolder", "dummy_adata2")
-def test_transfer(create_testfolder, dummy_adata2):
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_transfer(create_testfolder, dummy_adata2, backend):
     """test transfer"""
     f = create_testfolder / "test2.zipddl"
     vdj = read_zipddl(f)
     vdj, adata = check_contigs(vdj, dummy_adata2)
     transfer(dummy_adata2, vdj)
     assert "clone_id" in dummy_adata2.obs
-    generate_network(vdj, layout_method="mod_fr")
+    generate_network(vdj, layout_method="mod_fr", backend=backend)
     transfer(dummy_adata2, vdj)
     assert "X_vdj" in dummy_adata2.obsm
     f2 = create_testfolder / "test2.h5ad"
@@ -278,7 +295,8 @@ def test_diversity_min_size_ok(create_testfolder, method):
 
 
 @pytest.mark.usefixtures("create_testfolder", "json_10x_cr6", "dummy_adata_cr6")
-def test_setup2(create_testfolder, json_10x_cr6, dummy_adata_cr6):
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_setup2(create_testfolder, json_10x_cr6, dummy_adata_cr6, backend):
     """test setup 2"""
     json_file = create_testfolder / "test_all_contig_annotations.json"
     with open(json_file, "w") as outfile:
@@ -288,7 +306,9 @@ def test_setup2(create_testfolder, json_10x_cr6, dummy_adata_cr6):
     assert vdj.n_contigs == 19
     assert vdj.n_obs == 10
     find_clones(vdj)
-    generate_network(vdj, key="sequence", layout_method="mod_fr")
+    generate_network(
+        vdj, key="sequence", layout_method="mod_fr", backend=backend
+    )
     transfer(adata, vdj)
     f = create_testfolder / "test.zipddl"
     vdj.write_zipddl(f)
@@ -432,9 +452,9 @@ def test_extract_edge_weights(create_testfolder):
     f = create_testfolder / "test.zipddl"
     vdj = read_zipddl(f)
     x = ddl.tl.extract_edge_weights(vdj)
-    assert x is None
+    assert len(x) == 0
     x = ddl.tl.extract_edge_weights(vdj, expanded_only=True)
-    assert x is None
+    assert len(x) == 0
 
 
 @pytest.mark.usefixtures("create_testfolder")
@@ -457,9 +477,15 @@ def test_diversity_anndata2(create_testfolder, method):
 
 @pytest.mark.usefixtures("create_testfolder")
 @pytest.mark.parametrize(
-    "resample,expected", [pytest.param(None, 8), pytest.param(16, 16)]
+    "resample,expected,backend",
+    [
+        pytest.param(None, 8, "networkx"),
+        pytest.param(16, 16, "networkx"),
+        pytest.param(None, 8, "igraph"),
+        pytest.param(16, 16, "igraph"),
+    ],
 )
-def test_generate_network_lazy(create_testfolder, resample, expected):
+def test_generate_network_lazy(create_testfolder, resample, expected, backend):
     """test generate network"""
     f = create_testfolder / "test.zipddl"
     f2 = create_testfolder / "test2.zipddl"
@@ -475,22 +501,29 @@ def test_generate_network_lazy(create_testfolder, resample, expected):
             layout_method="mod_fr",
             lazy=True,
             key="junction",
+            backend=backend,
         )
         assert vdj.n_obs == expected
         assert vdj.layout is not None
         assert vdj.graph is not None
     else:
         generate_network(
-            vdj2, layout_method="mod_fr", lazy=True, key="junction"
+            vdj2,
+            layout_method="mod_fr",
+            lazy=True,
+            key="junction",
+            backend=backend,
         )
         assert vdj2.n_obs == expected
         assert vdj2.layout is not None
         assert vdj2.graph is not None
-    _data = vdj._data.with_columns(pl.lit("1").alias("clone_id"))
+    _data = vdj._data.with_columns(pl.lit("c1").alias("clone_id"))
     _data = _data.collect() if isinstance(_data, pl.LazyFrame) else _data
     vdj = DandelionPolars(_data)
     assert vdj._data.collect_schema()["clone_id"] == pl.String
-    generate_network(vdj, layout_method="mod_fr", lazy=True, key="junction")
+    generate_network(
+        vdj, layout_method="mod_fr", lazy=True, key="junction", backend=backend
+    )
     assert vdj.layout is not None
     # also test read/write lazy
     f3 = create_testfolder / "test_lazy.zipddl"

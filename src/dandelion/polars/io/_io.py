@@ -6,7 +6,9 @@ import os
 import re
 import tempfile
 
+import igraph as ig
 import networkx as nx
+import numpy as np
 import pandas as pd
 import polars as pl
 
@@ -131,19 +133,24 @@ def read_zipddl(
     if "graph" in root:
         graph_group = root["graph"]
         graphs = []
+        tiny_weight = 1e-12
         for key in sorted(graph_group.array_keys()):
             arr = graph_group[key][:]
             with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_h5:
                 tmp_h5.write(arr.tobytes())
                 tmp_h5.flush()
-                df = _read_h5_csr_matrix_zarr(tmp_h5.name, as_df=True)
-                g = _create_graph(df, adjust_adjacency=0, fillna=0)
-                # Recover encoded zero-weight edges written as a tiny
-                # positive sentinel to survive sparse serialization.
-                tiny_weight = 1e-12
-                for _, _, edge_data in g.edges(data=True):
-                    if abs(edge_data.get("weight", 0.0)) <= tiny_weight:
-                        edge_data["weight"] = 0.0
+
+                mat, columns, index = _read_h5_csr_matrix_zarr(
+                    tmp_h5.name, as_df=False
+                )
+
+                # Vectorized recovery of the zero-weight sentinel — replaces the
+                # previous per-edge Python loop entirely.
+                near_zero_mask = np.abs(mat.data) <= tiny_weight
+                if near_zero_mask.any():
+                    mat.data[near_zero_mask] = 0.0
+
+                g = _create_igraph_from_sparse(mat, np.array(index))
                 graphs.append(g)
         constructor["graph"] = tuple(graphs)
 
@@ -276,7 +283,7 @@ def read_h5ddl(
 
 def _read_h5_csr_matrix_zarr(
     filename: Path | str, as_df: bool = True
-) -> pd.DataFrame:
+) -> pd.DataFrame | csr_matrix | tuple[csr_matrix, list[str], list[str]]:
     """
     Read a group from an H5 file originally stored as a compressed sparse matrix.
 
@@ -284,22 +291,26 @@ def _read_h5_csr_matrix_zarr(
     ----------
     filename : Path | str
         The path to the H5 file.
+    as_df : bool, optional
+        If True, return a dense pandas DataFrame (default, preserves original
+        behavior). If False, return the sparse csr_matrix along with the
+        column and index names as plain Python lists, avoiding any dense
+        conversion.
 
     Returns
     -------
-    pd.DataFrame
-        The data from the specified group as a pandas dataframe.
+    pd.DataFrame | tuple[csr_matrix, list[str], list[str]]
+        If as_df=True: dense DataFrame with named columns/index (original behavior).
+        If as_df=False: (csr_matrix, columns, index) without ever materializing
+        a dense array.
     """
     with h5py.File(filename, "r") as f:
         data = f["data"][:]
         indices = f["indices"][:]
         indptr = f["indptr"][:]
         shape = tuple(f["shape"][:])
-        # Reconstruct CSR matrix
         loaded_matrix = csr_matrix((data, indices, indptr), shape=shape)
-        if not as_df:
-            return loaded_matrix
-        df = pd.DataFrame(loaded_matrix.toarray())
+
         df_col = [
             x.decode("utf-8") if isinstance(x, bytes) else x
             for x in f["columns"][:]
@@ -308,6 +319,11 @@ def _read_h5_csr_matrix_zarr(
             x.decode("utf-8") if isinstance(x, bytes) else x
             for x in f["index"][:]
         ]
+
+        if not as_df:
+            return loaded_matrix, df_col, df_index
+
+        df = pd.DataFrame(loaded_matrix.toarray())
         df.columns = df_col
         df.index = df_index
     return df
@@ -1152,3 +1168,20 @@ def read_10x_airr(
             remove_trailing_hyphen_number=remove_trailing_hyphen_number,
         )
     return vdj
+
+
+def _create_igraph_from_sparse(mat: csr_matrix, names: np.ndarray) -> ig.Graph:
+    coo = mat.tocoo()
+    mask = coo.row < coo.col  # upper triangle only, avoids duplicate edges
+    rows = coo.row[mask]
+    cols = coo.col[mask]
+    weights = coo.data[mask].astype(np.float64)
+
+    g = ig.Graph(
+        n=mat.shape[0],
+        edges=list(zip(rows.tolist(), cols.tolist())),
+        directed=False,
+    )
+    g.vs["name"] = list(names)
+    g.es["weight"] = weights.tolist()
+    return g
