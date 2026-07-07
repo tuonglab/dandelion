@@ -51,10 +51,10 @@ def generate_layout(
     if isinstance(G, ig.Graph):
         # Convert igraph to networkx for layout computation
         Gi = G
-        G = Gi.to_networkx()
+        G = _igraph_to_networkx_named(Gi)
     if isinstance(G_, ig.Graph):
         Gi_ = G_
-        G_ = Gi_.to_networkx()
+        G_ = _igraph_to_networkx_named(Gi_)
     if compute_layout:
         if layout_method == "mod_fr":
             if not expanded_only:
