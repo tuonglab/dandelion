@@ -2433,7 +2433,6 @@ def _build_graphs_networkx(
         tgt = edges["target"].to_list()
         wgt = edges["weight"].to_list()
         G.add_weighted_edges_from(zip(src, tgt, wgt))
-    if edges is not None:
         if min_size == 2:
             nodes_with_edges = set(src) | set(tgt)
             keep = [v for v in vertices if v in nodes_with_edges]
