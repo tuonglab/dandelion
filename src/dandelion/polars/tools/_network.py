@@ -1336,20 +1336,6 @@ def calculate_distance_matrix_long(
     return total_dist
 
 
-def lookup_weights(
-    struct: pl.Struct, total_dist: np.ndarray, lazy: bool
-) -> pl.Series:
-    s = struct.struct.field("_src_pos").to_numpy().copy()
-    t = struct.struct.field("_tgt_pos").to_numpy().copy()
-    if lazy:
-        w = da.stack([total_dist[s[i], t[i]] for i in range(len(s))]).compute()
-    else:
-        w = total_dist[s, t]
-        if hasattr(w, "A1"):
-            w = w.A1
-    return pl.Series(np.asarray(w), dtype=pl.Float64)
-
-
 def _dedup_edges_pl(edges: pl.LazyFrame) -> pl.LazyFrame:
     """Deduplicate edges based on unordered source-target pair, keeping first occurrence."""
     return (
