@@ -2447,6 +2447,8 @@ def _build_graphs_networkx(
         else:
             keep = vertices
         G_ = G.subgraph(keep).copy()
+    else:
+        G_ = G.copy()
     return G, G_
 
 
