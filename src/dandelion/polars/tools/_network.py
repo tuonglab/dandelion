@@ -590,7 +590,6 @@ def generate_network(
 
             # ===================================================================
             # ZERO-DISTANCE GROUPS
-            # Same union logic; kept separate because the edge-filtering differs.
             # ===================================================================
             zero_groups_df = (
                 meta_exploded.select(["group_key", "cell_id", "pos"])
@@ -608,8 +607,6 @@ def generate_network(
             # ===================================================================
             # MST COMPUTATION
             # ===================================================================
-            if verbose:
-                print("Computing minimum spanning tree edges")
             mst_edge_dict = {}
             for row in mst_groups_df.collect().iter_rows(named=True):
                 ids = row["cell_ids"]
@@ -639,11 +636,6 @@ def generate_network(
 
             # ===================================================================
             # MERGE MST AND ZERO-DISTANCE EDGES
-            #
-            # Index MUST be the canonical "min_cell_id|max_cell_id" string so
-            # combine_first aligns on edge identity, not row position.
-            # This matches the original's set_edge_list_index / _add_sorted_index
-            # behaviour.
             # ===================================================================
             if mst_edge_dict:
                 edge_listx = pl.concat(
@@ -652,11 +644,12 @@ def generate_network(
                 edge_listx = _dedup_edges_pl(edge_listx)
             else:
                 edge_listx = pl.LazyFrame(
-                    columns=["source", "target", "weight"],
+                    columns=["source", "target", "weight", "_edge_key"],
                     schema={
                         "source": pl.Utf8,
                         "target": pl.Utf8,
                         "weight": pl.Int64,
+                        "_edge_key": pl.Utf8,
                     },
                 )
 
@@ -675,7 +668,7 @@ def generate_network(
                 tmp_edge_listx = _dedup_edges_pl(tmp_edge_listx)
             else:
                 tmp_edge_listx = pl.LazyFrame(
-                    columns=["source", "target", "weight"],
+                    columns=["source", "target", "weight", "_edge_key"],
                     schema={
                         "source": pl.Utf8,
                         "target": pl.Utf8,
@@ -692,8 +685,6 @@ def generate_network(
             # ===================================================================
             # FINAL LAYOUT + GRAPH CREATION
             # ===================================================================
-            if verbose:
-                print("create graph")
             g, g_, lyt, lyt_ = generate_layout(
                 vertices=meta_df.collect()["cell_id"].to_list(),
                 edges=edge_list_final,
