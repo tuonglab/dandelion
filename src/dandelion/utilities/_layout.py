@@ -9,6 +9,7 @@ import networkx as nx
 from numba import njit, prange, cuda
 from scipy.sparse import issparse, coo_matrix, csr_matrix
 from scanpy import logging as logg
+from tqdm import tqdm
 from typing import Any, Literal
 
 from networkx.utils import np_random_state as random_state
@@ -76,8 +77,14 @@ def generate_layout(
                 G.add_weighted_edges_from(
                     [
                         (x, y, z)
-                        for x, y, z in zip(
-                            edges["source"], edges["target"], edges["weight"]
+                        for x, y, z in tqdm(
+                            zip(
+                                edges["source"],
+                                edges["target"],
+                                edges["weight"],
+                            ),
+                            disable=not verbose,
+                            desc="Creating graph...",
                         )
                     ]
                 )
