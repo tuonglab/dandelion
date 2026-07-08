@@ -272,6 +272,7 @@ def clone_diversity(
     normalize: bool = True,
     expanded_only: bool = False,
     use_contracted: bool = False,
+    backend: Literal["networkx", "igraph"] = "networkx",
     verbose: bool = False,
     **kwargs,
 ) -> tuple[pd.DataFrame, dict[list[float]]]:
@@ -309,6 +310,8 @@ def clone_diversity(
         Whether or not to perform the gini calculation after contraction of clone network.
         Only applies to calculation of clone size gini index. Default is False.
         This is to try and preserve the single-cell properties of the network.
+    backend : Literal["networkx", "igraph"], optional
+        Backend to use for network calculations. Default is "networkx".
     verbose : bool, optional
         whether to print progress.
     **kwargs
@@ -332,6 +335,7 @@ def clone_diversity(
             n_cpus=n_cpus,
             expanded_only=expanded_only,
             use_contracted=use_contracted,
+            backend=backend,
             verbose=verbose,
             **kwargs,
         )
@@ -359,6 +363,7 @@ def diversity_gini(
     n_cpus: int = -1,
     expanded_only: bool = False,
     use_contracted: bool = False,
+    backend: Literal["networkx", "igraph"] = "networkx",
     verbose: bool = False,
     **kwargs,
 ) -> tuple[dict[pd.DataFrame], dict[np.ndarray]]:
@@ -390,6 +395,8 @@ def diversity_gini(
         Whether or not to perform the gini calculation after contraction of clone network.
         Only applies to calculation of clone size gini index. Default is False.
         This is to try and preserve the single-cell properties of the network.
+    backend : Literal["networkx", "igraph"], optional
+        Backend to use for network calculations. Default is "networkx".
     verbose : bool, optional
         whether to print progress.
     **kwargs
@@ -413,6 +420,7 @@ def diversity_gini(
         expanded_only=expanded_only,
         contracted=use_contracted,
         verbose=verbose,
+        backend=backend,
         **kwargs,
     )
 
@@ -492,6 +500,7 @@ def gini_indices(
     expanded_only: bool = False,
     contracted: bool = False,
     verbose: bool = False,
+    backend: Literal["networkx", "igraph"] = "networkx",
     **kwargs,
 ) -> tuple[pd.DataFrame, dict[list[float]], dict[list[float]]]:
     """Gini indices."""
@@ -536,6 +545,7 @@ def gini_indices(
                 min_size,
                 expanded_only,
                 contracted,
+                backend,
                 **kwargs,
             )
             for _ in iterator
@@ -703,6 +713,7 @@ def _bootstrap_network(
     min_size: int,
     expanded_only: bool,
     contracted: bool,
+    backend: Literal["networkx", "igraph"],
     **kwargs,
 ):
     """
@@ -716,6 +727,7 @@ def _bootstrap_network(
         force_replace=True,
         verbose=False,
         compute_layout=False,
+        backend=backend,
         **kwargs,
     )
     # ---- Choose metric mode
