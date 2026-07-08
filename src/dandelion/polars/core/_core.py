@@ -9,6 +9,7 @@ import unicodedata
 import warnings
 import zarr
 
+import igraph as ig
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -108,7 +109,9 @@ class DandelionPolars:
         metadata: pl.LazyFrame | pl.DataFrame | pd.DataFrame | None = None,
         germline: dict[str, str] | None = None,
         layout: tuple[dict[str, np.array], dict[str, np.array]] | None = None,
-        graph: tuple[nx.Graph, nx.Graph] | None = None,
+        graph: (
+            tuple[nx.Graph, nx.Graph] | tuple[ig.Graph, ig.Graph] | None
+        ) = None,
         distances: csr_matrix | None = None,
         initialize: bool = True,
         library_type: Literal["tr-ab", "tr-gd", "ig"] | None = None,
@@ -130,8 +133,8 @@ class DandelionPolars:
             dictionary of germline gene:sequence records.
         layout : tuple[dict[str, np.array], dict[str, np.array]] | None, optional
             node positions for computed graph.
-        graph : tuple[nx.Graph, nx.Graph] | None, optional
-            networkx graphs for clonotype networks.
+        graph : tuple[nx.Graph, nx.Graph] | tuple[ig.Graph, ig.Graph] | None, optional
+            networkx or igraph graphs for clonotype networks.
         distances : csr_matrix | None, optional
             distance matrix for sequences.
         initialize : bool, optional
@@ -284,7 +287,10 @@ class DandelionPolars:
         if self.layout is not None:
             descr += f"\n    layout: {', '.join(['layout for '+ str(len(x)) + ' vertices' for x in (self.layout[0], self.layout[1]) if x is not None])}"
         if self.graph is not None:
-            descr += f"\n    graph: {', '.join(['networkx graph of '+ str(len(x)) + ' vertices' for x in (self.graph[0], self.graph[1]) if x is not None])} "
+            if isinstance(self.graph[0], ig.Graph):
+                descr += f"\n    graph: {', '.join(['igraph graph of '+ str(x.vcount()) + ' vertices' for x in (self.graph[0], self.graph[1]) if x is not None])} "
+            else:
+                descr += f"\n    graph: {', '.join(['networkx graph of '+ str(len(x)) + ' vertices' for x in (self.graph[0], self.graph[1]) if x is not None])} "
         if self.distances is not None:
             descr += f"\n    distances: distance matrix of shape {self.distances.shape}"
         return descr
@@ -587,12 +593,22 @@ class DandelionPolars:
         # ---- Graph ----------------------------------------------------
         if self.graph is not None:
             keep_set = set(cell_ids.to_list())
-            _graph = (
-                self.graph[0].subgraph(keep_set),
-                self.graph[1].subgraph(
-                    [n for n in self.graph[1].nodes if n in keep_set]
-                ),
-            )
+            if isinstance(self.graph[0], ig.Graph):
+                _graph = (
+                    self.graph[0].subgraph(
+                        self.graph[0].vs.select(name_in=keep_set)
+                    ),
+                    self.graph[1].subgraph(
+                        self.graph[1].vs.select(name_in=keep_set)
+                    ),
+                )
+            else:
+                _graph = (
+                    self.graph[0].subgraph(keep_set),
+                    self.graph[1].subgraph(
+                        [n for n in self.graph[1].nodes if n in keep_set]
+                    ),
+                )
         else:
             _graph = None
         sliced = DandelionPolars(
@@ -1817,7 +1833,9 @@ class DandelionPolars:
         layout: (
             tuple[dict[str, np.ndarray], dict[str, np.ndarray]] | None
         ) = None,
-        graph: tuple[nx.Graph, nx.Graph] | None = None,
+        graph: (
+            tuple[nx.Graph, nx.Graph] | tuple[ig.Graph, ig.Graph] | None
+        ) = None,
         distances: csr_matrix | None = None,
         germline: dict[str, str] | None = None,
         reinitialize: bool = True,
@@ -1840,8 +1858,8 @@ class DandelionPolars:
             Column name to use as the clone identifier. Only used if reinitialize is True.
         layout : tuple[dict[str, np.ndarray], dict[str, np.ndarray]] | None, optional
             Node positions for computed graph.
-        graph : tuple[nx.Graph, nx.Graph] | None, optional
-            NetworkX graphs for clonotype networks.
+        graph : tuple[nx.Graph, nx.Graph] | tuple[ig.Graph, ig.Graph] |None = None, optional
+            NetworkX or igraph graphs for clonotype networks.
         distances : csr_matrix | None, optional
             Distance matrix for sequences.
         germline : dict[str, str] | None, optional
@@ -3385,26 +3403,52 @@ class DandelionPolars:
             graph_grp = root.create_group("graph", overwrite=True)
             for i, g in enumerate(self.graph):
                 with tempfile.NamedTemporaryFile(suffix=".h5") as tmp_h5:
-                    # Convert NetworkX graph to CSR adjacency
-                    G_df = nx.to_pandas_adjacency(g, nonedge=np.nan)
                     # Add a tiny weight to zero edges to avoid issues with sparse representation
                     tiny_weight = 1e-12
-                    zero_edge_mask = G_df.notna() & G_df.eq(0)
-                    if zero_edge_mask.to_numpy().any():
-                        G_df = G_df.mask(zero_edge_mask, tiny_weight)
-                    G_x = csr_matrix(G_df.to_numpy())
+                    if not isinstance(g, ig.Graph):
+                        gi = ig.Graph.from_networkx(g)
+                        if (
+                            "name" not in gi.vs.attributes()
+                            and "_nx_name" in gi.vs.attributes()
+                        ):
+                            gi.vs["name"] = gi.vs["_nx_name"]
+                    else:
+                        gi = g
 
+                    names = np.array(gi.vs["name"], dtype="S")
+                    n = gi.vcount()
+                    edges = gi.get_edgelist()
+
+                    if not edges:
+                        G_x = csr_matrix((n, n), dtype=np.float64)
+                    else:
+                        edges_arr = np.array(edges, dtype=np.int64)
+                        u_idx = edges_arr[:, 0]
+                        v_idx = edges_arr[:, 1]
+                        weights = (
+                            gi.es["weight"]
+                            if "weight" in gi.es.attributes()
+                            else [1.0] * len(edges)
+                        )
+                        # u_idx = np.array([u for u, v in edges], dtype=np.int64)
+                        # v_idx = np.array([v for u, v in edges], dtype=np.int64)
+                        w = np.array(weights, dtype=np.float64)
+                        w = np.where(w == 0, tiny_weight, w)
+
+                        rows = np.concatenate([u_idx, v_idx])
+                        cols = np.concatenate([v_idx, u_idx])
+                        vals = np.concatenate([w, w])
+
+                        G_x = csr_matrix(
+                            (vals, (rows, cols)), shape=(n, n), dtype=np.float64
+                        )
                     with h5py.File(tmp_h5.name, "w") as hf:
                         hf.create_dataset("data", data=G_x.data)
                         hf.create_dataset("indices", data=G_x.indices)
                         hf.create_dataset("indptr", data=G_x.indptr)
                         hf.create_dataset("shape", data=G_x.shape)
-                        hf.create_dataset(
-                            "columns", data=np.array(G_df.columns, dtype="S")
-                        )
-                        hf.create_dataset(
-                            "index", data=np.array(G_df.index, dtype="S")
-                        )
+                        hf.create_dataset("columns", data=names)
+                        hf.create_dataset("index", data=names)
                     tmp_h5.seek(0)
                     arr = np.frombuffer(tmp_h5.read(), dtype=np.uint8)
                     create_zarr_dataset(
@@ -3496,6 +3540,12 @@ class DandelionPolars:
         out_fasta = folder / f"{filename_prefix}_contig.fasta"
         out_anno_path = folder / f"{filename_prefix}_contig_annotations.csv"
 
+        # convert to polars
+        if self._backend == "pandas":
+            _backend = "pandas"
+            self.to_polars()
+        else:
+            _backend = "polars"
         # Handle both Polars LazyFrame and DataFrame, as well as pandas DataFrame
         if isinstance(self._data, pl.LazyFrame):
             data_df = self._data.collect()
@@ -3533,11 +3583,15 @@ class DandelionPolars:
             "raw_clonotype_id": clone_key,
             "raw_consensus_id": clone_key,
         }
-        if "complete_vdj" not in self._data.columns:
+        if "complete_vdj" not in self._data.collect_schema():
             column_map.pop("full_length")
         # Support both _10x-suffixed (10x CellRanger) and plain (SeekGene) column names.
         is_cell_col = next(
-            (c for c in ["is_cell_10x", "is_cell"] if c in self._data.columns),
+            (
+                c
+                for c in ["is_cell_10x", "is_cell"]
+                if c in self._data.collect_schema()
+            ),
             None,
         )
         if is_cell_col:
@@ -3548,7 +3602,7 @@ class DandelionPolars:
             (
                 c
                 for c in ["high_confidence_10x", "high_confidence"]
-                if c in self._data.columns
+                if c in self._data.collect_schema()
             ),
             None,
         )
@@ -3578,6 +3632,11 @@ class DandelionPolars:
         anno = pd.DataFrame(anno)
         anno = anno.map(lambda x: bool_map[x] if x in bool_map.keys() else x)
         anno.to_csv(out_anno_path, index=False)
+
+        if (
+            _backend == "pandas"
+        ):  # convert back to pandas if the original backend was pandas
+            self.to_pandas()
 
     def write_10x(
         self,

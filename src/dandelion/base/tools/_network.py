@@ -901,7 +901,10 @@ def clone_centrality(vdj: Dandelion):
             )
         else:
             G = vdj.graph[0]
-            cc = nx.closeness_centrality(G)
+            if isinstance(G, nx.Graph):
+                cc = nx.closeness_centrality(G)
+            else:
+                cc = dict(zip(G.vs["name"], G.closeness()))
             cc = pd.DataFrame.from_dict(
                 cc, orient="index", columns=["clone_centrality"]
             )
