@@ -1535,7 +1535,8 @@ def test_bootstrap_diversity_iteration_gini():
 # ---------------------------------------------------------------------------
 
 
-def test_bootstrap_network_clone_degree(vdj2_with_clones):
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
     vdj, _ = vdj2_with_clones
     vdj.to_pandas()
@@ -1547,12 +1548,14 @@ def test_bootstrap_network_clone_degree(vdj2_with_clones):
         expanded_only=False,
         contracted=False,
         n_cpus=2,
+        backend=backend,
     )
     assert isinstance(cluster_gini, float)
     assert isinstance(vertex_gini, float)
 
 
-def test_bootstrap_network_clone_centrality(vdj2_with_clones):
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
     vdj, _ = vdj2_with_clones
     vdj.to_pandas()
@@ -1563,13 +1566,15 @@ def test_bootstrap_network_clone_centrality(vdj2_with_clones):
         min_size=4,
         expanded_only=False,
         contracted=False,
+        backend=backend,
         n_cpus=2,
     )
     assert isinstance(cluster_gini, float)
     assert isinstance(vertex_gini, float)
 
 
-def test_bootstrap_network_clone_network(vdj2_with_clones):
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_bootstrap_network_clone_network(vdj2_with_clones, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
     vdj, _ = vdj2_with_clones
     vdj.to_pandas()
@@ -1580,6 +1585,7 @@ def test_bootstrap_network_clone_network(vdj2_with_clones):
         min_size=4,
         expanded_only=False,
         contracted=False,
+        backend=backend,
         n_cpus=2,
     )
     assert isinstance(cluster_gini, float)

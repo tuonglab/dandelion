@@ -3577,11 +3577,15 @@ class DandelionPolars:
             "raw_clonotype_id": clone_key,
             "raw_consensus_id": clone_key,
         }
-        if "complete_vdj" not in self._data.columns:
+        if "complete_vdj" not in self._data.collect_schema():
             column_map.pop("full_length")
         # Support both _10x-suffixed (10x CellRanger) and plain (SeekGene) column names.
         is_cell_col = next(
-            (c for c in ["is_cell_10x", "is_cell"] if c in self._data.columns),
+            (
+                c
+                for c in ["is_cell_10x", "is_cell"]
+                if c in self._data.collect_schema()
+            ),
             None,
         )
         if is_cell_col:
@@ -3592,7 +3596,7 @@ class DandelionPolars:
             (
                 c
                 for c in ["high_confidence_10x", "high_confidence"]
-                if c in self._data.columns
+                if c in self._data.collect_schema()
             ),
             None,
         )
