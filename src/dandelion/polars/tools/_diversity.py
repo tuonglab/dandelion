@@ -1128,35 +1128,68 @@ def clone_networkstats(
         vertexsizes = defaultdict(list)
         clustersizes = defaultdict(list)
         nodes_names = defaultdict(list)
-        for subg in nx.connected_components(G):
-            nodes = sorted(list(subg))
-            # just assign the value in a single cell, because this will be representative of the clone
-            tmp = nodes[0]
-            for n in nodes:
-                nodes_names[n] = tmp  # keep so i can reference later
-            if len(nodes) > 1:
-                G_ = G.subgraph(nodes).copy()
-                remove_edges[tmp] = [
-                    (e[0], e[1])
-                    for e in G_.edges(data=True)
-                    if e[2]["weight"] > 0
-                ]
-                if len(remove_edges[tmp]) > 0:
-                    G_.remove_edges_from(remove_edges[tmp])
-                    for connected in nx.connected_components(G_):
-                        vertexsizes[tmp].append(len(connected))
-                    vertexsizes[tmp] = sorted(vertexsizes[tmp], reverse=True)
-                else:
-                    vertexsizes[tmp] = [
-                        1 for i in range(len(G_.edges(data=True)))
+        if isinstance(G, nx.Graph):
+            for subg in nx.connected_components(G):
+                nodes = sorted(list(subg))
+                # just assign the value in a single cell, because this will be representative of the clone
+                tmp = nodes[0]
+                for n in nodes:
+                    nodes_names[n] = tmp  # keep so i can reference later
+                if len(nodes) > 1:
+                    G_ = G.subgraph(nodes).copy()
+                    remove_edges[tmp] = [
+                        (e[0], e[1])
+                        for e in G_.edges(data=True)
+                        if e[2]["weight"] > 0
                     ]
-                if network_clustersize:
-                    clustersizes[tmp] = len(vertexsizes[tmp])
+                    if len(remove_edges[tmp]) > 0:
+                        G_.remove_edges_from(remove_edges[tmp])
+                        for connected in nx.connected_components(G_):
+                            vertexsizes[tmp].append(len(connected))
+                        vertexsizes[tmp] = sorted(
+                            vertexsizes[tmp], reverse=True
+                        )
+                    else:
+                        vertexsizes[tmp] = [
+                            1 for i in range(len(G_.edges(data=True)))
+                        ]
+                    if network_clustersize:
+                        clustersizes[tmp] = len(vertexsizes[tmp])
+                    else:
+                        clustersizes[tmp] = len(nodes)
                 else:
-                    clustersizes[tmp] = len(nodes)
-            else:
-                vertexsizes[tmp] = [1]
-                clustersizes[tmp] = [1]
+                    vertexsizes[tmp] = [1]
+                    clustersizes[tmp] = [1]
+        else:
+            for subg in G.connected_components():
+                nodes = [G.vs[node_id]["name"] for node_id in subg]
+                # assign representative node
+                tmp = nodes[0]
+                for n in nodes:
+                    nodes_names[n] = tmp
+                if len(nodes) > 1:
+                    G_ = G.subgraph(nodes)
+                    remove_edges[tmp] = [
+                        (e.source, e.target) for e in G_.es if e["weight"] > 0
+                    ]
+                    if len(remove_edges[tmp]) > 0:
+                        # get edge IDs to remove
+                        remove_ids = [e.index for e in G_.es if e["weight"] > 0]
+                        G_.delete_edges(remove_ids)
+                        for connected in G_.connected_components():
+                            vertexsizes[tmp].append(len(connected))
+                        vertexsizes[tmp] = sorted(
+                            vertexsizes[tmp], reverse=True
+                        )
+                    else:
+                        vertexsizes[tmp] = [1 for _ in range(G_.ecount())]
+                    if network_clustersize:
+                        clustersizes[tmp] = len(vertexsizes[tmp])
+                    else:
+                        clustersizes[tmp] = len(nodes)
+                else:
+                    vertexsizes[tmp] = [1]
+                    clustersizes[tmp] = [1]
         return (nodes_names, vertexsizes, clustersizes)
 
 

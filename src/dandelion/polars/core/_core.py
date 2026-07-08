@@ -3540,6 +3540,12 @@ class DandelionPolars:
         out_fasta = folder / f"{filename_prefix}_contig.fasta"
         out_anno_path = folder / f"{filename_prefix}_contig_annotations.csv"
 
+        # convert to polars
+        if self._backend == "pandas":
+            _backend = "pandas"
+            self.to_polars()
+        else:
+            _backend = "polars"
         # Handle both Polars LazyFrame and DataFrame, as well as pandas DataFrame
         if isinstance(self._data, pl.LazyFrame):
             data_df = self._data.collect()
@@ -3626,6 +3632,11 @@ class DandelionPolars:
         anno = pd.DataFrame(anno)
         anno = anno.map(lambda x: bool_map[x] if x in bool_map.keys() else x)
         anno.to_csv(out_anno_path, index=False)
+
+        if (
+            _backend == "pandas"
+        ):  # convert back to pandas if the original backend was pandas
+            self.to_pandas()
 
     def write_10x(
         self,

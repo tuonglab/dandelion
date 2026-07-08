@@ -904,7 +904,12 @@ def clone_degree(
             )
         else:
             G = vdj.graph[0]
-            degree_dict = dict(G.degree(weight=weight))
+            if isinstance(G, nx.Graph):
+                degree_dict = dict(G.degree(weight=weight))
+            else:
+                degree_dict = dict(
+                    zip(G.vs["name"], G.strength(weights="weight"))
+                )
             df = pl.DataFrame(
                 {
                     "cell_id": list(degree_dict.keys()),
@@ -952,7 +957,15 @@ def clone_centrality(vdj: DandelionPolars):
             )
         else:
             G = vdj.graph[0]
-            cc = nx.closeness_centrality(G)
+            if isinstance(G, nx.Graph):
+                cc = nx.closeness_centrality(G)
+            else:
+                print(G.vs["name"][:5])
+                print(type(G.vs["name"][0]))
+                cc = dict(zip(G.vs["name"], G.closeness()))
+            print(type(G))
+            print(list(cc.keys())[:5])
+            print(type(list(cc.keys())[0]))
             df = pl.DataFrame(
                 {
                     "cell_id": list(cc.keys()),
