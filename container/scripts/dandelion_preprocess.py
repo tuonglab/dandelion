@@ -354,7 +354,7 @@ def main():
             subset=["sample"], keep="first"
         )
         generated_meta = generated_meta.set_index("sample")
-        generated_samples = sorted(list(pd.unique(generated_samples)))
+        generated_samples = sorted(set(generated_samples))
         return generated_meta, generated_samples
 
     # set up sample list + metadata
