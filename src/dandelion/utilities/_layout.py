@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+import igraph as ig
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -30,73 +31,30 @@ def generate_layout(
         "fa2",
     ] = "mod_fr2",
     expanded_only: bool = False,
-    graphs: tuple[nx.Graph, nx.Graph] = None,
+    graphs: tuple[nx.Graph, nx.Graph] | tuple[ig.Graph, ig.Graph] | None = None,
     singleton_mass: float = 0.5,
+    backend: Literal["networkx", "igraph"] = "networkx",
     **kwargs,
-) -> tuple[nx.Graph, nx.Graph, dict, dict]:
-    """Generate layout.
-
-    Parameters
-    ----------
-    vertices : list
-        list of vertices
-    edges : pd.DataFrame, optional
-        edge list in a pandas data frame.
-    min_size : int, optional
-        minimum clone size.
-    weight : str | None, optional
-        name of weight column.
-    verbose : bool, optional
-        whether or not to print status
-    compute_layout : bool, optional
-        whether or not to compute layout.
-    layout_method : Literal["mod_fr", "mod_fr2", "mod_fr2_gpu", "mod_fr_bh", "mod_fr_bh_gpu", "fa2"], optional
-        layout method.
-    expanded_only : bool, optional
-        whether or not to only compute layout on expanded clones.
-    graphs: tuple[nx.Graph, nx.Graph], optional
-        tuple of graphs.
-    singleton_mass : float, optional
-        Mass assigned to singleton nodes (no edges) in Barnes-Hut layouts.
-        Lower values reduce their impact on pushing connected components apart.
-        Default 0.5. Only used with 'mod_fr_bh' and 'mod_fr_bh_gpu'.
-    **kwargs
-        passed to fruchterman_reingold_layout.
-
-    Returns
-    -------
+) -> (
     tuple[nx.Graph, nx.Graph, dict, dict]
-        graphs and layout positions.
-    """
+    | tuple[ig.Graph, ig.Graph, dict, dict]
+):
+    """Generate network layout for a given graph or set of vertices and edges."""
     if graphs is None:
         if vertices is not None:
-            G = nx.Graph()
-            G.add_nodes_from(vertices)
-            if edges is not None:
-                G.add_weighted_edges_from(
-                    [
-                        (x, y, z)
-                        for x, y, z in zip(
-                            edges["source"], edges["target"], edges["weight"]
-                        )
-                    ]
-                )
-        G_ = G.copy()
+            if backend == "igraph":
+                G, G_, Gi, Gi_ = _build_graphs_igraph(vertices, edges, min_size)
+            else:
+                G, G_ = _build_graphs_networkx(vertices, edges, min_size)
     else:
-        G = graphs[0]
-        G_ = graphs[1]
-    if min_size == 2:
-        if edges is not None:
-            G_.remove_nodes_from(nx.isolates(G))
-        else:
-            pass
-    elif min_size > 2:
-        if edges is not None:
-            for component in list(nx.connected_components(G_)):
-                if len(component) < min_size:
-                    for node in component:
-                        G_.remove_node(node)
-
+        G, G_ = graphs
+    if isinstance(G, ig.Graph):
+        # Convert igraph to networkx for layout computation
+        Gi = G
+        G = _igraph_to_networkx_named(Gi)
+    if isinstance(G_, ig.Graph):
+        Gi_ = G_
+        G_ = _igraph_to_networkx_named(Gi_)
     if compute_layout:
         if layout_method == "mod_fr":
             if not expanded_only:
@@ -186,8 +144,12 @@ def generate_layout(
             G = G_
             pos = pos_
 
+        if backend == "igraph":
+            return (Gi, Gi_, pos, pos_)
         return (G, G_, pos, pos_)
     else:
+        if backend == "igraph":
+            return (Gi, Gi_, None, None)
         return (G, G_, None, None)
 
 
@@ -2449,27 +2411,103 @@ def extract_edge_weights(
     list
         list of edge weights.
     """
-    if expanded_only:
-        try:
-            edges, weights = zip(
-                *nx.get_edge_attributes(vdj.graph[1], "weight").items()
+    graph = vdj.graph[1] if expanded_only else vdj.graph[0]
+
+    try:
+        if isinstance(graph, ig.Graph):
+            weights = graph.es["weight"]
+        else:
+            _, weights = zip(*nx.get_edge_attributes(graph, "weight").items())
+    except (ValueError, KeyError) as e:
+        logg.info(
+            "{} i.e. the graph does not contain edges. Therefore, edge weights not returned.".format(
+                e
             )
-        except ValueError as e:
-            logg.info(
-                "{} i.e. the graph does not contain edges. Therefore, edge weights not returned.".format(
-                    e
-                )
-            )
-    else:
-        try:
-            edges, weights = zip(
-                *nx.get_edge_attributes(vdj.graph[0], "weight").items()
-            )
-        except ValueError as e:
-            logg.info(
-                "{} i.e. the graph does not contain edges. Therefore, edge weights not returned.".format(
-                    e
-                )
-            )
+        )
+
     if "weights" in locals():
         return weights
+
+
+def _build_graphs_networkx(
+    vertices: list, edges: pd.DataFrame, min_size: int
+) -> tuple[nx.Graph, nx.Graph]:
+    """Helper function to build networkx graphs from vertices and edges."""
+    G = nx.Graph()
+    G.add_nodes_from(vertices)
+    if edges is not None:
+        src = edges["source"].to_list()
+        tgt = edges["target"].to_list()
+        wgt = edges["weight"].to_list()
+        G.add_weighted_edges_from(zip(src, tgt, wgt))
+        if min_size == 2:
+            nodes_with_edges = set(src) | set(tgt)
+            keep = [v for v in vertices if v in nodes_with_edges]
+        elif min_size > 2:
+            components = nx.connected_components(G)
+            keep = [
+                node
+                for component in components
+                if len(component) >= min_size
+                for node in component
+            ]
+        else:
+            keep = vertices
+        G_ = G.subgraph(keep).copy()
+    else:
+        G_ = G.copy()
+    return G, G_
+
+
+def _build_graphs_igraph(
+    vertices: list, edges: pd.DataFrame, min_size: int
+) -> tuple[nx.Graph, nx.Graph, ig.Graph, ig.Graph]:
+    """Helper function to build igraph graphs from vertices and edges."""
+    vertex_list = list(vertices)
+    vidx = {v: i for i, v in enumerate(vertex_list)}
+
+    if edges is not None:
+        src = edges["source"].to_list()
+        tgt = edges["target"].to_list()
+        wgt = edges["weight"].to_list()
+        edge_tuples = [(vidx[s], vidx[t]) for s, t in zip(src, tgt)]
+    else:
+        edge_tuples, wgt = [], []
+
+    Gi = ig.Graph(n=len(vertex_list), edges=edge_tuples, directed=False)
+    Gi.vs["name"] = vertex_list
+    if wgt:
+        Gi.es["weight"] = wgt
+    if edges is not None:
+        if min_size == 2:
+            degrees = Gi.degree()
+            keep_idx = [i for i, d in enumerate(degrees) if d > 0]
+        elif min_size > 2:
+            components = Gi.connected_components()
+            keep_idx = [
+                idx
+                for comp in components
+                if len(comp) >= min_size
+                for idx in comp
+            ]
+        else:
+            keep_idx = list(range(Gi.vcount()))
+        Gi_ = Gi.induced_subgraph(keep_idx)
+    # Convert back to networkx for downstream layout functions.
+    # Note: filtering already happened above on the cheap igraph
+    # representation, so these conversions are on the *filtered*
+    # (much smaller) G_, and on the full G only once.
+    G = _igraph_to_networkx_named(Gi)
+    G_ = _igraph_to_networkx_named(Gi_)
+    return G, G_, Gi, Gi_
+
+
+def _igraph_to_networkx_named(Gi: ig.Graph) -> nx.Graph:
+    """Convert an igraph.Graph to networkx.Graph, using the 'name' vertex
+    attribute as node keys instead of integer indices."""
+    Gnx = Gi.to_networkx()
+    # to_networkx() typically keys nodes by integer index; relabel using
+    # the 'name' attribute stored on each vertex.
+    mapping = {i: name for i, name in enumerate(Gi.vs["name"])}
+    Gnx = nx.relabel_nodes(Gnx, mapping)
+    return Gnx
