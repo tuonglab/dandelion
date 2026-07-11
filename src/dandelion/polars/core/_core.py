@@ -3793,10 +3793,10 @@ class LazyColumnExpr:
     def __getattr__(self, name):
         attr = getattr(self.expr, name)
         if callable(attr):
+
             def _wrapped(*args, **kwargs):
                 converted_args = [
-                    a.expr if isinstance(a, LazyColumnExpr) else a
-                    for a in args
+                    a.expr if isinstance(a, LazyColumnExpr) else a for a in args
                 ]
                 converted_kwargs = {
                     k: (v.expr if isinstance(v, LazyColumnExpr) else v)
