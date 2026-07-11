@@ -1083,7 +1083,7 @@ def test_dataframe_accessor_lazy_column(airr_polars):
     assert isinstance(da, DataFrameAccessor)
     # Accessing a column name on lazy → returns pl.Expr
     col_expr = da.cell_id
-    assert isinstance(col_expr, pl.Expr)
+    assert isinstance(col_expr, LazyFrameAccessor)
 
 
 def test_dataframe_accessor_lazy_attr_not_found(airr_polars):
