@@ -3790,6 +3790,8 @@ class LazyColumnExpr:
             return self.expr.is_in(rhs)
         return self.expr.is_in(other)
 
+    isin = is_in  # Alias for convenience
+
     def __getattr__(self, name):
         attr = getattr(self.expr, name)
         if callable(attr):
