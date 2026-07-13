@@ -3765,6 +3765,85 @@ def load_polars(
     return None  # Handle obj is None case
 
 
+class LazyColumnExpr:
+    """Lazy column expression that preserves source frame context."""
+
+    def __init__(self, source_df: pl.LazyFrame, column_name: str):
+        self._source_df = source_df
+        self._column_name = column_name
+
+    @property
+    def expr(self) -> pl.Expr:
+        return pl.col(self._column_name)
+
+    def is_in(self, other):
+        """Handle cross-frame membership checks by using concrete RHS values."""
+        if isinstance(other, LazyColumnExpr):
+            if other._source_df is self._source_df:
+                return self.expr.is_in(pl.col(other._column_name))
+            rhs = (
+                other._source_df.select(other._column_name)
+                .unique()
+                .collect(engine="streaming")
+                .to_series()
+            )
+            return self.expr.is_in(rhs)
+        return self.expr.is_in(other)
+
+    isin = is_in  # Alias for convenience
+
+    def __getattr__(self, name):
+        attr = getattr(self.expr, name)
+        if callable(attr):
+
+            def _wrapped(*args, **kwargs):
+                converted_args = [
+                    a.expr if isinstance(a, LazyColumnExpr) else a for a in args
+                ]
+                converted_kwargs = {
+                    k: (v.expr if isinstance(v, LazyColumnExpr) else v)
+                    for k, v in kwargs.items()
+                }
+                return attr(*converted_args, **converted_kwargs)
+
+            return _wrapped
+        return attr
+
+    def __repr__(self):
+        return repr(self.expr)
+
+    # Support comparison operators
+    def __eq__(self, other):
+        return self.expr.__eq__(
+            other.expr if isinstance(other, LazyColumnExpr) else other
+        )
+
+    def __ne__(self, other):
+        return self.expr.__ne__(
+            other.expr if isinstance(other, LazyColumnExpr) else other
+        )
+
+    def __lt__(self, other):
+        return self.expr.__lt__(
+            other.expr if isinstance(other, LazyColumnExpr) else other
+        )
+
+    def __le__(self, other):
+        return self.expr.__le__(
+            other.expr if isinstance(other, LazyColumnExpr) else other
+        )
+
+    def __gt__(self, other):
+        return self.expr.__gt__(
+            other.expr if isinstance(other, LazyColumnExpr) else other
+        )
+
+    def __ge__(self, other):
+        return self.expr.__ge__(
+            other.expr if isinstance(other, LazyColumnExpr) else other
+        )
+
+
 class DataFrameAccessor:
     """Wrapper that provides both DataFrame access and attribute-style column access."""
 
@@ -3814,7 +3893,7 @@ class DataFrameAccessor:
         if isinstance(df, pl.LazyFrame):
             if schema is not None and name in schema.names():
                 # Return a lazy expression for the column to avoid materialization
-                return pl.col(name)
+                return LazyColumnExpr(df, name)
             # Not a column, try to get actual attribute
             try:
                 return object.__getattribute__(df, name)
@@ -3839,7 +3918,7 @@ class DataFrameAccessor:
         if isinstance(key, str):
             if isinstance(df, pl.LazyFrame):
                 # Return an expression for lazy frames to keep pipeline lazy
-                return pl.col(key)
+                return LazyColumnExpr(df, key)
             else:
                 return SeriesAccessor(df[key])
 
@@ -3855,7 +3934,9 @@ class DataFrameAccessor:
             return df[key]
 
         # Handle boolean Series or expressions (for filtering)
-        elif isinstance(key, (pl.Series, pl.Expr)):
+        elif isinstance(key, (pl.Series, pl.Expr, LazyColumnExpr)):
+            if isinstance(key, LazyColumnExpr):
+                key = key.expr
             return df.filter(key)
 
         # For anything else, try to pass through
