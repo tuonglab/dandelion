@@ -71,8 +71,8 @@ F = TypeVar("F", bound=Callable)  # Define a TypeVar for any callable type
 RECEPTOR_SET = {"B", "abT", "gdT"}
 TRUES = ["T", "t", "True", "true", "TRUE", True, "1", 1]
 FALSES = ["F", "f", "False", "false", "FALSE", False, "0", 0]
-TRUES_STR = [str(x).upper() for x in TRUES]
-FALSES_STR = [str(x).upper() for x in FALSES]
+TRUES_STR = [str(x) for x in TRUES]
+FALSES_STR = [str(x) for x in FALSES]
 HEAVYLONG = ["IGH", "TRB", "TRD"]
 LIGHTSHORT = ["IGK", "IGL", "TRA", "TRG"]
 VCALL = "v_call"
