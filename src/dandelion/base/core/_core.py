@@ -2889,6 +2889,12 @@ def load_data(obj: pd.DataFrame | Path | str | None) -> pd.DataFrame:
                     columns={"duplicate_count": "umi_count"}, inplace=True
                 )
 
+        # Keep legacy pandas behavior: avoid nullable StringDtype/ArrowString
+        # in core data tables because downstream code and tests expect object.
+        for col in obj_.columns:
+            if isinstance(obj_[col].dtype, pd.StringDtype):
+                obj_[col] = obj_[col].astype(object)
+
         return obj_
 
 

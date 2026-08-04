@@ -2605,7 +2605,9 @@ def transfer_assignment(
                             if present(jstart):
                                 np1l = (jstart - vend) - 1
                                 if np1l >= 0:
-                                    db_pass.loc[i, "np1_length"] = np1l
+                                    db_pass.loc[i, "np1_length"] = str(
+                                        int(np1l)
+                                    )
             # fill in blanks
             db_pass = sanitize_data(db_pass)
             db_pass.to_csv(passfile, sep="\t", index=False)
@@ -2850,7 +2852,9 @@ def transfer_assignment(
                             if present(jstart):
                                 np1l = (jstart - vend) - 1
                                 if np1l >= 0:
-                                    db_fail.loc[i, "np1_length"] = np1l
+                                    db_fail.loc[i, "np1_length"] = str(
+                                        int(np1l)
+                                    )
 
             # fill in blanks
             db_fail = sanitize_data(db_fail)
@@ -4510,9 +4514,11 @@ def update_j_col_df(airrdata: pd.DataFrame, jmulti: pd.DataFrame, col: str):
     col : str
         The column to update.
     """
-    airrdata["j_call_" + col] = ""
+    airrdata["j_call_" + col] = pd.Series(
+        [""] * len(airrdata), index=airrdata.index, dtype=object
+    )
     df = pd.DataFrame(index=airrdata.index)
-    df[col] = ""
+    df[col] = pd.Series([""] * len(df), index=df.index, dtype=object)
     df.update(jmulti[[col]])
     df["j_call_" + col] = df[col]
     df = df[["j_call_" + col]]

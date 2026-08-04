@@ -237,6 +237,9 @@ def find_clones(
                 ):
                     dat_.at[i, clone_key] = row[clone_key]
 
+    # Keep clone ids as plain object dtype for stable pandas semantics.
+    dat_[clone_key] = dat_[clone_key].astype(object)
+
     # dat_[clone_key].replace('', 'unassigned')
     if os.path.isfile(str(vdj)):
         data_path = Path(vdj)
