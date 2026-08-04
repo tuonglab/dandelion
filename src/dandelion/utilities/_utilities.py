@@ -1289,7 +1289,7 @@ def format_isotype1(metadata: pd.DataFrame) -> list[str]:
     isotype_status = [
         (
             None
-            if i is None
+            if i is None or pd.isna(i)
             else (
                 "IgM/IgD"
                 if (i == "IgM|IgD") or (i == "IgD|IgM")
@@ -1319,7 +1319,7 @@ def format_isotype2(metadata: pd.DataFrame) -> list[str]:
     isotype_status = [
         (
             x
-            if y is None or "exception" in y
+            if y is None or pd.isna(y) or "exception" in y
             else ("Multi" if y == "Extra pair" else x)
         )
         for x, y in zip(metadata["isotype_status"], metadata["chain_status"])

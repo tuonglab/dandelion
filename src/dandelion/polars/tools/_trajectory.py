@@ -17,6 +17,16 @@ from typing import Literal
 from dandelion.polars.core._core import DandelionPolars
 
 
+def _main_call_token(value) -> str:
+    """Return the first call token, normalizing null-like values to 'None'."""
+    if value is None or pd.isna(value):
+        return "None"
+    text = str(value)
+    if text in {"None", "", "nan"}:
+        return "None"
+    return text.split("|")[0]
+
+
 @contextmanager
 def _trajectory_context(
     adata: AnnData,
@@ -322,51 +332,45 @@ def setup_vdj_pseudobulk(
         if extract_cols is None:
             if mode is not None:
                 adata_.obs["v_call_" + mode + "_VDJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
+                    _main_call_token(x)
                     for x in adata_.obs["v_call_" + mode + "_VDJ"]
                 ]
                 adata_.obs["d_call_" + mode + "_VDJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
+                    _main_call_token(x)
                     for x in adata_.obs["d_call_" + mode + "_VDJ"]
                 ]
                 adata_.obs["j_call_" + mode + "_VDJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
+                    _main_call_token(x)
                     for x in adata_.obs["j_call_" + mode + "_VDJ"]
                 ]
                 adata_.obs["v_call_" + mode + "_VJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
+                    _main_call_token(x)
                     for x in adata_.obs["v_call_" + mode + "_VJ"]
                 ]
                 adata_.obs["j_call_" + mode + "_VJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
+                    _main_call_token(x)
                     for x in adata_.obs["j_call_" + mode + "_VJ"]
                 ]
             else:
                 adata_.obs["v_call_VDJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
-                    for x in adata_.obs["v_call_VDJ"]
+                    _main_call_token(x) for x in adata_.obs["v_call_VDJ"]
                 ]
                 adata_.obs["d_call_VDJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
-                    for x in adata_.obs["d_call_VDJ"]
+                    _main_call_token(x) for x in adata_.obs["d_call_VDJ"]
                 ]
                 adata_.obs["j_call_VDJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
-                    for x in adata_.obs["j_call_VDJ"]
+                    _main_call_token(x) for x in adata_.obs["j_call_VDJ"]
                 ]
                 adata_.obs["v_call_VJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
-                    for x in adata_.obs["v_call_VJ"]
+                    _main_call_token(x) for x in adata_.obs["v_call_VJ"]
                 ]
                 adata_.obs["j_call_VJ_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
-                    for x in adata_.obs["j_call_VJ"]
+                    _main_call_token(x) for x in adata_.obs["j_call_VJ"]
                 ]
         else:
             for col in extract_cols:
                 adata_.obs[col + "_main"] = [
-                    x.split("|")[0] if str(x) != "None" else "None"
-                    for x in adata_.obs[col]
+                    _main_call_token(x) for x in adata_.obs[col]
                 ]
 
         # remove any cells if there's unclear mapping

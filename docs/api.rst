@@ -192,6 +192,7 @@ Reading: `io`
    read_ddl
    read_h5ddl
    read_zipddl
+   read_vdj
 
 Dandelion Class
 ---------------

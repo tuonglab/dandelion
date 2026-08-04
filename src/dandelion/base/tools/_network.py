@@ -362,21 +362,24 @@ def generate_network(
             overlap = []
             for i in vdj._metadata.index:
                 cx_ = vdj._metadata.loc[i, str(clone_key)]
-                if cx_ is None or cx_ == "None":
+                if cx_ is None or pd.isna(cx_):
                     continue
-                if len(cx_.split("|")) > 1:
+                cx_str = str(cx_)
+                if cx_str == "None" or cx_str == "":
+                    continue
+                if len(cx_str.split("|")) > 1:
                     overlap.append(
                         [
                             c
-                            for c in cx_.split("|")
+                            for c in cx_str.split("|")
                             if c is not None and c != "None"
                         ]
                     )
-                    for c in cx_.split("|"):
+                    for c in cx_str.split("|"):
                         if c is not None and c != "None":
                             tmp_clusterdist[c][i].value = 1
                 else:
-                    tmp_clusterdist[cx_][i].value = 1
+                    tmp_clusterdist[cx_str][i].value = 1
             tmp_clusterdist2 = {}
             for x in tmp_clusterdist:
                 tmp_clusterdist2[x] = list(tmp_clusterdist[x])
@@ -459,17 +462,20 @@ def generate_network(
             clone_ref = {
                 k: r
                 for k, r in clone_ref.items()
-                if r is not None and r != "None"
+                if r is not None
+                and not pd.isna(r)
+                and str(r) not in {"None", ""}
             }
             tmp_clone_tree = Tree()
             for x in vdj._metadata.index:
                 if x in clone_ref:
-                    if "|" in clone_ref[x]:
-                        for x_ in clone_ref[x].split("|"):
+                    clone_val = str(clone_ref[x])
+                    if "|" in clone_val:
+                        for x_ in clone_val.split("|"):
                             if x_ is not None and x_ != "None":
                                 tmp_clone_tree[x_][x].value = 1
                     else:
-                        tmp_clone_tree[clone_ref[x]][x].value = 1
+                        tmp_clone_tree[clone_val][x].value = 1
             tmp_clone_tree2 = Tree()
             for x in tmp_clone_tree:
                 tmp_clone_tree2[x] = list(tmp_clone_tree[x])

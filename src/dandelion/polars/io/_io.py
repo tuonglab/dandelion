@@ -255,7 +255,10 @@ def read_h5ddl(
         if (
             col in SCHEMA_OVERRIDES
             and SCHEMA_OVERRIDES[col] == pl.Float64
-            and data_pd[col].dtype == object
+            and (
+                data_pd[col].dtype == object
+                or pd.api.types.is_string_dtype(data_pd[col].dtype)
+            )
         ):
             data_pd[col] = data_pd[col].replace("", None)
     constructor["data"] = pl.from_pandas(
