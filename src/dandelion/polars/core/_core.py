@@ -809,7 +809,7 @@ class DandelionPolars:
                 logg.info(
                     "The AIRR data needs to undergo sanitization, apologies for any delays..."
                 )
-                self._data = _sanitize_data_polars(self._data)
+            self._data = _sanitize_data_polars(self._data)
 
     def _is_sanitized(self):
         """Check if the data is sanitized (pandas or polars)."""
@@ -2755,6 +2755,16 @@ class DandelionPolars:
         )
         self._lazy = lazy
         metadata_status = self._metadata
+        metadata_before_reinit = None
+        if self._metadata is not None:
+            if isinstance(self._metadata, pl.LazyFrame):
+                metadata_before_reinit = self._metadata.collect(
+                    engine="streaming"
+                )
+            elif isinstance(self._metadata, pl.DataFrame):
+                metadata_before_reinit = self._metadata.clone()
+            elif isinstance(self._metadata, pd.DataFrame):
+                metadata_before_reinit = self._metadata.copy()
 
         if (metadata_status is None) or reinitialize:
             self._initialize_metadata(
@@ -2766,6 +2776,39 @@ class DandelionPolars:
                 productive_only=productive_only,
                 check_rearrangement_status=check_rearrangement_status,
             )
+            # Preserve user-added metadata columns when reinitializing.
+            if metadata_before_reinit is not None:
+                old_meta = metadata_before_reinit
+                if isinstance(old_meta, pd.DataFrame):
+                    old_meta = pl.from_pandas(old_meta.reset_index(drop=False))
+                if isinstance(old_meta, pl.DataFrame):
+                    old_meta = old_meta.lazy()
+
+                if isinstance(old_meta, pl.LazyFrame):
+                    new_cols = set(self._metadata.collect_schema().names())
+                    old_cols = set(old_meta.collect_schema().names())
+                    keep_cols = [
+                        c
+                        for c in old_cols
+                        if c not in new_cols and c != self._metadata_name_col
+                    ]
+                    if keep_cols:
+                        old_extra = old_meta.select(
+                            [self._metadata_name_col] + keep_cols
+                        )
+                        self._metadata = self._metadata.lazy().join(
+                            old_extra, on=self._metadata_name_col, how="left"
+                        )
+                        self._metadata = (
+                            self._metadata.collect(engine="streaming").lazy()
+                            if self._lazy
+                            else self._metadata.collect(engine="streaming")
+                        )
+                        if "metadata" in self._cache_handles.keys():
+                            self._cache_handles["metadata"].close()
+                            del self._cache_handles["metadata"]
+                        if self._lazy:
+                            self._cache_data()
         if retrieve is not None:
             if self._metadata is None:
                 raise ValueError(

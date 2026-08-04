@@ -1072,12 +1072,11 @@ class Dandelion:
             ],
             ref_col="chain_status",
         )
-        # if metadata already exist, just overwrite the default columns?
+        # If metadata already exists, preserve non-default columns but
+        # reindex rows to current cells and overwrite all initialized columns.
         if self.metadata is not None:
-            if any(~self.metadata_names.isin(self._data.cell_id)):
-                self._metadata = tmp_metadata.copy()  # reindex and replace.
-            for col in tmp_metadata:
-                self._metadata[col] = pd.Series(tmp_metadata[col])
+            self._metadata = self._metadata.reindex(tmp_metadata.index)
+            self._metadata.loc[:, tmp_metadata.columns] = tmp_metadata
         else:
             self._metadata = tmp_metadata.copy()
 
