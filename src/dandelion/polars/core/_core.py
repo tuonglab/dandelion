@@ -4887,7 +4887,7 @@ def _sanitize_data_polars(
                         # Has some numeric values - convert empty strings to None
                         data[col] = data[col].replace("", None)
                         # Try to convert to numeric
-                        data[col] = pd.to_numeric(data[col], errors="ignore")
+                        data[col] = pd.to_numeric(data[col], errors="coerce")
 
         data = pl.from_pandas(
             data.reset_index(drop=True), schema_overrides=SCHEMA_OVERRIDES
