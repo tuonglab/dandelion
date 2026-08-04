@@ -1041,6 +1041,19 @@ def _flatten_and_join_loci(row: dict, locus_columns: list[str]) -> str | None:
     return "|".join(all_clones) if all_clones else None
 
 
+def _sanitize_dataframe_for_h5ad(df: pd.DataFrame) -> None:
+    """Mutate DataFrame to be h5ad-friendly without nullable string extension dtypes."""
+    df.index = pd.Index(
+        np.asarray(df.index, dtype=object),
+        dtype=object,
+        name=df.index.name,
+    )
+    for col in df.columns:
+        series = df[col]
+        if isinstance(series.dtype, pd.StringDtype):
+            df[col] = series.astype(object).where(series.notna(), np.nan)
+
+
 def transfer(
     adata: AnnData | MuData,
     vdj: DandelionPolars,
@@ -1107,6 +1120,8 @@ def transfer(
     # we just associate recipient to adata directly
     else:
         recipient = adata
+    _sanitize_dataframe_for_h5ad(recipient.obs)
+    _sanitize_dataframe_for_h5ad(recipient.var)
     original_backend = vdj._backend
     original_lazy = vdj._lazy
     if original_backend == "polars":
@@ -1138,6 +1153,9 @@ def transfer(
                 )
                 if recipient.obs[ow].dtype == "bool":
                     recipient.obs[ow] = recipient.obs[ow].astype(str)
+
+        _sanitize_dataframe_for_h5ad(recipient.obs)
+        _sanitize_dataframe_for_h5ad(recipient.var)
 
     # also check that all the cells in dandelion are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)

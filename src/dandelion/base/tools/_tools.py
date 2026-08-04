@@ -275,6 +275,19 @@ def find_clones(
         return out
 
 
+def _sanitize_dataframe_for_h5ad(df: pd.DataFrame) -> None:
+    """Mutate DataFrame to be h5ad-friendly without nullable string extension dtypes."""
+    df.index = pd.Index(
+        np.asarray(df.index, dtype=object),
+        dtype=object,
+        name=df.index.name,
+    )
+    for col in df.columns:
+        series = df[col]
+        if isinstance(series.dtype, pd.StringDtype):
+            df[col] = series.astype(object).where(series.notna(), np.nan)
+
+
 def transfer(
     adata: AnnData | MuData,
     vdj: Dandelion,
@@ -332,6 +345,11 @@ def transfer(
     # we just associate recipient to adata directly
     else:
         recipient = adata
+
+    # Keep obs index h5ad-safe for downstream `write_h5ad`.
+    _sanitize_dataframe_for_h5ad(recipient.obs)
+    _sanitize_dataframe_for_h5ad(recipient.var)
+
     # --- 1) metadata -> adata.obs (preserve original overwrite semantics) ---
     if obs:
 
@@ -349,8 +367,8 @@ def transfer(
                 if numeric_candidate.notna().all():
                     return pd.to_numeric(col, errors="coerce")
 
-            # Avoid pandas StringDtype (nullable StringArray), which anndata
-            # may reject unless allow_write_nullable_strings=True.
+            # Avoid pandas StringDtype (nullable StringArray/ArrowStringArray)
+            # to keep downstream h5ad writes compatible.
             out = col.astype(object).where(pd.notna(col), np.nan)
             return out.map(lambda v: str(v) if pd.notna(v) else np.nan)
 
@@ -373,6 +391,9 @@ def transfer(
                 recipient.obs[ow] = _aligned_metadata_col(ow)
                 if recipient.obs[ow].dtype == "bool":
                     recipient.obs[ow] = recipient.obs[ow].astype(str)
+
+        _sanitize_dataframe_for_h5ad(recipient.obs)
+        _sanitize_dataframe_for_h5ad(recipient.var)
 
     # also check that all the cells in vdj are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)
