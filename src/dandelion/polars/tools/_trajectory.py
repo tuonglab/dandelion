@@ -353,30 +353,24 @@ def setup_vdj_pseudobulk(
                 ]
             else:
                 adata_.obs["v_call_VDJ_main"] = [
-                    _main_call_token(x)
-                    for x in adata_.obs["v_call_VDJ"]
+                    _main_call_token(x) for x in adata_.obs["v_call_VDJ"]
                 ]
                 adata_.obs["d_call_VDJ_main"] = [
-                    _main_call_token(x)
-                    for x in adata_.obs["d_call_VDJ"]
+                    _main_call_token(x) for x in adata_.obs["d_call_VDJ"]
                 ]
                 adata_.obs["j_call_VDJ_main"] = [
-                    _main_call_token(x)
-                    for x in adata_.obs["j_call_VDJ"]
+                    _main_call_token(x) for x in adata_.obs["j_call_VDJ"]
                 ]
                 adata_.obs["v_call_VJ_main"] = [
-                    _main_call_token(x)
-                    for x in adata_.obs["v_call_VJ"]
+                    _main_call_token(x) for x in adata_.obs["v_call_VJ"]
                 ]
                 adata_.obs["j_call_VJ_main"] = [
-                    _main_call_token(x)
-                    for x in adata_.obs["j_call_VJ"]
+                    _main_call_token(x) for x in adata_.obs["j_call_VJ"]
                 ]
         else:
             for col in extract_cols:
                 adata_.obs[col + "_main"] = [
-                    _main_call_token(x)
-                    for x in adata_.obs[col]
+                    _main_call_token(x) for x in adata_.obs[col]
                 ]
 
         # remove any cells if there's unclear mapping
