@@ -462,7 +462,9 @@ def generate_network(
             clone_ref = {
                 k: r
                 for k, r in clone_ref.items()
-                if r is not None and not pd.isna(r) and str(r) not in {"None", ""}
+                if r is not None
+                and not pd.isna(r)
+                and str(r) not in {"None", ""}
             }
             tmp_clone_tree = Tree()
             for x in vdj._metadata.index:
