@@ -2501,8 +2501,8 @@ class DandelionPolars:
             data_columns = self._data.columns.tolist()
             metadata_columns = self._metadata.columns.tolist()
         else:  # Polars
-            data_columns = self._data.columns
-            metadata_columns = self._metadata.columns
+            data_columns = self._data.collect_schema().names()
+            metadata_columns = self._metadata.collect_schema().names()
 
         for col in metadata_columns:
             # skip blacklisted columns
