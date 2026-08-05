@@ -15,6 +15,7 @@ from dandelion.polars.tools._tools import (
     clone_size,
     transfer,
     to_scirpy,
+    concat,
 )
 from dandelion.polars.tools._network import generate_network
 from dandelion.polars.tools._diversity import (
@@ -78,6 +79,19 @@ def test_find_clones(create_testfolder):
     )
     vdj.write_zipddl(f)
     vdj2.write_zipddl(f2)
+
+
+@pytest.mark.usefixtures("create_testfolder")
+def test_find_clones_grouped(create_testfolder):
+    """test find clones"""
+    f1 = create_testfolder / "test.zipddl"
+    f2 = create_testfolder / "test2.zipddl"
+    vdj1 = read_zipddl(f1)
+    vdj2 = read_zipddl(f2)
+    vdj1.metadata["sample_id"] = "sample_test1"
+    vdj2.metadata["sample_id"] = "sample_test2"
+    vdj = concat([vdj1, vdj2])
+    find_clones(vdj, group_by="sample_id")
 
 
 @pytest.mark.usefixtures("create_testfolder")
