@@ -299,7 +299,7 @@ def transfer(
     vdj_key: str | None = None,
     clone_key: str | None = None,
     collapse_nodes: bool = False,
-    overwrite: bool | list[str] | str | None = None,
+    overwrite: bool | list[str] | str | None = True,
     obs: bool = True,
     obsm: bool = True,
     uns: bool = True,
