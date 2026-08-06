@@ -19,6 +19,7 @@ from dandelion.base.tools import (
     transfer,
     clone_diversity,
     clone_rarefaction,
+    vdj_sample,
 )
 from dandelion.base.tools._diversity import (
     calculate_chao1,
@@ -532,6 +533,8 @@ def test_bootstrap_diversity_iteration_gini():
 def test_bootstrap_network_clone_degree(airr_reannotated2):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
     vdj = check_contigs(airr_reannotated2)
+    # let's make this vdj object bigger so that we have enough clones to bootstrap
+    vdj = vdj_sample(vdj, size=5000, random_state=42)
     find_clones(vdj)
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -548,6 +551,8 @@ def test_bootstrap_network_clone_degree(airr_reannotated2):
 def test_bootstrap_network_clone_centrality(airr_reannotated2):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
     vdj = check_contigs(airr_reannotated2)
+    # let's make this vdj object bigger so that we have enough clones to bootstrap
+    vdj = vdj_sample(vdj, size=5000, random_state=42)
     find_clones(vdj)
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -564,6 +569,8 @@ def test_bootstrap_network_clone_centrality(airr_reannotated2):
 def test_bootstrap_network_clone_network(airr_reannotated2):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
     vdj = check_contigs(airr_reannotated2)
+    # let's make this vdj object bigger so that we have enough clones to bootstrap
+    vdj = vdj_sample(vdj, size=5000, random_state=42)
     find_clones(vdj)
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,

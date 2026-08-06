@@ -1539,6 +1539,8 @@ def test_bootstrap_diversity_iteration_gini():
 def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
     vdj, _ = vdj2_with_clones
+    # let's make this vdj object bigger so that we have enough clones to bootstrap
+    vdj = vdj_sample(vdj, size=5000, random_state=42)
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -1558,6 +1560,7 @@ def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
 def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
     vdj, _ = vdj2_with_clones
+    vdj = vdj_sample(vdj, size=5000, random_state=42)
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -1577,6 +1580,7 @@ def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
 def test_bootstrap_network_clone_network(vdj2_with_clones, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
     vdj, _ = vdj2_with_clones
+    vdj = vdj_sample(vdj, size=5000, random_state=42)
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
