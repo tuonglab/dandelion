@@ -375,9 +375,7 @@ def test_fetch_iedb_full_pipeline(monkeypatch):
     )
 
     df = fetch_iedb()
-    assert {"BCR", "TCR"}.issuperset(
-        set(df["receptor_type"].unique()) - {""}
-    )
+    assert {"BCR", "TCR"}.issuperset(set(df["receptor_type"].unique()) - {""})
     assert (df["source_db"] == "IEDB").all()
     # alphabeta row should have produced an alpha + beta pair, with the beta
     # row's cdr3_aa pulled from the duplicate "cdr3_curated" (chain-2) column
