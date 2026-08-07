@@ -375,7 +375,7 @@ def test_fetch_iedb_full_pipeline(monkeypatch):
     )
 
     df = fetch_iedb()
-    assert set(["BCR", "TCR"]).issuperset(
+    assert {"BCR", "TCR"}.issuperset(
         set(df["receptor_type"].unique()) - {""}
     )
     assert (df["source_db"] == "IEDB").all()
