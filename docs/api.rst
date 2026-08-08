@@ -149,6 +149,7 @@ Tools: `tl`
    find_clones
    from_scirpy
    generate_network
+   get_epitope
    productive_ratio
    project_pseudotime_to_cell
    pseudobulk_gex
