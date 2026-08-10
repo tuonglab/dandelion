@@ -1865,6 +1865,21 @@ def vdj_sample(
         replace = True if size > vdj._metadata.shape[0] else False
         if force_replace:
             replace = True
+        if p is not None:
+            p_array = np.array(p, dtype=float, copy=True)
+            if p_array.ndim != 1 or p_array.shape[0] != vdj._metadata.shape[0]:
+                raise ValueError(
+                    "`p` must be a 1D array-like with one value per cell in metadata."
+                )
+            p_array[~np.isfinite(p_array)] = 0.0
+            if np.any(p_array < 0):
+                raise ValueError("`p` must not contain negative probabilities.")
+            p_sum = p_array.sum()
+            if p_sum <= 0:
+                raise ValueError(
+                    "`p` sums to 0 after cleaning missing values; provide at least one positive probability."
+                )
+            p = (p_array / p_sum).tolist()
         keep_cells = vdj._metadata.sample(
             size, replace=replace, random_state=random_state, weights=p
         )
@@ -1875,12 +1890,57 @@ def vdj_sample(
             adata = adata.mod["gex"].copy()
         else:
             adata = adata.copy()
+        adata_obs_names_full = adata.obs_names.copy()
         # ensure only cells present in both vdj and adata are sampled
         common_cells = list(
             set(vdj._metadata.index).intersection(set(adata.obs_names))
         )
         adata = adata[adata.obs_names.isin(common_cells)].copy()
         vdj = vdj[vdj._metadata.index.isin(common_cells)].copy()
+
+        if p is not None:
+            # Align provided probabilities to the filtered adata cell order.
+            if isinstance(p, pd.Series):
+                p_aligned = p.reindex(adata.obs_names).to_numpy(dtype=float)
+            else:
+                p_aligned = None
+
+            p_array = np.array(p, dtype=float, copy=True)
+            if p_array.ndim != 1:
+                raise ValueError("`p` must be a 1D array-like.")
+
+            if p_aligned is None:
+                if p_array.shape[0] == vdj_data._metadata.shape[0]:
+                    p_map = dict(
+                        zip(vdj_data._metadata.index, p_array.tolist())
+                    )
+                    p_aligned = np.array(
+                        [p_map.get(c, 0.0) for c in adata.obs_names],
+                        dtype=float,
+                    )
+                elif p_array.shape[0] == adata_obs_names_full.shape[0]:
+                    p_map = dict(zip(adata_obs_names_full, p_array.tolist()))
+                    p_aligned = np.array(
+                        [p_map.get(c, 0.0) for c in adata.obs_names],
+                        dtype=float,
+                    )
+                elif p_array.shape[0] == adata.shape[0]:
+                    p_aligned = p_array
+                else:
+                    raise ValueError(
+                        "`p` length must match one of: original vdj metadata length, original adata length, or filtered adata length."
+                    )
+
+            p_aligned[~np.isfinite(p_aligned)] = 0.0
+            if np.any(p_aligned < 0):
+                raise ValueError("`p` must not contain negative probabilities.")
+            p_sum = p_aligned.sum()
+            if p_sum <= 0:
+                raise ValueError(
+                    "`p` sums to 0 after cleaning missing values; provide at least one positive probability."
+                )
+            p = p_aligned / p_sum
+
         replace = True if size > vdj._metadata.shape[0] else False
         if force_replace:
             replace = True

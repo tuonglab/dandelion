@@ -2397,7 +2397,9 @@ def vdj_sample(
 
         # Normalize probabilities if provided
         if p is not None:
-            p_array = np.asarray(p, dtype=float)
+            # Polars Series.to_numpy() may return a read-only view; use a
+            # writable copy because we sanitize probabilities in-place.
+            p_array = np.array(p, dtype=float, copy=True)
             if p_array.ndim != 1 or p_array.shape[0] != n_cells:
                 raise ValueError(
                     "`p` must be a 1D array-like with one value per cell in metadata."
@@ -2443,6 +2445,7 @@ def vdj_sample(
             adata = adata.mod["gex"].copy()
         else:
             adata = adata.copy()
+        adata_obs_names_full = adata.obs_names.copy()
 
         # Get common cells between vdj and adata - only collect cell_id column
         if isinstance(vdj._metadata, pl.LazyFrame):
@@ -2462,6 +2465,59 @@ def vdj_sample(
         # The __getitem__ will treat it as cell_ids to filter by
         adata = adata[adata.obs_names.isin(common_cells)].copy()
         vdj_filtered = vdj[common_cells]
+
+        if p is not None:
+            if isinstance(p, pd.Series):
+                p_aligned = p.reindex(adata.obs_names).to_numpy(dtype=float)
+            else:
+                p_aligned = None
+
+            p_array = np.array(p, dtype=float, copy=True)
+            if p_array.ndim != 1:
+                raise ValueError("`p` must be a 1D array-like.")
+
+            original_n_cells = vdj.n_obs
+            filtered_n_cells = vdj_filtered.n_obs
+
+            if p_aligned is None:
+                if p_array.shape[0] == original_n_cells:
+                    if isinstance(vdj._metadata, pl.LazyFrame):
+                        full_meta = vdj._metadata.select("cell_id").collect(
+                            streaming=True
+                        )
+                        full_cell_ids = full_meta["cell_id"].to_list()
+                    elif isinstance(vdj._metadata, pl.DataFrame):
+                        full_cell_ids = vdj._metadata["cell_id"].to_list()
+                    else:
+                        full_cell_ids = list(vdj._metadata.index)
+
+                    p_map = dict(zip(full_cell_ids, p_array.tolist()))
+                    p_aligned = np.array(
+                        [p_map.get(c, 0.0) for c in adata.obs_names],
+                        dtype=float,
+                    )
+                elif p_array.shape[0] == adata_obs_names_full.shape[0]:
+                    p_map = dict(zip(adata_obs_names_full, p_array.tolist()))
+                    p_aligned = np.array(
+                        [p_map.get(c, 0.0) for c in adata.obs_names],
+                        dtype=float,
+                    )
+                elif p_array.shape[0] == filtered_n_cells:
+                    p_aligned = p_array
+                else:
+                    raise ValueError(
+                        "`p` length must match one of: original vdj metadata length, original adata length, or filtered adata length."
+                    )
+
+            p_aligned[~np.isfinite(p_aligned)] = 0.0
+            if np.any(p_aligned < 0):
+                raise ValueError("`p` must not contain negative probabilities.")
+            p_sum = p_aligned.sum()
+            if p_sum <= 0:
+                raise ValueError(
+                    "`p` sums to 0 after cleaning missing values; provide at least one positive probability."
+                )
+            p = p_aligned / p_sum
 
         # Determine replacement based on filtered vdj
         n_cells = vdj_filtered.n_obs

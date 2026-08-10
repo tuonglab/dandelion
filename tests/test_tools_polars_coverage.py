@@ -486,6 +486,68 @@ def test_vdj_sample_with_p(vdj_base):
     assert vdj_sampled.n_obs == 3
 
 
+def test_vdj_sample_with_adata_and_full_length_p_list(vdj_with_network):
+    """Probability vector from full vdj metadata should align to filtered adata."""
+    vdj, adata = vdj_with_network
+    clone_size(vdj)
+
+    # Force a mismatch between full vdj metadata length and filtered adata length.
+    adata_subset = adata[: max(1, adata.n_obs - 1)].copy()
+    p_full = vdj.metadata.collect()["clone_id_size_prop"].to_list()
+
+    sample_size = min(3, adata_subset.n_obs)
+    vdj_sampled, adata_sampled = vdj_sample(
+        vdj,
+        adata=adata_subset,
+        size=sample_size,
+        random_state=42,
+        p=p_full,
+    )
+
+    assert vdj_sampled.n_obs == sample_size
+    assert adata_sampled.n_obs == sample_size
+
+
+def test_vdj_sample_with_adata_and_full_length_p_numpy(vdj_with_network):
+    """Numpy probability vector from full vdj metadata should also align."""
+    vdj, adata = vdj_with_network
+    clone_size(vdj)
+
+    adata_subset = adata[: max(1, adata.n_obs - 1)].copy()
+    p_full = vdj.metadata.collect()["clone_id_size_prop"].to_numpy()
+
+    sample_size = min(3, adata_subset.n_obs)
+    vdj_sampled, adata_sampled = vdj_sample(
+        vdj,
+        adata=adata_subset,
+        size=sample_size,
+        random_state=42,
+        p=p_full,
+    )
+
+    assert vdj_sampled.n_obs == sample_size
+    assert adata_sampled.n_obs == sample_size
+
+
+def test_vdj_sample_with_adata_obs_series_probabilities(vdj_with_network):
+    """Allow passing probabilities directly as adata.obs Series."""
+    vdj, adata = vdj_with_network
+    clone_size(vdj)
+    transfer(adata, vdj)
+
+    sample_size = min(3, adata.n_obs)
+    vdj_sampled, adata_sampled = vdj_sample(
+        vdj,
+        adata=adata,
+        size=sample_size,
+        random_state=42,
+        p=adata.obs["clone_id_size_prop"],
+    )
+
+    assert vdj_sampled.n_obs == sample_size
+    assert adata_sampled.n_obs == sample_size
+
+
 # ---------------------------------------------------------------------------
 # Group 8 – concat
 # ---------------------------------------------------------------------------
