@@ -67,6 +67,18 @@ def vdj2_with_clones(airr_reannotated2, dummy_adata2):
     return vdj, adata
 
 
+@pytest.fixture
+def vdj2_resampled_with_network(airr_reannotated2, dummy_adata2):
+    """Second VDJ object with clones and network."""
+    vdj = DandelionPolars(airr_reannotated2)
+    vdj, adata = check_contigs(vdj, dummy_adata2)
+    vdj, adata = vdj_sample(vdj, adata=adata, size=5000, random_state=42)
+    find_clones(vdj)
+    generate_network(vdj, layout_method="mod_fr", use_existing_graph=False)
+    transfer(adata, vdj)
+    return vdj, adata
+
+
 # ---------------------------------------------------------------------------
 # Group 1 – find_clones with store_distances=True
 # ---------------------------------------------------------------------------
@@ -1536,11 +1548,10 @@ def test_bootstrap_diversity_iteration_gini():
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
-def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
+def test_bootstrap_network_clone_degree(vdj2_resampled_with_network, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
-    vdj, _ = vdj2_with_clones
+    vdj, _ = vdj2_resampled_with_network
     # let's make this vdj object bigger so that we have enough clones to bootstrap
-    vdj = vdj_sample(vdj, size=5000, random_state=42)
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -1557,10 +1568,11 @@ def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
-def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
+def test_bootstrap_network_clone_centrality(
+    vdj2_resampled_with_network, backend
+):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
-    vdj, _ = vdj2_with_clones
-    vdj = vdj_sample(vdj, size=5000, random_state=42)
+    vdj, _ = vdj2_resampled_with_network
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -1577,10 +1589,9 @@ def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
-def test_bootstrap_network_clone_network(vdj2_with_clones, backend):
+def test_bootstrap_network_clone_network(vdj2_resampled_with_network, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
-    vdj, _ = vdj2_with_clones
-    vdj = vdj_sample(vdj, size=5000, random_state=42)
+    vdj, _ = vdj2_resampled_with_network
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
