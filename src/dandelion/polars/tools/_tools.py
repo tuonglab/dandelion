@@ -59,7 +59,7 @@ def find_clones(
     store_distances: bool = True,
     group_by: str | None = None,
     verbose: bool = True,
-) -> DandelionPolars:
+) -> None:
     """
     Find clones based on VDJ chain and VJ chain CDR3 junction hamming distance.
 
@@ -106,11 +106,6 @@ def find_clones(
         `None` disables grouping and clones are found across all cells as before.
     verbose : bool, optional
         whether or not to print progress.
-
-    Returns
-    -------
-    Dandelion
-        Dandelion object with clone_id annotated in `.data` slot and `.metadata` initialized.
 
     Raises
     ------
@@ -832,8 +827,6 @@ def find_clones(
             else ""
         ),
     )
-
-    return vdj
 
 
 def _check_chains(
