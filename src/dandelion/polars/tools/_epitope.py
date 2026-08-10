@@ -1106,37 +1106,51 @@ def _annotate_from_db(
       aggregated by ``sequence_id`` and merged in, so a cell's TRA contig
       and TRB contig each carry only their own match — no cross-chain
       bleed.
-    - ``vdj._metadata`` (per-cell) is **not** built with a naive
-      ``groupby("cell_id")`` over ``vdj._data``, because that would merge
-      a cell's TRA and TRB (or IGH and IGL) matches into one
-      undifferentiated string, discarding which chain each match came
-      from. Instead, once the contig-level columns are written to
-      ``vdj._data``, this delegates to Dandelion's own
-      ``vdj.update_metadata(retrieve=[...])``, whose internal chain
-      splitting groups contigs into VDJ (IGH/TRB/TRD) vs VJ
-      (IGK/IGL/TRA/TRG) *before* joining/aggregating per cell — producing
-      separate ``{column}_VDJ`` / ``{column}_VJ`` columns in
-      ``vdj._metadata`` that correctly keep e.g. a TRA epitope match and a
-      TRB epitope match on the same cell distinct. ``adata.obs`` then
-      mirrors whatever new columns that call added.
+    - ``vdj._metadata`` (per-cell) is built entirely by delegating to
+      Dandelion's own ``vdj.update_metadata(retrieve=[...])``, called four
+      times with different combinations of its native ``split`` / ``join``
+      / ``unique`` / ``first`` / ``key_added`` options, rather than any
+      manual pandas aggregation:
+        1. ``split=False, join=True, unique=True`` — merges a cell's
+           chains together, deduped and ``"|"``-joined.
+        2. ``split=False, first=True, key_added=[...])`` — a flat
+           "primary" value per cell.
+        3. ``split=True, join=True, unique=True`` — Dandelion's internal
+           chain splitting groups contigs into VDJ (IGH/TRB/TRD) vs VJ
+           (IGK/IGL/TRA/TRG) *before* joining/aggregating per cell,
+           keeping e.g. a TRA epitope match and a TRB epitope match on
+           the same cell distinct rather than merged into one string.
+        4. ``split=True, first=True, key_added=[...])`` — the same VDJ/VJ
+           split, "primary" value per group.
+      ``adata.obs`` then mirrors whatever of the expected output columns
+      those calls produced.
+
+      Important semantic note on "primary": Dandelion's ``first=True``
+      returns the value from whichever contig comes first for that cell
+      in ``vdj._data``'s **original row order** — it is not "the first
+      non-null match". A cell can have a genuine match on a later contig
+      and still show a missing "primary" value if an earlier, non-matching
+      contig for that same cell happens to come first.
 
     Adds the following columns per source database:
-        Contig-level (``vdj._data``):
+        Contig-level (``vdj._data``) — unchanged, all 6 columns:
             - epitope_{source}, organism_{source}, mhc_class_{source},
               mhc_allele_{source}, epitope_{source}_primary,
               organism_{source}_primary — that single contig's own match(es).
-        Cell-level (``vdj._metadata`` / ``adata.obs``), named by Dandelion's
-        own ``update_metadata`` splitting convention:
+        Cell-level (``vdj._metadata`` / ``adata.obs``) — narrower than the
+        contig level by design: just the epitope/organism convenience
+        columns (no ``mhc_class``/``mhc_allele`` — those stay contig-only),
+        in both a flat (merged-across-chains) and a chain-split form, each
+        with a "primary" variant:
+            - epitope_{source} / epitope_{source}_primary
             - epitope_{source}_VDJ / epitope_{source}_VJ
+            - epitope_{source}_primary_VDJ / epitope_{source}_primary_VJ
+            - organism_{source} / organism_{source}_primary
             - organism_{source}_VDJ / organism_{source}_VJ
-            - mhc_class_{source}_VDJ / mhc_class_{source}_VJ
-            - mhc_allele_{source}_VDJ / mhc_allele_{source}_VJ
-        (The contig-level ``_primary`` convenience columns are not passed
-        through to the cell level, since "primary" only has an
-        unambiguous meaning for a single contig — at the cell level the
-        VDJ/VJ split already narrows things to (usually) one chain, and
-        further collapsing risks re-introducing the same cross-contig
-        ambiguity this function exists to avoid.)
+            - organism_{source}_primary_VDJ / organism_{source}_primary_VJ
+        (Dandelion's ``_split_first`` always appends ``_VDJ``/``_VJ``
+        *after* the given ``key_added``, hence ``_primary_VDJ`` rather
+        than ``_VDJ_primary``.)
     If the columns already exist they are overwritten.
 
     Note that Dandelion's ``update_metadata`` defaults to
@@ -1214,8 +1228,11 @@ def _annotate_from_db(
             "contig-level epitope annotations back onto it."
         )
 
-    # Columns to hand to vdj.update_metadata's retrieve= — deliberately
-    # excludes the "_primary" convenience columns; see docstring.
+    # Columns to hand to vdj.update_metadata's retrieve= — only the
+    # epitope/organism convenience columns propagate to the cell level;
+    # mhc_class/mhc_allele stay contig-only in vdj._data. The "_primary"
+    # variants aren't retrieved here either — they're derived below, after
+    # the VDJ/VJ split, from whatever update_metadata returns.
     retrieve_cols: list[str] = []
 
     for source, col_suffix in [("VDJdb", "vdjdb"), ("IEDB", "iedb")]:
@@ -1271,7 +1288,11 @@ def _annotate_from_db(
             f"epitope_{col_suffix}_primary",
             f"organism_{col_suffix}_primary",
         ]
-        retrieve_cols.extend(base_cols)
+        # Only epitope/organism go up to the cell level -- mhc_class/mhc_allele
+        # remain contig-only in vdj._data.
+        retrieve_cols.extend(
+            [f"epitope_{col_suffix}", f"organism_{col_suffix}"]
+        )
 
         vdj_data_current = vdj_data_current.drop(
             columns=[
@@ -1298,16 +1319,52 @@ def _annotate_from_db(
         )
         return
 
-    # Snapshot vdj._metadata's columns before delegating to Dandelion's own
-    # locus-aware (VDJ vs VJ) aggregation, so we can identify exactly which
-    # columns it added regardless of its internal naming/suffix convention.
-    if vdj._metadata is not None:
-        meta_before, _ = _as_pandas(vdj._metadata)
-        cols_before = set(meta_before.columns)
-    else:
-        cols_before = set()
+    # Four calls to Dandelion's own update_metadata, each asking for a
+    # different combination of its native split/join/unique/first options,
+    # so every output column name is known in advance via key_added rather
+    # than needing to diff vdj._metadata's columns before/after (as an
+    # earlier version of this function did) or re-derive "primary" values
+    # ourselves in pandas:
+    #   1. split=False, join=True,  unique=True  -> epitope_{db}, organism_{db}
+    #      (merged across a cell's chains, deduped, "|"-joined)
+    #   2. split=False, first=True               -> epitope_{db}_primary, organism_{db}_primary
+    #      (Dandelion's own "first" — the first contig for that cell in
+    #      vdj._data's original row order, NOT necessarily the first
+    #      non-null match; a cell can have a real match on a later contig
+    #      and still show NaN here if an earlier, non-matching contig for
+    #      that cell comes first)
+    #   3. split=True,  join=True,  unique=True  -> epitope_{db}_VDJ / _VJ, organism_{db}_VDJ / _VJ
+    #      (chain-aware, unchanged from before)
+    #   4. split=True,  first=True               -> epitope_{db}_primary_VDJ / _VJ, organism_{db}_primary_VDJ / _VJ
+    #      (Dandelion's _split_first always appends _VDJ/_VJ *after*
+    #      key_added, hence "_primary_VDJ" rather than "_VDJ_primary")
+    primary_key_added = [f"{c}_primary" for c in retrieve_cols]
+    expected_cols: list[str] = []
+    for c in retrieve_cols:
+        expected_cols += [
+            c,
+            f"{c}_primary",
+            f"{c}_VDJ",
+            f"{c}_VJ",
+            f"{c}_primary_VDJ",
+            f"{c}_primary_VJ",
+        ]
 
     try:
+        vdj.update_metadata(
+            retrieve=retrieve_cols,
+            split=False,
+            join=True,
+            unique=True,
+            reinitialize=False,
+        )
+        vdj.update_metadata(
+            retrieve=retrieve_cols,
+            split=False,
+            first=True,
+            key_added=primary_key_added,
+            reinitialize=False,
+        )
         vdj.update_metadata(
             retrieve=retrieve_cols,
             split=True,
@@ -1315,24 +1372,32 @@ def _annotate_from_db(
             unique=True,
             reinitialize=False,
         )
+        vdj.update_metadata(
+            retrieve=retrieve_cols,
+            split=True,
+            first=True,
+            key_added=primary_key_added,
+            reinitialize=False,
+        )
     except TypeError:
         # Older/newer Dandelion version with a different update_metadata
         # signature — fall back to the one argument every version accepts.
+        # Only the plain retrieved columns will be available in this case,
+        # not the split/primary variants.
         vdj.update_metadata(retrieve=retrieve_cols, reinitialize=False)
 
     meta_after, _ = _as_pandas(vdj._metadata)
-    new_cols = [
-        c for c in meta_after.columns if c not in cols_before and c != "cell_id"
-    ]
-    if not new_cols:
+    mirror_cols = [c for c in expected_cols if c in meta_after.columns]
+    if not mirror_cols:
         log.warning(
-            "vdj.update_metadata did not add any new columns for %s",
+            "vdj.update_metadata did not add any of the expected columns "
+            "for %s",
             retrieve_cols,
         )
         return
 
-    meta_after = meta_after.set_index("cell_id")
-    adata.obs = _write_cell_level_columns(adata.obs, meta_after, new_cols)
+    meta_indexed = meta_after.set_index("cell_id")
+    adata.obs = _write_cell_level_columns(adata.obs, meta_indexed, mirror_cols)
 
 
 def _print_epitope_summary(adata: AnnData, col_suffix: str) -> None:
@@ -1535,15 +1600,20 @@ def get_epitope(
         - vdj._data : per-contig (chain-specific) match columns —
           epitope_{db}, organism_{db}, mhc_class_{db}, mhc_allele_{db},
           epitope_{db}_primary, organism_{db}_primary.
-        - vdj._metadata : per-cell match columns, produced by delegating to
-          Dandelion's own ``vdj.update_metadata(retrieve=...)``, which
-          splits contigs into VDJ (IGH/TRB/TRD) and VJ (IGK/IGL/TRA/TRG)
-          groups before aggregating — giving epitope_{db}_VDJ /
-          epitope_{db}_VJ (and the organism_/mhc_class_/mhc_allele_
-          equivalents), rather than one flattened column that would mix a
-          cell's different chains together.
-        - adata.obs : mirrors whatever new columns that call added to
-          vdj._metadata.
+        - vdj._metadata : per-cell convenience columns — just epitope and
+          organism (mhc_class/mhc_allele stay contig-only), produced via
+          four calls to Dandelion's own
+          ``vdj.update_metadata(retrieve=..., split=..., first=...)``: a
+          flat merged form, a flat "primary" form, a VDJ/VJ chain-split
+          form, and a VDJ/VJ chain-split "primary" form. Per db: epitope_{db},
+          epitope_{db}_primary, epitope_{db}_VDJ, epitope_{db}_VJ,
+          epitope_{db}_primary_VDJ, epitope_{db}_primary_VJ, and the same
+          six for organism_{db} — 12 columns per db. "primary" here is
+          Dandelion's own ``first=True`` semantics (the first contig for
+          that cell in ``vdj._data``'s row order, not necessarily the
+          first non-null match).
+        - adata.obs : mirrors whichever of those expected columns that
+          call actually produced.
         where {db} is "vdjdb" and/or "iedb" depending on database.
 
     Examples

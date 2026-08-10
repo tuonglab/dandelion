@@ -239,9 +239,11 @@ def _vdjdb_tsv_bytes() -> bytes:
 
 
 def _make_vdjdb_zip() -> bytes:
+    """Mirrors real VDJdb release packaging: members nested under a
+    ``vdjdb-<date>/`` directory rather than sitting at the zip root."""
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w") as zf:
-        zf.writestr("vdjdb.txt", _vdjdb_tsv_bytes())
+        zf.writestr("vdjdb-2026-05-16/vdjdb.txt", _vdjdb_tsv_bytes())
     return zbuf.getvalue()
 
 
@@ -473,6 +475,45 @@ def test_fetch_iedb_full_pipeline(monkeypatch):
 # ---------------------------------------------------------------------------
 # VDJdb parsing / mapping / fetch
 # ---------------------------------------------------------------------------
+
+
+def _make_vdjdb_zip_nested(with_decoy: bool = True) -> bytes:
+    """Mimic a real VDJdb release zip: every member nested under a
+    ``vdjdb-<date>/`` directory (as current VDJdb releases actually do),
+    optionally alongside an unrelated ``.txt`` file that sorts before
+    ``vdjdb.txt`` in the archive and has none of the expected columns --
+    this is exactly what a basename-unaware fallback used to silently pick
+    instead (the real bug this regression-tests)."""
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w") as zf:
+        if with_decoy:
+            zf.writestr(
+                "vdjdb-2026-05-16/cluster_members.txt",
+                "x\ty\tcid\tcsz\n1\t2\t3\t4\n",
+            )
+        zf.writestr(
+            "vdjdb-2026-05-16/vdjdb.txt", _vdjdb_tsv_bytes().decode("utf-8")
+        )
+    return zbuf.getvalue()
+
+
+def test_parse_vdjdb_tsv_nested_directory_regression():
+    """Regression test: VDJdb release zips nest every member under a
+    `vdjdb-<date>/` directory. Basename-based matching must still find
+    `vdjdb.txt`, and must not be fooled by an unrelated `.txt` file (e.g.
+    `cluster_members.txt`) that happens to sort first in the archive."""
+    df = _parse_vdjdb_tsv(_make_vdjdb_zip_nested(with_decoy=True))
+    assert len(df) == 3
+    assert "cdr3" in df.columns
+    assert "cid" not in df.columns  # would be present if the decoy were picked
+
+
+def test_parse_vdjdb_tsv_no_matching_member_raises():
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w") as zf:
+        zf.writestr("readme.txt", "nothing useful here")
+    with pytest.raises(ValueError, match="Could not find a vdjdb"):
+        _parse_vdjdb_tsv(zbuf.getvalue())
 
 
 def test_parse_vdjdb_tsv_all_branches():
@@ -710,41 +751,93 @@ def test_write_cell_level_columns():
 # ---------------------------------------------------------------------------
 
 
-def _split_update_metadata(
-    vdj, retrieve, split=True, join=True, unique=True, reinitialize=False
+def _mock_update_metadata(
+    vdj,
+    retrieve,
+    split=True,
+    join=True,
+    unique=False,
+    first=False,
+    key_added=None,
+    reinitialize=False,
+    **_ignored,
 ):
-    """A realistic-enough stand-in for Dandelion's own
-    ``update_metadata(retrieve=..., split=True, ...)``: groups contigs into
-    VDJ (IGH/TRB/TRD) vs VJ (everything else) and joins unique values per
-    cell for each retrieved column, writing `{col}_VDJ` / `{col}_VJ` into
-    vdj._metadata."""
-    d, _ = _as_pandas(vdj._data)
-    d = d.copy()
-    d["_locus_group"] = d["locus"].apply(
-        lambda locus: "VDJ" if locus in ("IGH", "TRB", "TRD") else "VJ"
-    )
-    if vdj._metadata is not None:
-        meta, _ = _as_pandas(vdj._metadata)
-        out = meta.set_index("cell_id")
-    else:
-        out = pd.DataFrame(
-            index=pd.Index(d["cell_id"].unique(), name="cell_id")
-        )
+    """
+    A faithful-enough-for-testing pandas reimplementation of Dandelion's
+    real ``update_metadata`` for the string-column path (the only path
+    ``_annotate_from_db`` exercises): supports split (VDJ/VJ chain
+    grouping) x (join+unique merge, or first="original row order first
+    value"), and accumulates results onto any existing ``vdj._metadata``
+    via a left-join on ``cell_id`` (dropping only genuinely-overlapping
+    columns first), mirroring the real function's join-based accumulation
+    -- so calling this multiple times in a row (as ``_annotate_from_db``
+    now does) correctly builds up columns rather than clobbering earlier
+    ones.
 
-    for col in retrieve:
-        for grp in ["VDJ", "VJ"]:
-            sub = d[d["_locus_group"] == grp]
-            agg = (
-                sub.groupby("cell_id")[col]
-                .apply(
-                    lambda x: "|".join(
-                        sorted({v for v in x.dropna() if v != ""})
-                    )
-                )
-                .replace("", pd.NA)
-            )
-            out[f"{col}_{grp}"] = agg
-    vdj._metadata = out.reset_index()
+    Matches the real function's "first" semantics precisely: it's the
+    value from whichever contig comes first *in vdj._data's original row
+    order* for that cell (group), not the first non-null value.
+    """
+    if isinstance(retrieve, str):
+        retrieve = [retrieve]
+    if key_added is None:
+        key_added = list(retrieve)
+    elif isinstance(key_added, str):
+        key_added = [key_added]
+
+    d, _ = _as_pandas(vdj._data)
+    d = d.reset_index(drop=True)
+    d["_original_order"] = range(len(d))
+
+    if vdj._metadata is not None:
+        base, _ = _as_pandas(vdj._metadata)
+        base = base.copy()
+    else:
+        base = pd.DataFrame({"cell_id": pd.unique(d["cell_id"])})
+
+    if split:
+        d["_locus_group"] = d["locus"].apply(
+            lambda locus: "VDJ" if locus in ("IGH", "TRB", "TRD") else "VJ"
+        )
+        groups = ["VDJ", "VJ"]
+    else:
+        groups = [None]
+
+    new_cols: dict[str, pd.Series] = {}
+    for col, key in zip(retrieve, key_added):
+        for grp in groups:
+            sub = d if grp is None else d[d["_locus_group"] == grp]
+            sub = sub.sort_values("_original_order")
+            out_name = key if grp is None else f"{key}_{grp}"
+
+            if first:
+                agg = sub.groupby("cell_id", sort=False)[col].first()
+            else:
+
+                def _agg(x, _unique=unique, _join=join):
+                    vals = [v for v in x if pd.notna(v) and v != ""]
+                    if _unique:
+                        seen: list[str] = []
+                        for v in vals:
+                            if v not in seen:
+                                seen.append(v)
+                        vals = seen
+                    return "|".join(vals) if _join else vals
+
+                agg = sub.groupby("cell_id", sort=False)[col].apply(_agg)
+            new_cols[out_name] = agg
+
+    new_df = pd.DataFrame(new_cols)
+    new_df.index.name = "cell_id"
+    new_df = new_df.reset_index()
+    for c in new_df.columns:
+        if c != "cell_id":
+            new_df[c] = new_df[c].replace("", pd.NA)
+
+    dup_cols = (set(new_df.columns) & set(base.columns)) - {"cell_id"}
+    if dup_cols:
+        base = base.drop(columns=list(dup_cols))
+    vdj._metadata = base.merge(new_df, on="cell_id", how="left")
 
 
 def _make_mock_vdj(
@@ -755,11 +848,11 @@ def _make_mock_vdj(
 ):
     """Build a minimal Dandelion-like mock.
 
-    update_metadata: "default" (working VDJ/VJ split), "missing" (no
-    such attribute at all), "typeerror_then_ok" (rich-kwargs call raises
-    TypeError, falls back to the reduced-kwargs call), or "noop" (does
-    nothing, so no new columns appear -- exercises the "no new columns"
-    warning branch).
+    update_metadata: "default" (working split/join/unique/first
+    reimplementation), "missing" (no such attribute at all),
+    "typeerror_then_ok" (any call passing split= raises TypeError, the
+    reduced fallback call succeeds), or "noop" (does nothing, so no new
+    columns appear -- exercises the "no expected columns" warning branch).
     """
     obj = SimpleNamespace()
     obj.data = data_df
@@ -784,19 +877,15 @@ def _make_mock_vdj(
             calls["n"] += 1
             if "split" in kwargs:
                 raise TypeError("unexpected keyword argument 'split'")
-            _split_update_metadata(self, retrieve)
+            _mock_update_metadata(self, retrieve, **kwargs)
 
         obj.update_metadata = types.MethodType(_um, obj)
         obj._calls = calls
         return obj
 
     # default
-    def _um(
-        self, retrieve, split=True, join=True, unique=True, reinitialize=False
-    ):
-        _split_update_metadata(
-            self, retrieve, split, join, unique, reinitialize
-        )
+    def _um(self, retrieve, **kwargs):
+        _mock_update_metadata(self, retrieve, **kwargs)
 
     obj.update_metadata = types.MethodType(_um, obj)
     return obj
@@ -882,6 +971,107 @@ def test_annotate_from_db_keeps_chains_separate():
     # adata.obs mirrors the new vdj._metadata columns
     assert adata.obs.loc["cellA", "epitope_vdjdb_VJ"] == "EPI_ALPHA"
     assert adata.obs.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
+
+
+def test_annotate_from_db_cell_level_is_twelve_convenience_columns_only():
+    """Cell level (vdj._metadata / adata.obs) should carry exactly the 4
+    epitope/organism convenience concepts, each in a flat form and a
+    VDJ/VJ-split form, each with a "primary" variant -- 12 columns total
+    per source db -- and nothing else: no mhc_class/mhc_allele, which must
+    remain contig-only in vdj._data."""
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+
+    expected = {
+        "epitope_vdjdb",
+        "epitope_vdjdb_primary",
+        "epitope_vdjdb_VDJ",
+        "epitope_vdjdb_VJ",
+        "epitope_vdjdb_primary_VDJ",
+        "epitope_vdjdb_primary_VJ",
+        "organism_vdjdb",
+        "organism_vdjdb_primary",
+        "organism_vdjdb_VDJ",
+        "organism_vdjdb_VJ",
+        "organism_vdjdb_primary_VDJ",
+        "organism_vdjdb_primary_VJ",
+    }
+    assert set(adata.obs.columns) == expected
+    assert set(vdj._metadata.columns) == expected | {"cell_id"}
+
+    # mhc_class/mhc_allele must NOT leak to cell level
+    assert not any("mhc" in c for c in adata.obs.columns)
+    assert not any("mhc" in c for c in vdj._metadata.columns)
+
+    # but must still be present, untouched, at the contig level
+    assert "mhc_class_vdjdb" in vdj._data.columns
+    assert "mhc_allele_vdjdb" in vdj._data.columns
+
+    m = vdj._metadata.set_index("cell_id")
+
+    # flat (merged-across-chains) form: cellA has both a TRA and a TRB
+    # match, so the flat column should contain both, "|"-joined
+    assert set(m.loc["cellA", "epitope_vdjdb"].split("|")) == {
+        "EPI_ALPHA",
+        "EPI_BETA",
+    }
+    assert set(m.loc["cellA", "organism_vdjdb"].split("|")) == {"EBV", "CMV"}
+
+    # flat "primary" is Dandelion's own first=True semantics: the value
+    # from whichever contig comes first in vdj._data's row order for that
+    # cell -- _two_chain_data() lists cellA's TRA contig before its TRB
+    # contig, so the flat primary should be the TRA (alpha) match, not
+    # necessarily the alphabetically- or join-order-first value.
+    assert m.loc["cellA", "epitope_vdjdb_primary"] == "EPI_ALPHA"
+
+    # VDJ/VJ-split form stays chain-distinct, as before
+    assert m.loc["cellA", "epitope_vdjdb_VJ"] == "EPI_ALPHA"
+    assert m.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
+    assert m.loc["cellA", "epitope_vdjdb_primary_VJ"] == "EPI_ALPHA"
+    assert m.loc["cellA", "epitope_vdjdb_primary_VDJ"] == "EPI_BETA"
+
+    # a chain group with zero matches (cellB's non-matching TRA-only
+    # contig) resolves to a clean missing value, not an error
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_VJ"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_primary_VJ"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_VDJ"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_primary"])
+
+
+def test_annotate_from_db_ignores_unrelated_new_metadata_columns():
+    """If vdj.update_metadata (or some other process) ever adds an
+    unrelated column to vdj._metadata that isn't one of the columns this
+    function explicitly asked for, it must NOT be mirrored to adata.obs --
+    only the exact expected column names are ever propagated."""
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    real_um = vdj.update_metadata
+
+    def _um_with_extra_column(self, retrieve, **kwargs):
+        real_um(retrieve=retrieve, **kwargs)
+        self._metadata["some_other_column"] = "unrelated_value"
+
+    vdj.update_metadata = types.MethodType(_um_with_extra_column, vdj)
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+
+    # present in vdj._metadata (update_metadata's own side effect)...
+    assert "some_other_column" in vdj._metadata.columns
+    # ...but NOT mirrored to adata.obs, since it isn't one of the
+    # explicitly-expected column names.
+    assert "some_other_column" not in adata.obs.columns
 
 
 def test_annotate_from_db_chain_filter():
@@ -1015,24 +1205,24 @@ def test_annotate_from_db_both_source_dbs():
     )
     ref = _make_reference(
         [
-            {
-                "cdr3_aa": "CAVSEQ1",
-                "antigen_epitope": "EPI_A_IEDB",
-                "antigen_organism": "EBV",
-                "mhc_class": "I",
-                "mhc_allele": "A*02:01",
-                "source_db": "IEDB",
-                "locus": "TRA",
-            },
-            {
-                "cdr3_aa": "CASSEQ2",
-                "antigen_epitope": "EPI_B_VDJDB",
-                "antigen_organism": "CMV",
-                "mhc_class": "I",
-                "mhc_allele": "A*01:01",
-                "source_db": "VDJdb",
-                "locus": "TRB",
-            },
+            dict(
+                cdr3_aa="CAVSEQ1",
+                antigen_epitope="EPI_A_IEDB",
+                antigen_organism="EBV",
+                mhc_class="I",
+                mhc_allele="A*02:01",
+                source_db="IEDB",
+                locus="TRA",
+            ),
+            dict(
+                cdr3_aa="CASSEQ2",
+                antigen_epitope="EPI_B_VDJDB",
+                antigen_organism="CMV",
+                mhc_class="I",
+                mhc_allele="A*01:01",
+                source_db="VDJdb",
+                locus="TRB",
+            ),
         ]
     )
     vdj = _make_mock_vdj(data, metadata_df=pd.DataFrame({"cell_id": ["cellA"]}))
