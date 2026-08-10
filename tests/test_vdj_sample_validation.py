@@ -1,5 +1,6 @@
 """Test vdj_sample implementation."""
 
+import numpy as np
 import pandas as pd
 import polars as pl
 
@@ -181,12 +182,7 @@ def test_vdj_sample_accepts_readonly_probability_array():
     }
 
     vdj = DandelionPolars(pl.DataFrame(mock_data))
-    probs = (
-        vdj._metadata.select(pl.lit(1.0 / vdj.n_obs).alias("p"))
-        .collect(engine="streaming")
-        .get_column("p")
-        .to_numpy()
-    )
+    probs = np.full(vdj.n_obs, 1.0 / vdj.n_obs, dtype=float)
     probs.setflags(write=False)
 
     vdj_sampled = vdj_sample(vdj, size=10, p=probs, random_state=42)
