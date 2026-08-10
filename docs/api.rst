@@ -146,6 +146,7 @@ Tools: `tl`
    concat
    define_clones
    extract_edge_weights
+   fetch_db
    find_clones
    from_scirpy
    generate_network

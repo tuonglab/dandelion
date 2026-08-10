@@ -21,7 +21,7 @@ from dandelion.polars.tools._diversity import (
     clone_diversity,
     clone_rarefaction,
 )
-from dandelion.polars.tools._epitope import get_epitope
+from dandelion.polars.tools._epitope import fetch_db, get_epitope
 from dandelion.utilities._layout import extract_edge_weights
 from dandelion.polars.tools._trajectory import (
     project_pseudotime_to_cell,
@@ -45,6 +45,7 @@ __all__ = [
     "concat_polars",
     "define_clones",
     "extract_edge_weights",
+    "fetch_db",
     "find_clones",
     "find_clones_polars",
     "from_scirpy",
@@ -56,7 +57,6 @@ __all__ = [
     "pseudotime_transfer",
     "setup_vdj_pseudobulk",
     "to_scirpy",
-    "transfer",
     "transfer",
     "vdj_pseudobulk",
     "vdj_sample",
