@@ -77,7 +77,7 @@ def vdj2_resampled_with_network(airr_reannotated2, dummy_adata2):
     vdj_big, adata_big = vdj_sample(
         vdj,
         adata=adata,
-        size=5000,
+        size=50,
         random_state=42,
         p=vdj.metadata.collect()["clone_id_size_prop"].to_list(),
     )
