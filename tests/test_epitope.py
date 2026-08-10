@@ -738,7 +738,7 @@ def _split_update_metadata(
                 sub.groupby("cell_id")[col]
                 .apply(
                     lambda x: "|".join(
-                        sorted(set(v for v in x.dropna() if v != ""))
+                        sorted({v for v in x.dropna() if v != ""})
                     )
                 )
                 .replace("", pd.NA)
