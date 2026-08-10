@@ -79,7 +79,7 @@ def vdj2_resampled_with_network(airr_reannotated2, dummy_adata2):
         adata=adata,
         size=5000,
         random_state=42,
-        p=vdj.metadata["clone_id_size_prop"],
+        p=vdj.metadata.collect()["clone_id_size_prop"].to_list(),
     )
     find_clones(vdj_big)
     generate_network(vdj_big, layout_method="mod_fr", use_existing_graph=False)
@@ -1565,7 +1565,7 @@ def test_bootstrap_network_clone_degree(vdj2_resampled_with_network, backend):
         vdj,
         "clone_id",
         "clone_degree",
-        min_size=4,
+        # min_size=4,
         expanded_only=False,
         contracted=False,
         n_cpus=2,
@@ -1586,7 +1586,7 @@ def test_bootstrap_network_clone_centrality(
         vdj,
         "clone_id",
         "clone_centrality",
-        min_size=4,
+        # min_size=4,
         expanded_only=False,
         contracted=False,
         backend=backend,
@@ -1605,7 +1605,7 @@ def test_bootstrap_network_clone_network(vdj2_resampled_with_network, backend):
         vdj,
         "clone_id",
         "clone_network",
-        min_size=4,
+        # min_size=4,
         expanded_only=False,
         contracted=False,
         backend=backend,

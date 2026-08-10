@@ -540,7 +540,7 @@ def test_bootstrap_network_clone_degree(airr_reannotated2):
         vdj,
         "clone_id",
         "clone_degree",
-        min_size=4,
+        # min_size=4,
         expanded_only=False,
         contracted=False,
     )
@@ -558,7 +558,7 @@ def test_bootstrap_network_clone_centrality(airr_reannotated2):
         vdj,
         "clone_id",
         "clone_centrality",
-        min_size=4,
+        # min_size=4,
         expanded_only=False,
         contracted=False,
     )
@@ -576,7 +576,7 @@ def test_bootstrap_network_clone_network(airr_reannotated2):
         vdj,
         "clone_id",
         "clone_network",
-        min_size=4,
+        # min_size=4,
         expanded_only=False,
         contracted=False,
     )
