@@ -72,11 +72,19 @@ def vdj2_resampled_with_network(airr_reannotated2, dummy_adata2):
     """Second VDJ object with clones and network."""
     vdj = DandelionPolars(airr_reannotated2)
     vdj, adata = check_contigs(vdj, dummy_adata2)
-    vdj, adata = vdj_sample(vdj, adata=adata, size=5000, random_state=42)
     find_clones(vdj)
-    generate_network(vdj, layout_method="mod_fr", use_existing_graph=False)
-    transfer(adata, vdj)
-    return vdj, adata
+    clone_size(vdj)
+    vdj_big, adata_big = vdj_sample(
+        vdj,
+        adata=adata,
+        size=5000,
+        random_state=42,
+        p=vdj.metadata["clone_id_size_prop"],
+    )
+    find_clones(vdj_big)
+    generate_network(vdj_big, layout_method="mod_fr", use_existing_graph=False)
+    transfer(adata_big, vdj_big)
+    return vdj_big, adata_big
 
 
 # ---------------------------------------------------------------------------
