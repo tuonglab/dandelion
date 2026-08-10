@@ -35,7 +35,6 @@ from dandelion.polars.tools._epitope import (
     _restore_type,
     _write_cell_level_columns,
     _annotate_from_db,
-    _print_epitope_summary,
     fetch_db,
     get_epitope,
 )
@@ -747,7 +746,7 @@ def test_write_cell_level_columns():
 
 
 # ---------------------------------------------------------------------------
-# _annotate_from_db / get_epitope / _print_epitope_summary
+# _annotate_from_db / get_epitope
 # ---------------------------------------------------------------------------
 
 
@@ -922,24 +921,24 @@ def _two_chain_data():
 def _two_chain_reference():
     return _make_reference(
         [
-            dict(
-                cdr3_aa="CAVSEQ1",
-                antigen_epitope="EPI_ALPHA",
-                antigen_organism="EBV",
-                mhc_class="I",
-                mhc_allele="A*02:01",
-                source_db="VDJdb",
-                locus="TRA",
-            ),
-            dict(
-                cdr3_aa="CASSEQ2",
-                antigen_epitope="EPI_BETA",
-                antigen_organism="CMV",
-                mhc_class="I",
-                mhc_allele="A*01:01",
-                source_db="VDJdb",
-                locus="TRB",
-            ),
+            {
+                "cdr3_aa": "CAVSEQ1",
+                "antigen_epitope": "EPI_ALPHA",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "VDJdb",
+                "locus": "TRA",
+            },
+            {
+                "cdr3_aa": "CASSEQ2",
+                "antigen_epitope": "EPI_BETA",
+                "antigen_organism": "CMV",
+                "mhc_class": "I",
+                "mhc_allele": "A*01:01",
+                "source_db": "VDJdb",
+                "locus": "TRB",
+            },
         ]
     )
 
@@ -1209,24 +1208,24 @@ def test_annotate_from_db_both_source_dbs():
     )
     ref = _make_reference(
         [
-            dict(
-                cdr3_aa="CAVSEQ1",
-                antigen_epitope="EPI_A_IEDB",
-                antigen_organism="EBV",
-                mhc_class="I",
-                mhc_allele="A*02:01",
-                source_db="IEDB",
-                locus="TRA",
-            ),
-            dict(
-                cdr3_aa="CASSEQ2",
-                antigen_epitope="EPI_B_VDJDB",
-                antigen_organism="CMV",
-                mhc_class="I",
-                mhc_allele="A*01:01",
-                source_db="VDJdb",
-                locus="TRB",
-            ),
+            {
+                "cdr3_aa": "CAVSEQ1",
+                "antigen_epitope": "EPI_A_IEDB",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "IEDB",
+                "locus": "TRA",
+            },
+            {
+                "cdr3_aa": "CASSEQ2",
+                "antigen_epitope": "EPI_B_VDJDB",
+                "antigen_organism": "CMV",
+                "mhc_class": "I",
+                "mhc_allele": "A*01:01",
+                "source_db": "VDJdb",
+                "locus": "TRB",
+            },
         ]
     )
     vdj = _make_mock_vdj(data, metadata_df=pd.DataFrame({"cell_id": ["cellA"]}))
@@ -1241,15 +1240,15 @@ def test_annotate_from_db_both_source_dbs():
 def test_annotate_from_db_lazy_and_eager_polars_data():
     ref = _make_reference(
         [
-            dict(
-                cdr3_aa="CASSX",
-                antigen_epitope="EP1",
-                antigen_organism="EBV",
-                mhc_class="I",
-                mhc_allele="A*02:01",
-                source_db="IEDB",
-                locus="TRB",
-            )
+            {
+                "cdr3_aa": "CASSX",
+                "antigen_epitope": "EP1",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "IEDB",
+                "locus": "TRB",
+            }
         ]
     )
 
@@ -1294,28 +1293,6 @@ def test_annotate_from_db_lazy_and_eager_polars_data():
     assert adata2.obs.loc["cell0", "epitope_iedb_VDJ"] == "EP1"
 
 
-def test_print_epitope_summary(capsys):
-    adata = _fake_adata(["cellA", "cellB"])
-    adata.obs["epitope_vdjdb_VDJ"] = ["EP1", None]
-    adata.obs["epitope_vdjdb_VJ"] = [None, None]
-    adata.obs["organism_vdjdb_VDJ"] = [
-        "EBV",
-        None,
-    ]  # not epitope_-prefixed w/ VDJ/VJ match, still fine
-
-    _print_epitope_summary(adata, "vdjdb")
-    out = capsys.readouterr().out
-    assert "epitope_vdjdb_VDJ" in out
-    assert "epitope_vdjdb_VJ" in out
-    assert "1 / 2" in out
-
-    # no matching columns at all -> prints nothing
-    adata_empty = _fake_adata(["cellA"])
-    _print_epitope_summary(adata_empty, "iedb")
-    out2 = capsys.readouterr().out
-    assert out2 == ""
-
-
 # ---------------------------------------------------------------------------
 # get_epitope
 # ---------------------------------------------------------------------------
@@ -1324,15 +1301,15 @@ def test_print_epitope_summary(capsys):
 def test_get_epitope_with_reference():
     ref = _make_reference(
         [
-            dict(
-                cdr3_aa="CASSX",
-                antigen_epitope="EP1",
-                antigen_organism="EBV",
-                mhc_class="I",
-                mhc_allele="A*02:01",
-                source_db="VDJdb",
-                locus="TRB",
-            )
+            {
+                "cdr3_aa": "CASSX",
+                "antigen_epitope": "EP1",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "VDJdb",
+                "locus": "TRB",
+            }
         ]
     )
     data = pd.DataFrame(

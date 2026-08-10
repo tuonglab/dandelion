@@ -1416,33 +1416,6 @@ def _annotate_from_db(
     adata.obs = _write_cell_level_columns(adata.obs, meta_indexed, mirror_cols)
 
 
-def _print_epitope_summary(adata: AnnData, col_suffix: str) -> None:
-    """
-    Print how many cells got an epitope match for one source database.
-
-    ``_annotate_from_db`` (via ``vdj.update_metadata``) adds columns named
-    ``epitope_{col_suffix}_VDJ`` / ``epitope_{col_suffix}_VJ`` to
-    ``adata.obs`` rather than a single flat ``epitope_{col_suffix}``
-    column, so this reports each chain group separately.
-
-    Parameters
-    ----------
-    adata : AnnData
-        The annotated AnnData object.
-    col_suffix : str
-        ``"vdjdb"`` or ``"iedb"``.
-    """
-    matched_cols = [
-        c
-        for c in adata.obs.columns
-        if c.startswith(f"epitope_{col_suffix}")
-        and (c.endswith("_VDJ") or c.endswith("_VJ"))
-    ]
-    for col in sorted(matched_cols):
-        n = adata.obs[col].notna().sum()
-        print(f"Cells with matched epitope in {col}: {n} / {adata.n_obs}")
-
-
 def fetch_db(
     database: Literal["vdjdb", "iedb", "both"] = "vdjdb",
     receptor_type: Literal["BCR", "TCR"] | None = "TCR",
@@ -1652,8 +1625,6 @@ def get_epitope(
             chain,
         )
         _annotate_from_db(vdj, adata, reference, chain=chain)
-        for col_suffix in ["vdjdb", "iedb"]:
-            _print_epitope_summary(adata, col_suffix)
         return
 
     database = database.lower()
@@ -1709,7 +1680,3 @@ def get_epitope(
         )
 
     _annotate_from_db(vdj, adata, _reference, chain=chain)
-
-    # Print summary
-    for col_suffix in ["vdjdb", "iedb"]:
-        _print_epitope_summary(adata, col_suffix)
