@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gzip
 import io
 import json
 import logging
@@ -672,9 +671,19 @@ def _parse_vdjdb_tsv(raw: bytes) -> pd.DataFrame:
     Parse a VDJdb release download of unknown container format.
 
     VDJdb releases have shipped as a zip archive (preferring
-    ``vdjdb.txt``/``vdjdb.slim.txt``, falling back to any ``.tsv``/``.txt``
-    member), a gzip-compressed TSV, and a plain TSV, depending on the
-    release. This tries each in turn and returns the first that parses.
+    ``vdjdb.txt``/``vdjdb.slim.txt``, falling back to any other member
+    whose filename contains ``"vdjdb"`` and ends in ``.tsv``/``.txt``), a
+    gzip-compressed TSV, and a plain TSV, depending on the release. This
+    tries each in turn and returns the first that parses.
+
+    The desired member is matched by **basename**, not full path — recent
+    VDJdb releases nest every file under a ``vdjdb-<date>/`` directory
+    inside the zip, so a full-path equality check (e.g.
+    ``name == "vdjdb.txt"``) never matches and silently falls through to
+    picking the wrong file (VDJdb also ships unrelated ``.txt`` files in
+    the same archive, such as ``cluster_members.txt``, which parses as a
+    valid TSV but has none of the expected columns — an old bug that
+    produced an all-empty ``cdr3_aa`` with no error or warning).
 
     Parameters
     ----------
@@ -687,23 +696,50 @@ def _parse_vdjdb_tsv(raw: bytes) -> pd.DataFrame:
         The parsed tab-separated contents, still using VDJdb's own
         (non-AIRR) column names — see :func:`_map_vdjdb_columns` for the
         AIRR rename step.
+
+    Raises
+    ------
+    ValueError
+        If the payload is a zip archive but no member's basename matches
+        ``vdjdb.txt``, ``vdjdb.slim.txt``, or ``*vdjdb*.tsv``/``*vdjdb*.txt``.
     """
+    import gzip
+    import posixpath
+
     # zip — prefer vdjdb.txt
     try:
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
             target = (
-                next((n for n in names if n == "vdjdb.txt"), None)
-                or next((n for n in names if n == "vdjdb.slim.txt"), None)
+                next(
+                    (n for n in names if posixpath.basename(n) == "vdjdb.txt"),
+                    None,
+                )
                 or next(
                     (
                         n
                         for n in names
-                        if n.endswith(".tsv") or n.endswith(".txt")
+                        if posixpath.basename(n) == "vdjdb.slim.txt"
+                    ),
+                    None,
+                )
+                or next(
+                    (
+                        n
+                        for n in names
+                        if "vdjdb" in posixpath.basename(n).lower()
+                        and (n.endswith(".tsv") or n.endswith(".txt"))
                     ),
                     None,
                 )
             )
+            if target is None:
+                raise ValueError(
+                    "Could not find a vdjdb.txt / vdjdb.slim.txt / "
+                    "*vdjdb*.tsv member inside the VDJdb release zip. "
+                    f"Archive contents: {names}"
+                )
+            log.info("Parsing VDJdb file: %s", target)
             return _read_csv_bytes(zf.read(target), sep="\t")
     except zipfile.BadZipFile:
         pass
@@ -1112,24 +1148,24 @@ def _annotate_from_db(
     Parameters
     ----------
     vdj : DandelionPolars
-            The Dandelion object to annotate. Must have ``vdj.data`` and
-            ``vdj._data`` populated with AIRR-compliant columns, including
-            ``junction_aa`` (or ``cdr3_aa``) and ``sequence_id``.
-        adata : AnnData
-            The AnnData object to annotate. Must have ``adata.obs`` populated
-            with a ``cell_id`` column that matches the ``cell_id`` in
-            ``vdj._metadata``.
-        reference : pd.DataFrame
-            The reference epitope database to match against, already filtered
-            to the desired source(s) (e.g. VDJdb, IEDB)
-            and with AIRR-compliant column names (see :func:`_fetch_vdjdb` and
-            :func:`_fetch_iedb`).
-        chain : str | list[str] | None, optional
-            Restrict matching to specific IMGT locus/loci (e.g. "TRA", or
-            ["TRA", "TRB"]). Both the query contigs (from vdj.data) and the
-            reference database are filtered to this chain before matching, so
-            annotations never cross chains (e.g. a TRB CDR3 coincidentally
-            matching a TRA-only reference epitope).
+        The Dandelion object to annotate. Must have ``vdj.data`` and
+        ``vdj._data`` populated with AIRR-compliant columns, including
+        ``junction_aa`` (or ``cdr3_aa``) and ``sequence_id``.
+    adata : AnnData
+        The AnnData object to annotate. Must have ``adata.obs`` populated
+        with a ``cell_id`` column that matches the ``cell_id`` in
+        ``vdj._metadata``.
+    reference : pd.DataFrame
+        The reference epitope database to match against, already filtered
+        to the desired source(s) (e.g. VDJdb, IEDB)
+        and with AIRR-compliant column names (see :func:`_fetch_vdjdb` and
+        :func:`_fetch_iedb`).
+    chain : str | list[str] | None, optional
+        Restrict matching to specific IMGT locus/loci (e.g. "TRA", or
+        ["TRA", "TRB"]). Both the query contigs (from vdj.data) and the
+        reference database are filtered to this chain before matching, so
+        annotations never cross chains (e.g. a TRB CDR3 coincidentally
+        matching a TRA-only reference epitope).
 
     Raises
     ------
