@@ -973,12 +973,13 @@ def test_annotate_from_db_keeps_chains_separate():
     assert adata.obs.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
 
 
-def test_annotate_from_db_cell_level_is_twelve_convenience_columns_only():
+def test_annotate_from_db_cell_level_is_eight_convenience_columns_only():
     """Cell level (vdj._metadata / adata.obs) should carry exactly the 4
-    epitope/organism convenience concepts, each in a flat form and a
-    VDJ/VJ-split form, each with a "primary" variant -- 12 columns total
-    per source db -- and nothing else: no mhc_class/mhc_allele, which must
-    remain contig-only in vdj._data."""
+    epitope/organism convenience concepts x 2 (flat, VDJ/VJ-split) -- 8
+    columns total per source db -- and nothing else: no mhc_class/
+    mhc_allele (contig-only), and no separate primary_VDJ/primary_VJ
+    columns, since "primary" is now v1-style: derived once, from the flat
+    merged column, not per chain group."""
     data = _two_chain_data()
     vdj = _make_mock_vdj(
         data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
@@ -993,14 +994,10 @@ def test_annotate_from_db_cell_level_is_twelve_convenience_columns_only():
         "epitope_vdjdb_primary",
         "epitope_vdjdb_VDJ",
         "epitope_vdjdb_VJ",
-        "epitope_vdjdb_primary_VDJ",
-        "epitope_vdjdb_primary_VJ",
         "organism_vdjdb",
         "organism_vdjdb_primary",
         "organism_vdjdb_VDJ",
         "organism_vdjdb_VJ",
-        "organism_vdjdb_primary_VDJ",
-        "organism_vdjdb_primary_VJ",
     }
     assert set(adata.obs.columns) == expected
     assert set(vdj._metadata.columns) == expected | {"cell_id"}
@@ -1023,23 +1020,30 @@ def test_annotate_from_db_cell_level_is_twelve_convenience_columns_only():
     }
     assert set(m.loc["cellA", "organism_vdjdb"].split("|")) == {"EBV", "CMV"}
 
-    # flat "primary" is Dandelion's own first=True semantics: the value
-    # from whichever contig comes first in vdj._data's row order for that
-    # cell -- _two_chain_data() lists cellA's TRA contig before its TRB
-    # contig, so the flat primary should be the TRA (alpha) match, not
-    # necessarily the alphabetically- or join-order-first value.
-    assert m.loc["cellA", "epitope_vdjdb_primary"] == "EPI_ALPHA"
+    # "primary" is v1's original algorithm: the first "|"-token of the
+    # already-deduplicated, already-joined flat column above -- a cell's
+    # chains deliberately merged together for this one convenience field,
+    # unlike the _VDJ/_VJ columns.
+    assert (
+        m.loc["cellA", "epitope_vdjdb_primary"]
+        == m.loc["cellA", "epitope_vdjdb"].split("|")[0]
+    )
+    assert (
+        m.loc["cellA", "organism_vdjdb_primary"]
+        == m.loc["cellA", "organism_vdjdb"].split("|")[0]
+    )
 
-    # VDJ/VJ-split form stays chain-distinct, as before
+    # VDJ/VJ-split form stays chain-distinct, as before -- and there is no
+    # separate epitope_vdjdb_primary_VDJ / _VJ anymore.
     assert m.loc["cellA", "epitope_vdjdb_VJ"] == "EPI_ALPHA"
     assert m.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
-    assert m.loc["cellA", "epitope_vdjdb_primary_VJ"] == "EPI_ALPHA"
-    assert m.loc["cellA", "epitope_vdjdb_primary_VDJ"] == "EPI_BETA"
+    assert "epitope_vdjdb_primary_VDJ" not in vdj._metadata.columns
+    assert "epitope_vdjdb_primary_VJ" not in vdj._metadata.columns
 
     # a chain group with zero matches (cellB's non-matching TRA-only
-    # contig) resolves to a clean missing value, not an error
+    # contig) resolves to a clean missing value, not an error -- including
+    # the flat column and its derived primary.
     assert pd.isna(m.loc["cellB", "epitope_vdjdb_VJ"])
-    assert pd.isna(m.loc["cellB", "epitope_vdjdb_primary_VJ"])
     assert pd.isna(m.loc["cellB", "epitope_vdjdb_VDJ"])
     assert pd.isna(m.loc["cellB", "epitope_vdjdb"])
     assert pd.isna(m.loc["cellB", "epitope_vdjdb_primary"])
