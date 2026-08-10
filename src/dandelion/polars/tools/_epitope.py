@@ -844,12 +844,10 @@ def _get_vdjdb_url() -> str:
         assets = data.get("assets", [])
         for asset in assets:
             name = asset.get("name", "")
-            if name.endswith(".tsv.gz") or name.endswith(".tsv"):
+            if name.endswith((".tsv.gz", ".tsv")):
                 url = asset["browser_download_url"]
                 log.info("Resolved VDJdb release asset via GitHub API: %s", url)
                 return url
-        # No suitable asset found; fall through to tier 2
-        log.warning("No .tsv/.tsv.gz asset found in latest release via API.")
     except Exception as exc:
         log.warning("Could not resolve latest VDJdb URL via API: %s", exc)
 
