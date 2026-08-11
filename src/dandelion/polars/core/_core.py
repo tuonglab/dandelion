@@ -2504,6 +2504,18 @@ class DandelionPolars:
             data_columns = self._data.collect_schema().names()
             metadata_columns = self._metadata.collect_schema().names()
 
+        # Polars hash-joins do not guarantee row-order stability. Preserve the
+        # pre-join row order so later positional operations (e.g. ID reset from
+        # cached originals) remain deterministic.
+        row_order_col = "_tmp_row_order_update_data"
+        if is_polars_eager or is_polars_lazy:
+            # If this helper column already exists, replace it to ensure we are
+            # always restoring the current pre-join order.
+            if row_order_col in data_columns:
+                self._data = self._data.drop(row_order_col)
+            self._data = self._data.with_row_index(row_order_col)
+            data_columns = self._data.collect_schema().names()
+
         for col in metadata_columns:
             # skip blacklisted columns
             if col in skip:
@@ -2525,6 +2537,11 @@ class DandelionPolars:
                 self._data = self._data.join(
                     mapping_df, on="cell_id", how="left"
                 )
+                data_columns = self._data.collect_schema().names()
+
+        if is_polars_eager or is_polars_lazy:
+            self._data = self._data.sort(row_order_col).drop(row_order_col)
+
         # If lazy, collect and re-lazify once at the end
         if is_polars_lazy:
             self._data = self._data.collect(engine="streaming").lazy()

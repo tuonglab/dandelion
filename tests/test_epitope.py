@@ -3,38 +3,40 @@ from __future__ import annotations
 import gzip
 import io
 import json
-import pytest
+import types
 import zipfile
 
 import pandas as pd
 import polars as pl
-
+import pytest
 
 from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
 
 import dandelion.polars.tools._epitope as _epitope
 from dandelion.polars.tools._epitope import (
-    clear_cache,
     _fetch_bytes,
     _infer_locus,
     _infer_receptor_type,
     _ensure_airr_columns,
     _normalise_na,
+    _normalise_chain,
+    _filter_by_chain,
     _read_csv_bytes,
     _to_polars,
     _parse_iedb_receptor_zip,
     _map_iedb_columns,
-    fetch_iedb,
+    _fetch_iedb,
     _parse_vdjdb_tsv,
+    _map_vdjdb_columns,
     _get_vdjdb_url,
-    fetch_vdjdb,
-    fetch_all,
+    _fetch_vdjdb,
+    _as_pandas,
+    _restore_type,
+    _write_cell_level_columns,
+    _annotate_from_db,
     fetch_db,
     get_epitope,
-    _annotate_from_db,
-    query,
-    to_tsv,
 )
 
 # ---------------------------------------------------------------------------
@@ -54,7 +56,9 @@ def _make_iedb_zip() -> bytes:
       and the chain-2 column-copy branch in `_map_iedb_columns`.
     - Includes "chain_2_type" to exercise the `_chain2_type` drop branch.
     - One row uses chain type "alphabeta" and another "gammadelta" to
-      exercise the chain-splitting branch in `_map_iedb_columns`.
+      exercise the chain-splitting branch in `_map_iedb_columns` (producing
+      TRA+TRB and TRG+TRD rows respectively).
+    - One plain "beta" row producing a lone TRB row.
     """
     cols = [
         "group_iri",
@@ -79,9 +83,6 @@ def _make_iedb_zip() -> bytes:
     ]
     note_row = ["note"] * len(cols)
     rows = [
-        # id, type, chain2type, v, d, j, cdr1, cdr2, cdr3(chain1),
-        # cdr3(chain2, dup col), prot, nt, epitope, ag_prot, ag_organism,
-        # mhc_class, mhc_allele, host, pubmed
         [
             "1",
             "alphabeta",
@@ -237,44 +238,55 @@ def _vdjdb_tsv_bytes() -> bytes:
 
 
 def _make_vdjdb_zip() -> bytes:
+    """Mirrors real VDJdb release packaging: members nested under a
+    ``vdjdb-<date>/`` directory rather than sitting at the zip root."""
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w") as zf:
-        zf.writestr("vdjdb.txt", _vdjdb_tsv_bytes())
+        zf.writestr("vdjdb-2026-05-16/vdjdb.txt", _vdjdb_tsv_bytes())
     return zbuf.getvalue()
 
 
 # ---------------------------------------------------------------------------
-# Reset module-level cache between tests
+# Reset module-level download cache between tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache():
-    clear_cache()
+def _reset_cache():
+    _epitope._CACHE.clear()
     yield
-    clear_cache()
+    _epitope._CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
-# clear_cache / _fetch_bytes
+# _fetch_bytes
 # ---------------------------------------------------------------------------
+
+
+class _FakeResp:
+    """Minimal context-manager stand-in for urlopen()'s return value."""
+
+    def __init__(self, payload: bytes):
+        self._payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return self._payload
 
 
 def test_fetch_bytes_cache_hit_and_miss(monkeypatch):
     calls = {"n": 0}
 
-    class FakeResp:
-        def __enter__(self):
-            calls["n"] += 1
-            return self
+    def fake_urlopen(req, timeout):
+        calls["n"] += 1
+        return _FakeResp(b"hello")
 
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return b"hello"
-
-    monkeypatch.setattr(_epitope, "urlopen", lambda req, timeout: FakeResp())
+    monkeypatch.setattr(_epitope, "urlopen", fake_urlopen)
 
     data = _fetch_bytes("http://example.com/a", timeout=5)
     assert data == b"hello"
@@ -342,6 +354,28 @@ def test_to_polars_roundtrip():
     assert isinstance(pldf, pl.DataFrame)
 
 
+def test_normalise_chain():
+    assert _normalise_chain(None) is None
+    assert _normalise_chain("tra") == ["TRA"]
+    assert _normalise_chain([" tra ", "TRB"]) == ["TRA", "TRB"]
+    with pytest.raises(ValueError, match="Invalid chain"):
+        _normalise_chain("XYZ")
+
+
+def test_filter_by_chain():
+    df = pd.DataFrame({"locus": ["TRA", "TRB", "IGH"]})
+
+    # chains=None -> unchanged passthrough
+    assert _filter_by_chain(df, None) is df
+
+    out = _filter_by_chain(df, ["TRA"])
+    assert out["locus"].tolist() == ["TRA"]
+
+    no_locus = pd.DataFrame({"x": [1]})
+    with pytest.raises(KeyError):
+        _filter_by_chain(no_locus, ["TRA"])
+
+
 # ---------------------------------------------------------------------------
 # IEDB parsing / mapping / fetch
 # ---------------------------------------------------------------------------
@@ -369,35 +403,116 @@ def test_map_iedb_columns_cdr3_fallback_and_chain2_drop():
     assert "_chain2_type" not in mapped.columns
 
 
+def test_map_iedb_columns_no_chain_type_and_existing_junction():
+    # No "type"/"chain_2_type" columns at all -> skips the whole
+    # alphabeta/gammadelta split branch and the locus-derivation branch;
+    # junction_aa already present -> the cdr3_aa fallback-copy is skipped
+    # (must not be overwritten).
+    df = pd.DataFrame(
+        {
+            "curated_v_gene": ["V1"],
+            "cdr3_curated": ["CASX"],
+            "junction_aa": ["CASXJ"],
+        }
+    )
+    mapped = _map_iedb_columns(df)
+    assert "locus" not in mapped.columns
+    assert "receptor_type" not in mapped.columns
+    assert mapped["junction_aa"].tolist() == ["CASXJ"]
+
+
+def test_map_iedb_columns_cdr3_all_nan_no_fallback_column():
+    # cdr3_curated all-NaN and no *_cdr3_calculated_* column present at all
+    # -> the "if calc:" fallback branch's False path (calc is None).
+    df = pd.DataFrame(
+        {
+            "cdr3_curated": [None, None],
+            "curated_v_gene": ["V1", "V2"],
+        }
+    )
+    mapped = _map_iedb_columns(df)
+    assert mapped["cdr3_aa"].isna().all()
+
+
 def test_fetch_iedb_full_pipeline(monkeypatch):
     monkeypatch.setattr(
         _epitope, "_fetch_bytes", lambda url, timeout=120: _make_iedb_zip()
     )
 
-    df = fetch_iedb()
+    df = _fetch_iedb()
     assert {"BCR", "TCR"}.issuperset(set(df["receptor_type"].unique()) - {""})
     assert (df["source_db"] == "IEDB").all()
     # alphabeta row should have produced an alpha + beta pair, with the beta
     # row's cdr3_aa pulled from the duplicate "cdr3_curated" (chain-2) column
     assert "CASSCHAIN2" in df["cdr3_aa"].tolist()
+    # loci present: TRA + TRB (alphabeta split), TRG + TRD (gammadelta split), TRB (plain)
+    assert set(df["locus"].unique()) == {"TRA", "TRB", "TRG", "TRD"}
 
     # organism filter
-    df2 = fetch_iedb(organism_filter="Epstein-Barr")
+    df2 = _fetch_iedb(organism_filter="Epstein-Barr")
     assert len(df2) >= 1
     assert df2["antigen_organism"].str.contains("Epstein-Barr").all()
 
     # receptor_type filter
-    df3 = fetch_iedb(receptor_type="TCR")
+    df3 = _fetch_iedb(receptor_type="TCR")
     assert (df3["receptor_type"] == "TCR").all()
 
+    # chain filter (single string)
+    df4 = _fetch_iedb(chain="TRA")
+    assert (df4["locus"] == "TRA").all()
+    assert len(df4) == 1
+
+    # chain filter (list)
+    df5 = _fetch_iedb(chain=["TRG", "TRD"])
+    assert set(df5["locus"].unique()) == {"TRG", "TRD"}
+
     # use_polars=True path
-    pldf = fetch_iedb(use_polars=True)
+    pldf = _fetch_iedb(use_polars=True)
     assert isinstance(pldf, pl.DataFrame)
 
 
 # ---------------------------------------------------------------------------
 # VDJdb parsing / mapping / fetch
 # ---------------------------------------------------------------------------
+
+
+def _make_vdjdb_zip_nested(with_decoy: bool = True) -> bytes:
+    """Mimic a real VDJdb release zip: every member nested under a
+    ``vdjdb-<date>/`` directory (as current VDJdb releases actually do),
+    optionally alongside an unrelated ``.txt`` file that sorts before
+    ``vdjdb.txt`` in the archive and has none of the expected columns --
+    this is exactly what a basename-unaware fallback used to silently pick
+    instead (the real bug this regression-tests)."""
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w") as zf:
+        if with_decoy:
+            zf.writestr(
+                "vdjdb-2026-05-16/cluster_members.txt",
+                "x\ty\tcid\tcsz\n1\t2\t3\t4\n",
+            )
+        zf.writestr(
+            "vdjdb-2026-05-16/vdjdb.txt", _vdjdb_tsv_bytes().decode("utf-8")
+        )
+    return zbuf.getvalue()
+
+
+def test_parse_vdjdb_tsv_nested_directory_regression():
+    """Regression test: VDJdb release zips nest every member under a
+    `vdjdb-<date>/` directory. Basename-based matching must still find
+    `vdjdb.txt`, and must not be fooled by an unrelated `.txt` file (e.g.
+    `cluster_members.txt`) that happens to sort first in the archive."""
+    df = _parse_vdjdb_tsv(_make_vdjdb_zip_nested(with_decoy=True))
+    assert len(df) == 3
+    assert "cdr3" in df.columns
+    assert "cid" not in df.columns  # would be present if the decoy were picked
+
+
+def test_parse_vdjdb_tsv_no_matching_member_raises():
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w") as zf:
+        zf.writestr("readme.txt", "nothing useful here")
+    with pytest.raises(ValueError, match="Could not find a vdjdb"):
+        _parse_vdjdb_tsv(zbuf.getvalue())
 
 
 def test_parse_vdjdb_tsv_all_branches():
@@ -415,7 +530,40 @@ def test_parse_vdjdb_tsv_all_branches():
     assert len(df_plain) == 3
 
 
-def test_get_vdjdb_url_success(monkeypatch):
+def test_map_vdjdb_columns_direct():
+    df = _read_csv_bytes(_vdjdb_tsv_bytes(), sep="\t")
+    mapped = _map_vdjdb_columns(df)
+    assert (mapped["source_db"] == "VDJdb").all()
+    assert mapped["sequence_id"].str.startswith("VDJdb_").all()
+    assert "locus" in mapped.columns
+    assert set(mapped["locus"].unique()) == {"TRA", "TRB"}
+    assert (mapped["receptor_type"] == "TCR").all()
+    # web.method column must be dropped
+    assert "_method" not in mapped.columns
+    assert "web.method" not in mapped.columns
+    # junction_aa filled from cdr3_aa
+    assert mapped["junction_aa"].tolist() == mapped["cdr3_aa"].tolist()
+    # db_record_id falls back to sequence_id when absent from source
+    assert mapped["db_record_id"].tolist() == mapped["sequence_id"].tolist()
+
+
+def test_map_vdjdb_columns_minimal_no_gene_no_method_existing_junction():
+    # No "gene"/"web.method" columns at all -> skips locus/receptor_type
+    # derivation and the _method drop; junction_aa already present -> the
+    # cdr3_aa fallback-copy is skipped (must not be overwritten).
+    df = pd.DataFrame({"cdr3": ["CASSX"], "junction_aa": ["CASSXJ"]})
+    mapped = _map_vdjdb_columns(df)
+    assert "locus" not in mapped.columns
+    assert "receptor_type" not in mapped.columns
+    assert mapped["junction_aa"].tolist() == ["CASSXJ"]
+    assert (mapped["source_db"] == "VDJdb").all()
+
+
+def _github_api_url() -> str:
+    return "https://api.github.com/repos/antigenomics/vdjdb-db/releases/latest"
+
+
+def test_get_vdjdb_url_tier1_success(monkeypatch):
     payload = {
         "assets": [
             {"name": "readme.md", "browser_download_url": "http://x/readme.md"},
@@ -426,47 +574,58 @@ def test_get_vdjdb_url_success(monkeypatch):
         ]
     }
 
-    class FakeResp:
-        def __enter__(self):
-            return self
+    def fake_urlopen(req, timeout):
+        assert "api.github.com" in req.full_url
+        return _FakeResp(json.dumps(payload).encode())
 
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return json.dumps(payload).encode()
-
-    monkeypatch.setattr(_epitope, "urlopen", lambda req, timeout: FakeResp())
+    monkeypatch.setattr(_epitope, "urlopen", fake_urlopen)
     url = _get_vdjdb_url()
     assert url == "http://x/vdjdb.tsv.gz"
 
 
-def test_get_vdjdb_url_no_suitable_asset(monkeypatch):
+def test_get_vdjdb_url_tier1_no_asset_falls_to_tier2(monkeypatch):
     payload = {
         "assets": [
             {"name": "readme.md", "browser_download_url": "http://x/readme.md"}
         ]
     }
 
-    class FakeResp:
-        def __enter__(self):
-            return self
+    def fake_urlopen(req, timeout):
+        if "api.github.com" in req.full_url:
+            return _FakeResp(json.dumps(payload).encode())
+        # tier 2: latest-version.txt
+        return _FakeResp(b"https://example.com/vdjdb-latest.zip\n")
 
-        def __exit__(self, *a):
-            return False
+    monkeypatch.setattr(_epitope, "urlopen", fake_urlopen)
+    assert _get_vdjdb_url() == "https://example.com/vdjdb-latest.zip"
 
-        def read(self):
-            return json.dumps(payload).encode()
 
-    monkeypatch.setattr(_epitope, "urlopen", lambda req, timeout: FakeResp())
+def test_get_vdjdb_url_tier1_exception_falls_to_tier2(monkeypatch):
+    def fake_urlopen(req, timeout):
+        if "api.github.com" in req.full_url:
+            raise URLError("down")
+        return _FakeResp(b"https://example.com/from-changelog.zip\n")
+
+    monkeypatch.setattr(_epitope, "urlopen", fake_urlopen)
+    assert _get_vdjdb_url() == "https://example.com/from-changelog.zip"
+
+
+def test_get_vdjdb_url_tier2_bad_content_falls_to_tier3(monkeypatch):
+    def fake_urlopen(req, timeout):
+        if "api.github.com" in req.full_url:
+            raise URLError("down")
+        # First non-empty line isn't a URL
+        return _FakeResp(b"not-a-url\nsomething-else\n")
+
+    monkeypatch.setattr(_epitope, "urlopen", fake_urlopen)
     assert _get_vdjdb_url() == _epitope.VDJDB_URL
 
 
-def test_get_vdjdb_url_api_failure(monkeypatch):
-    def raise_err(req, timeout):
-        raise URLError("down")
+def test_get_vdjdb_url_both_tiers_fail_falls_to_tier3(monkeypatch):
+    def fake_urlopen(req, timeout):
+        raise URLError("everything is down")
 
-    monkeypatch.setattr(_epitope, "urlopen", raise_err)
+    monkeypatch.setattr(_epitope, "urlopen", fake_urlopen)
     assert _get_vdjdb_url() == _epitope.VDJDB_URL
 
 
@@ -478,82 +637,33 @@ def test_fetch_vdjdb_full_pipeline(monkeypatch):
         _epitope, "_fetch_bytes", lambda url, timeout=120: _make_vdjdb_zip()
     )
 
-    df = fetch_vdjdb()
+    df = _fetch_vdjdb()
     assert len(df) == 3
 
     # score filter
-    df_scored = fetch_vdjdb(min_vdjdb_score=2)
+    df_scored = _fetch_vdjdb(min_vdjdb_score=2)
     assert len(df_scored) == 2
 
     # antigen species / epitope / receptor_type filters
-    df_species = fetch_vdjdb(antigen_species="EBV")
+    df_species = _fetch_vdjdb(antigen_species="EBV")
     assert len(df_species) == 1
-    df_epi = fetch_vdjdb(antigen_epitope="EP2")
+    df_epi = _fetch_vdjdb(antigen_epitope="EP2")
     assert len(df_epi) == 1
-    df_rt = fetch_vdjdb(receptor_type="TCR")
+    df_rt = _fetch_vdjdb(receptor_type="TCR")
     assert (df_rt["receptor_type"] == "TCR").all()
 
+    # chain filter
+    df_chain = _fetch_vdjdb(chain="TRA")
+    assert (df_chain["locus"] == "TRA").all()
+    assert len(df_chain) == 1
+
     # use_polars=True path
-    pldf = fetch_vdjdb(use_polars=True)
+    pldf = _fetch_vdjdb(use_polars=True)
     assert isinstance(pldf, pl.DataFrame)
 
 
 # ---------------------------------------------------------------------------
-# fetch_all
-# ---------------------------------------------------------------------------
-
-
-def test_fetch_all_both_sources(monkeypatch):
-    monkeypatch.setattr(
-        _epitope, "_get_vdjdb_url", lambda: "http://fake/vdjdb.zip"
-    )
-
-    def fake_fetch_bytes(url, timeout=120):
-        if "vdjdb" in url:
-            return _make_vdjdb_zip()
-        return _make_iedb_zip()
-
-    monkeypatch.setattr(_epitope, "_fetch_bytes", fake_fetch_bytes)
-
-    merged = fetch_all()
-    assert len(merged) > 0
-
-    merged_polars = fetch_all(use_polars=True)
-    assert isinstance(merged_polars, pl.DataFrame)
-
-    only_vdjdb = fetch_all(sources=["vdjdb"])
-    assert (only_vdjdb["source_db"] == "VDJdb").all()
-
-
-def test_fetch_all_partial_failure(monkeypatch):
-    monkeypatch.setattr(
-        _epitope, "_get_vdjdb_url", lambda: "http://fake/vdjdb.zip"
-    )
-
-    def fake_fetch_bytes(url, timeout=120):
-        if "vdjdb" in url:
-            return _make_vdjdb_zip()
-        raise RuntimeError("iedb is down")
-
-    monkeypatch.setattr(_epitope, "_fetch_bytes", fake_fetch_bytes)
-    merged = fetch_all()
-    assert (merged["source_db"] == "VDJdb").all()
-
-
-def test_fetch_all_total_failure(monkeypatch):
-    def always_fail(url, timeout=120):
-        raise RuntimeError("network down")
-
-    monkeypatch.setattr(_epitope, "_fetch_bytes", always_fail)
-    monkeypatch.setattr(
-        _epitope, "_get_vdjdb_url", lambda: "http://fake/vdjdb.zip"
-    )
-    with pytest.raises(RuntimeError, match="All data sources failed"):
-        fetch_all()
-
-
-# ---------------------------------------------------------------------------
-# fetch_db / get_epitope
+# fetch_db
 # ---------------------------------------------------------------------------
 
 
@@ -571,162 +681,711 @@ def patched_downloads(monkeypatch):
     monkeypatch.setattr(_epitope, "_fetch_bytes", fake_fetch_bytes)
 
 
-def test_fetch_db_all_methods(patched_downloads):
-    assert len(fetch_db(method="vdjdb")) > 0
-    assert len(fetch_db(method="iedb", receptor_type=None)) > 0
-    assert len(fetch_db(method="both", receptor_type=None)) > 0
+def test_fetch_db_all_databases(patched_downloads):
+    assert len(fetch_db(database="vdjdb")) > 0
+    assert len(fetch_db(database="iedb", receptor_type=None)) > 0
+    assert len(fetch_db(database="both", receptor_type=None)) > 0
     with pytest.raises(ValueError):
-        fetch_db(method="bogus")
+        fetch_db(database="bogus")
 
 
-def _fake_vdj(cdr3_values):
-    """A minimal stand-in for a Dandelion object with a plain-pandas .data."""
-    df = pd.DataFrame(
+# ---------------------------------------------------------------------------
+# _as_pandas / _restore_type
+# ---------------------------------------------------------------------------
+
+
+def test_as_pandas_all_branches():
+    pdf = pd.DataFrame({"a": [1]})
+
+    # already pandas
+    out, kind = _as_pandas(pdf)
+    assert kind == "pandas"
+    assert out is pdf
+
+    # eager polars
+    pldf = pl.DataFrame({"a": [1]})
+    out, kind = _as_pandas(pldf)
+    assert kind == "polars"
+    assert isinstance(out, pd.DataFrame)
+
+    # lazy polars
+    lazy = pldf.lazy()
+    out, kind = _as_pandas(lazy)
+    assert kind == "lazy"
+    assert isinstance(out, pd.DataFrame)
+
+
+def test_restore_type_all_branches():
+    pdf = pd.DataFrame({"a": [1]})
+
+    assert _restore_type(pdf, "pandas") is pdf
+
+    out = _restore_type(pdf, "polars")
+    assert isinstance(out, pl.DataFrame)
+
+    out = _restore_type(pdf, "lazy")
+    assert isinstance(out, pl.LazyFrame)
+
+
+def test_write_cell_level_columns():
+    target = pd.DataFrame({"existing": [1, 2]}, index=["c1", "c2"])
+    target.index.name = "cell_id"
+    source = pd.DataFrame({"new_col": ["x", "y"]}, index=["c1", "c2"])
+    source.index.name = "cell_id"
+
+    out = _write_cell_level_columns(target, source, ["new_col"])
+    assert out["new_col"].tolist() == ["x", "y"]
+    assert "existing" in out.columns
+
+    # calling again with a stale version of the column is idempotent
+    source2 = pd.DataFrame({"new_col": ["z", "w"]}, index=["c1", "c2"])
+    source2.index.name = "cell_id"
+    out2 = _write_cell_level_columns(out, source2, ["new_col"])
+    assert out2["new_col"].tolist() == ["z", "w"]
+    assert list(out2.columns).count("new_col") == 1
+
+
+# ---------------------------------------------------------------------------
+# _annotate_from_db / get_epitope
+# ---------------------------------------------------------------------------
+
+
+def _mock_update_metadata(
+    vdj,
+    retrieve,
+    split=True,
+    join=True,
+    unique=False,
+    first=False,
+    key_added=None,
+    reinitialize=False,
+    **_ignored,
+):
+    """
+    A faithful-enough-for-testing pandas reimplementation of Dandelion's
+    real ``update_metadata`` for the string-column path (the only path
+    ``_annotate_from_db`` exercises): supports split (VDJ/VJ chain
+    grouping) x (join+unique merge, or first="original row order first
+    value"), and accumulates results onto any existing ``vdj._metadata``
+    via a left-join on ``cell_id`` (dropping only genuinely-overlapping
+    columns first), mirroring the real function's join-based accumulation
+    -- so calling this multiple times in a row (as ``_annotate_from_db``
+    now does) correctly builds up columns rather than clobbering earlier
+    ones.
+
+    Matches the real function's "first" semantics precisely: it's the
+    value from whichever contig comes first *in vdj._data's original row
+    order* for that cell (group), not the first non-null value.
+    """
+    if isinstance(retrieve, str):
+        retrieve = [retrieve]
+    if key_added is None:
+        key_added = list(retrieve)
+    elif isinstance(key_added, str):
+        key_added = [key_added]
+
+    d, _ = _as_pandas(vdj._data)
+    d = d.reset_index(drop=True)
+    d["_original_order"] = range(len(d))
+
+    if vdj._metadata is not None:
+        base, _ = _as_pandas(vdj._metadata)
+        base = base.copy()
+    else:
+        base = pd.DataFrame({"cell_id": pd.unique(d["cell_id"])})
+
+    if split:
+        d["_locus_group"] = d["locus"].apply(
+            lambda locus: "VDJ" if locus in ("IGH", "TRB", "TRD") else "VJ"
+        )
+        groups = ["VDJ", "VJ"]
+    else:
+        groups = [None]
+
+    new_cols: dict[str, pd.Series] = {}
+    for col, key in zip(retrieve, key_added):
+        for grp in groups:
+            sub = d if grp is None else d[d["_locus_group"] == grp]
+            sub = sub.sort_values("_original_order")
+            out_name = key if grp is None else f"{key}_{grp}"
+
+            if first:
+                agg = sub.groupby("cell_id", sort=False)[col].first()
+            else:
+
+                def _agg(x, _unique=unique, _join=join):
+                    vals = [v for v in x if pd.notna(v) and v != ""]
+                    if _unique:
+                        seen: list[str] = []
+                        for v in vals:
+                            if v not in seen:
+                                seen.append(v)
+                        vals = seen
+                    return "|".join(vals) if _join else vals
+
+                agg = sub.groupby("cell_id", sort=False)[col].apply(_agg)
+            new_cols[out_name] = agg
+
+    new_df = pd.DataFrame(new_cols)
+    new_df.index.name = "cell_id"
+    new_df = new_df.reset_index()
+    for c in new_df.columns:
+        if c != "cell_id":
+            new_df[c] = new_df[c].replace("", pd.NA)
+
+    dup_cols = (set(new_df.columns) & set(base.columns)) - {"cell_id"}
+    if dup_cols:
+        base = base.drop(columns=list(dup_cols))
+    vdj._metadata = base.merge(new_df, on="cell_id", how="left")
+
+
+def _make_mock_vdj(
+    data_df: pd.DataFrame,
+    vdj_data_df: pd.DataFrame | None = None,
+    metadata_df: pd.DataFrame | None = None,
+    update_metadata="default",
+):
+    """Build a minimal Dandelion-like mock.
+
+    update_metadata: "default" (working split/join/unique/first
+    reimplementation), "missing" (no such attribute at all),
+    "typeerror_then_ok" (any call passing split= raises TypeError, the
+    reduced fallback call succeeds), or "noop" (does nothing, so no new
+    columns appear -- exercises the "no expected columns" warning branch).
+    """
+    obj = SimpleNamespace()
+    obj.data = data_df
+    obj._data = vdj_data_df if vdj_data_df is not None else data_df.copy()
+    obj._metadata = metadata_df
+
+    if update_metadata == "missing":
+        return obj
+
+    if update_metadata == "noop":
+
+        def _um(self, retrieve, **kwargs):
+            return None
+
+        obj.update_metadata = types.MethodType(_um, obj)
+        return obj
+
+    if update_metadata == "typeerror_then_ok":
+        calls = {"n": 0}
+
+        def _um(self, retrieve, **kwargs):
+            calls["n"] += 1
+            if "split" in kwargs:
+                raise TypeError("unexpected keyword argument 'split'")
+            _mock_update_metadata(self, retrieve, **kwargs)
+
+        obj.update_metadata = types.MethodType(_um, obj)
+        obj._calls = calls
+        return obj
+
+    # default
+    def _um(self, retrieve, **kwargs):
+        _mock_update_metadata(self, retrieve, **kwargs)
+
+    obj.update_metadata = types.MethodType(_um, obj)
+    return obj
+
+
+def _make_reference(rows):
+    """rows: list of dicts with keys cdr3_aa, antigen_epitope,
+    antigen_organism, mhc_class, mhc_allele, source_db, locus."""
+    base = {
+        "antigen_protein": "",
+    }
+    return pd.DataFrame([{**base, **r} for r in rows])
+
+
+def _fake_adata(cell_ids):
+    obs = pd.DataFrame(index=pd.Index(cell_ids, name="cell_id"))
+    return SimpleNamespace(obs=obs, n_obs=len(cell_ids))
+
+
+def _two_chain_data():
+    """cellA has a matching TRA contig and a matching TRB contig (with
+    *different* epitopes); cellB has a non-matching TRA contig only."""
+    return pd.DataFrame(
         {
-            "cell_id": [f"cell{i}" for i in range(len(cdr3_values))],
-            "junction_aa": cdr3_values,
+            "sequence_id": ["c1_tra", "c1_trb", "c2_tra"],
+            "cell_id": ["cellA", "cellA", "cellB"],
+            "locus": ["TRA", "TRB", "TRA"],
+            "junction_aa": ["CAVSEQ1", "CASSEQ2", "CAVNOMATCH"],
+            "productive": ["T", "T", "T"],
         }
     )
-    return SimpleNamespace(data=df)
 
 
-def _fake_adata(n_cells):
-    return SimpleNamespace(
-        obs=pd.DataFrame(index=[f"cell{i}" for i in range(n_cells)]),
-        n_obs=n_cells,
+def _two_chain_reference():
+    return _make_reference(
+        [
+            {
+                "cdr3_aa": "CAVSEQ1",
+                "antigen_epitope": "EPI_ALPHA",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "VDJdb",
+                "locus": "TRA",
+            },
+            {
+                "cdr3_aa": "CASSEQ2",
+                "antigen_epitope": "EPI_BETA",
+                "antigen_organism": "CMV",
+                "mhc_class": "I",
+                "mhc_allele": "A*01:01",
+                "source_db": "VDJdb",
+                "locus": "TRB",
+            },
+        ]
     )
+
+
+def test_annotate_from_db_keeps_chains_separate():
+    """The core bug fix: a cell's TRA match and TRB match must not be
+    merged together in vdj._metadata / adata.obs."""
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+
+    # contig-level: each contig carries only its own match
+    d = vdj._data.set_index("sequence_id")
+    assert d.loc["c1_tra", "epitope_vdjdb"] == "EPI_ALPHA"
+    assert d.loc["c1_trb", "epitope_vdjdb"] == "EPI_BETA"
+    assert d.loc["c1_tra", "epitope_vdjdb_primary"] == "EPI_ALPHA"
+    assert pd.isna(d.loc["c2_tra", "epitope_vdjdb"])
+
+    # cell-level: VDJ (TRB) and VJ (TRA) groups stay distinct
+    m = vdj._metadata.set_index("cell_id")
+    assert m.loc["cellA", "epitope_vdjdb_VJ"] == "EPI_ALPHA"
+    assert m.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
+
+    # adata.obs mirrors the new vdj._metadata columns
+    assert adata.obs.loc["cellA", "epitope_vdjdb_VJ"] == "EPI_ALPHA"
+    assert adata.obs.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
+
+
+def test_annotate_from_db_cell_level_is_eight_convenience_columns_only():
+    """Cell level (vdj._metadata / adata.obs) should carry exactly the 4
+    epitope/organism convenience concepts x 2 (flat, VDJ/VJ-split) -- 8
+    columns total per source db -- and nothing else: no mhc_class/
+    mhc_allele (contig-only), and no separate primary_VDJ/primary_VJ
+    columns, since "primary" is now v1-style: derived once, from the flat
+    merged column, not per chain group."""
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+
+    expected = {
+        "epitope_vdjdb",
+        "epitope_vdjdb_primary",
+        "epitope_vdjdb_VDJ",
+        "epitope_vdjdb_VJ",
+        "organism_vdjdb",
+        "organism_vdjdb_primary",
+        "organism_vdjdb_VDJ",
+        "organism_vdjdb_VJ",
+    }
+    assert set(adata.obs.columns) == expected
+    assert set(vdj._metadata.columns) == expected | {"cell_id"}
+
+    # mhc_class/mhc_allele must NOT leak to cell level
+    assert not any("mhc" in c for c in adata.obs.columns)
+    assert not any("mhc" in c for c in vdj._metadata.columns)
+
+    # but must still be present, untouched, at the contig level
+    assert "mhc_class_vdjdb" in vdj._data.columns
+    assert "mhc_allele_vdjdb" in vdj._data.columns
+
+    m = vdj._metadata.set_index("cell_id")
+
+    # flat (merged-across-chains) form: cellA has both a TRA and a TRB
+    # match, so the flat column should contain both, "|"-joined
+    assert set(m.loc["cellA", "epitope_vdjdb"].split("|")) == {
+        "EPI_ALPHA",
+        "EPI_BETA",
+    }
+    assert set(m.loc["cellA", "organism_vdjdb"].split("|")) == {"EBV", "CMV"}
+
+    # "primary" is v1's original algorithm: the first "|"-token of the
+    # already-deduplicated, already-joined flat column above -- a cell's
+    # chains deliberately merged together for this one convenience field,
+    # unlike the _VDJ/_VJ columns.
+    assert (
+        m.loc["cellA", "epitope_vdjdb_primary"]
+        == m.loc["cellA", "epitope_vdjdb"].split("|")[0]
+    )
+    assert (
+        m.loc["cellA", "organism_vdjdb_primary"]
+        == m.loc["cellA", "organism_vdjdb"].split("|")[0]
+    )
+
+    # VDJ/VJ-split form stays chain-distinct, as before -- and there is no
+    # separate epitope_vdjdb_primary_VDJ / _VJ anymore.
+    assert m.loc["cellA", "epitope_vdjdb_VJ"] == "EPI_ALPHA"
+    assert m.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_BETA"
+    assert "epitope_vdjdb_primary_VDJ" not in vdj._metadata.columns
+    assert "epitope_vdjdb_primary_VJ" not in vdj._metadata.columns
+
+    # a chain group with zero matches (cellB's non-matching TRA-only
+    # contig) resolves to a clean missing value, not an error -- including
+    # the flat column and its derived primary.
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_VJ"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_VDJ"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb"])
+    assert pd.isna(m.loc["cellB", "epitope_vdjdb_primary"])
+
+
+def test_annotate_from_db_ignores_unrelated_new_metadata_columns():
+    """If vdj.update_metadata (or some other process) ever adds an
+    unrelated column to vdj._metadata that isn't one of the columns this
+    function explicitly asked for, it must NOT be mirrored to adata.obs --
+    only the exact expected column names are ever propagated."""
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    real_um = vdj.update_metadata
+
+    def _um_with_extra_column(self, retrieve, **kwargs):
+        real_um(retrieve=retrieve, **kwargs)
+        self._metadata["some_other_column"] = "unrelated_value"
+
+    vdj.update_metadata = types.MethodType(_um_with_extra_column, vdj)
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+
+    # present in vdj._metadata (update_metadata's own side effect)...
+    assert "some_other_column" in vdj._metadata.columns
+    # ...but NOT mirrored to adata.obs, since it isn't one of the
+    # explicitly-expected column names.
+    assert "some_other_column" not in adata.obs.columns
+
+
+def test_annotate_from_db_chain_filter():
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]})
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    # restrict to TRA only -> the TRB contig must not get annotated at all
+    _annotate_from_db(vdj, adata, ref, chain="TRA")
+
+    d = vdj._data.set_index("sequence_id")
+    assert d.loc["c1_tra", "epitope_vdjdb"] == "EPI_ALPHA"
+    assert "epitope_vdjdb" not in d.columns or pd.isna(
+        d.loc["c1_trb"].get("epitope_vdjdb", float("nan"))
+    )
+
+
+def test_annotate_from_db_chain_missing_locus_column_raises():
+    data = pd.DataFrame({"cell_id": ["c1"], "junction_aa": ["X"]})
+    vdj = _make_mock_vdj(data)
+    adata = _fake_adata(["c1"])
+    ref = _two_chain_reference()
+    with pytest.raises(KeyError, match="locus"):
+        _annotate_from_db(vdj, adata, ref, chain="TRA")
+
+
+def test_annotate_from_db_missing_sequence_id_raises():
+    data = pd.DataFrame(
+        {"cell_id": ["c1"], "locus": ["TRA"], "junction_aa": ["CAVSEQ1"]}
+    )
+    vdj_data = pd.DataFrame({"cell_id": ["c1"]})  # no sequence_id column
+    vdj = _make_mock_vdj(data, vdj_data_df=vdj_data)
+    adata = _fake_adata(["c1"])
+    ref = _two_chain_reference()
+    with pytest.raises(KeyError, match="sequence_id"):
+        _annotate_from_db(vdj, adata, ref, chain=None)
+
+
+def test_annotate_from_db_no_matches_early_return():
+    data = pd.DataFrame(
+        {
+            "sequence_id": ["c1"],
+            "cell_id": ["c1cell"],
+            "locus": ["TRA"],
+            "junction_aa": ["NO_MATCH_AT_ALL"],
+            "productive": ["T"],
+        }
+    )
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["c1cell"]})
+    )
+    adata = _fake_adata(["c1cell"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+    # nothing matched -> vdj._metadata untouched, adata.obs untouched
+    assert list(vdj._metadata.columns) == ["cell_id"]
+    assert list(adata.obs.columns) == []
+
+
+def test_annotate_from_db_no_update_metadata_method():
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(data, update_metadata="missing")
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+    # vdj._data still gets annotated
+    d = vdj._data.set_index("sequence_id")
+    assert d.loc["c1_tra", "epitope_vdjdb"] == "EPI_ALPHA"
+    # but nothing propagates to adata.obs
+    assert list(adata.obs.columns) == []
+
+
+def test_annotate_from_db_metadata_none_initially():
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(data, metadata_df=None)
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+    assert vdj._metadata is not None
+    assert "epitope_vdjdb_VJ" in adata.obs.columns
+
+
+def test_annotate_from_db_update_metadata_typeerror_fallback():
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data,
+        metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]}),
+        update_metadata="typeerror_then_ok",
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+    assert vdj._calls["n"] == 2  # rich call failed, reduced call succeeded
+    assert "epitope_vdjdb_VJ" in adata.obs.columns
+
+
+def test_annotate_from_db_update_metadata_adds_nothing():
+    data = _two_chain_data()
+    vdj = _make_mock_vdj(
+        data,
+        metadata_df=pd.DataFrame({"cell_id": ["cellA", "cellB"]}),
+        update_metadata="noop",
+    )
+    adata = _fake_adata(["cellA", "cellB"])
+    ref = _two_chain_reference()
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+    # vdj._data was still annotated
+    d = vdj._data.set_index("sequence_id")
+    assert d.loc["c1_tra", "epitope_vdjdb"] == "EPI_ALPHA"
+    # but adata.obs got nothing since update_metadata (mock) added no columns
+    assert list(adata.obs.columns) == []
+
+
+def test_annotate_from_db_both_source_dbs():
+    data = pd.DataFrame(
+        {
+            "sequence_id": ["c1_tra", "c1_trb"],
+            "cell_id": ["cellA", "cellA"],
+            "locus": ["TRA", "TRB"],
+            "junction_aa": ["CAVSEQ1", "CASSEQ2"],
+            "productive": ["T", "T"],
+        }
+    )
+    ref = _make_reference(
+        [
+            {
+                "cdr3_aa": "CAVSEQ1",
+                "antigen_epitope": "EPI_A_IEDB",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "IEDB",
+                "locus": "TRA",
+            },
+            {
+                "cdr3_aa": "CASSEQ2",
+                "antigen_epitope": "EPI_B_VDJDB",
+                "antigen_organism": "CMV",
+                "mhc_class": "I",
+                "mhc_allele": "A*01:01",
+                "source_db": "VDJdb",
+                "locus": "TRB",
+            },
+        ]
+    )
+    vdj = _make_mock_vdj(data, metadata_df=pd.DataFrame({"cell_id": ["cellA"]}))
+    adata = _fake_adata(["cellA"])
+
+    _annotate_from_db(vdj, adata, ref, chain=None)
+
+    assert adata.obs.loc["cellA", "epitope_iedb_VJ"] == "EPI_A_IEDB"
+    assert adata.obs.loc["cellA", "epitope_vdjdb_VDJ"] == "EPI_B_VDJDB"
+
+
+def test_annotate_from_db_lazy_and_eager_polars_data():
+    ref = _make_reference(
+        [
+            {
+                "cdr3_aa": "CASSX",
+                "antigen_epitope": "EP1",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "IEDB",
+                "locus": "TRB",
+            }
+        ]
+    )
+
+    # .collect().to_pandas() branch -- vdj.data is a polars LazyFrame
+    lazy_df = pl.DataFrame(
+        {
+            "sequence_id": ["s1"],
+            "cell_id": ["cell0"],
+            "locus": ["TRB"],
+            "junction_aa": ["CASSX"],
+            "productive": ["T"],
+        }
+    ).lazy()
+    vdj_lazy = _make_mock_vdj(
+        lazy_df,
+        vdj_data_df=lazy_df,
+        metadata_df=pd.DataFrame({"cell_id": ["cell0"]}),
+    )
+    adata = _fake_adata(["cell0"])
+    _annotate_from_db(vdj_lazy, adata, ref, chain=None)
+    assert isinstance(vdj_lazy._data, pl.LazyFrame)
+    assert adata.obs.loc["cell0", "epitope_iedb_VDJ"] == "EP1"
+
+    # .to_pandas() branch -- vdj.data is an eager polars DataFrame
+    eager_df = pl.DataFrame(
+        {
+            "sequence_id": ["s1"],
+            "cell_id": ["cell0"],
+            "locus": ["TRB"],
+            "junction_aa": ["CASSX"],
+            "productive": ["T"],
+        }
+    )
+    vdj_eager = _make_mock_vdj(
+        eager_df,
+        vdj_data_df=eager_df,
+        metadata_df=pd.DataFrame({"cell_id": ["cell0"]}),
+    )
+    adata2 = _fake_adata(["cell0"])
+    _annotate_from_db(vdj_eager, adata2, ref, chain=None)
+    assert isinstance(vdj_eager._data, pl.DataFrame)
+    assert adata2.obs.loc["cell0", "epitope_iedb_VDJ"] == "EP1"
+
+
+# ---------------------------------------------------------------------------
+# get_epitope
+# ---------------------------------------------------------------------------
 
 
 def test_get_epitope_with_reference():
-    ref = pd.DataFrame(
+    ref = _make_reference(
+        [
+            {
+                "cdr3_aa": "CASSX",
+                "antigen_epitope": "EP1",
+                "antigen_organism": "EBV",
+                "mhc_class": "I",
+                "mhc_allele": "A*02:01",
+                "source_db": "VDJdb",
+                "locus": "TRB",
+            }
+        ]
+    )
+    data = pd.DataFrame(
         {
-            "cdr3_aa": ["CASSX"],
-            "antigen_epitope": ["EP1"],
-            "antigen_organism": ["EBV"],
-            "antigen_protein": ["Prot1"],
-            "mhc_class": ["I"],
-            "mhc_allele": ["A*02:01"],
-            "source_db": ["VDJdb"],
+            "sequence_id": ["s0", "s1"],
+            "cell_id": ["cell0", "cell1"],
+            "locus": ["TRB", "TRB"],
+            "junction_aa": ["CASSX", "UNKNOWN"],
+            "productive": ["T", "T"],
         }
     )
-    vdj = _fake_vdj(["CASSX", "UNKNOWN"])
-    adata = _fake_adata(2)
+    vdj = _make_mock_vdj(
+        data, metadata_df=pd.DataFrame({"cell_id": ["cell0", "cell1"]})
+    )
+    adata = _fake_adata(["cell0", "cell1"])
+
     get_epitope(vdj, adata, reference=ref)
-    assert "epitope_vdjdb_primary" in adata.obs.columns
-    assert adata.obs.loc["cell0", "epitope_vdjdb_primary"] == "EP1"
+    assert adata.obs.loc["cell0", "epitope_vdjdb_VDJ"] == "EP1"
 
 
 def test_get_epitope_downloads_vdjdb(patched_downloads):
-    vdj = _fake_vdj(["CASSX"])
-    adata = _fake_adata(1)
-    get_epitope(vdj, adata, method="vdjdb", receptor_type=None)
+    data = pd.DataFrame(
+        {
+            "sequence_id": ["s0"],
+            "cell_id": ["cell0"],
+            "locus": ["TRB"],
+            "junction_aa": ["CASSX"],
+            "productive": ["T"],
+        }
+    )
+    vdj = _make_mock_vdj(data, metadata_df=pd.DataFrame({"cell_id": ["cell0"]}))
+    adata = _fake_adata(["cell0"])
+    get_epitope(vdj, adata, database="vdjdb", receptor_type=None)
 
 
 def test_get_epitope_downloads_iedb(patched_downloads):
-    vdj = _fake_vdj(["CASSX"])
-    adata = _fake_adata(1)
-    get_epitope(vdj, adata, method="iedb", receptor_type=None)
+    data = pd.DataFrame(
+        {
+            "sequence_id": ["s0"],
+            "cell_id": ["cell0"],
+            "locus": ["TRB"],
+            "junction_aa": ["CASSX"],
+            "productive": ["T"],
+        }
+    )
+    vdj = _make_mock_vdj(data, metadata_df=pd.DataFrame({"cell_id": ["cell0"]}))
+    adata = _fake_adata(["cell0"])
+    get_epitope(vdj, adata, database="iedb", receptor_type=None)
 
 
 def test_get_epitope_downloads_both(patched_downloads):
-    vdj = _fake_vdj(["CASSX"])
-    adata = _fake_adata(1)
-    get_epitope(vdj, adata, method="both", receptor_type=None)
+    data = pd.DataFrame(
+        {
+            "sequence_id": ["s0"],
+            "cell_id": ["cell0"],
+            "locus": ["TRB"],
+            "junction_aa": ["CASSX"],
+            "productive": ["T"],
+        }
+    )
+    vdj = _make_mock_vdj(data, metadata_df=pd.DataFrame({"cell_id": ["cell0"]}))
+    adata = _fake_adata(["cell0"])
+    get_epitope(vdj, adata, database="both", receptor_type=None)
 
 
-def test_get_epitope_invalid_method():
-    vdj = _fake_vdj(["CASSX"])
-    adata = _fake_adata(1)
+def test_get_epitope_invalid_database():
+    data = pd.DataFrame(
+        {
+            "sequence_id": ["s0"],
+            "cell_id": ["cell0"],
+            "locus": ["TRB"],
+            "junction_aa": ["CASSX"],
+            "productive": ["T"],
+        }
+    )
+    vdj = _make_mock_vdj(data)
+    adata = _fake_adata(["cell0"])
     with pytest.raises(ValueError):
-        get_epitope(vdj, adata, method="bogus")
-
-
-def test_annotate_from_db_polars_and_to_pandas_paths():
-    ref = pd.DataFrame(
-        {
-            "cdr3_aa": ["CASSX"],
-            "antigen_epitope": ["EP1"],
-            "antigen_organism": ["EBV"],
-            "antigen_protein": ["Prot1"],
-            "mhc_class": ["I"],
-            "mhc_allele": ["A*02:01"],
-            "source_db": ["IEDB"],
-        }
-    )
-    adata = _fake_adata(1)
-
-    # .collect().to_pandas() branch (e.g. a polars LazyFrame-like stand-in)
-    lazy_df = pl.DataFrame(
-        {"cell_id": ["cell0"], "junction_aa": ["CASSX"]}
-    ).lazy()
-    vdj_lazy = SimpleNamespace(data=lazy_df)
-    _annotate_from_db(vdj_lazy, adata, ref)
-    assert adata.obs.loc["cell0", "epitope_iedb_primary"] == "EP1"
-
-    # .to_pandas() branch (a plain polars DataFrame)
-    adata2 = _fake_adata(1)
-    eager_df = pl.DataFrame({"cell_id": ["cell0"], "junction_aa": ["CASSX"]})
-    vdj_eager = SimpleNamespace(data=eager_df)
-    _annotate_from_db(vdj_eager, adata2, ref)
-    assert adata2.obs.loc["cell0", "epitope_iedb_primary"] == "EP1"
-
-
-# ---------------------------------------------------------------------------
-# query / to_tsv
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def sample_df():
-    return pd.DataFrame(
-        {
-            "antigen_organism": ["EBV", "CMV", "SARS-CoV-2"],
-            "antigen_epitope": ["EP1", "EP2", "EP3"],
-            "receptor_type": ["TCR", "TCR", "BCR"],
-            "locus": ["TRB", "TRA", "IGH"],
-            "v_call": ["TRBV1", "TRAV1", "IGHV1"],
-            "cdr3_aa": ["CASSX", "CA", "CASSLONGER"],
-        }
-    )
-
-
-def test_query_pandas_all_filters(sample_df):
-    out = query(sample_df, organism="EBV")
-    assert len(out) == 1
-
-    out = query(sample_df, epitope="EP2")
-    assert len(out) == 1
-
-    out = query(sample_df, receptor_type="TCR")
-    assert len(out) == 2
-
-    out = query(sample_df, locus="IGH")
-    assert len(out) == 1
-
-    out = query(sample_df, v_gene="TRBV1")
-    assert len(out) == 1
-
-    out = query(sample_df, min_cdr3_len=6)
-    assert len(out) == 1
-
-    # column-missing branch inside _filt
-    narrow = sample_df.drop(columns=["antigen_organism"])
-    out = query(narrow, organism="EBV")
-    assert len(out) == len(narrow)
-
-
-def test_query_polars(sample_df):
-    pldf = pl.from_pandas(sample_df)
-    out = query(pldf, organism="EBV", min_cdr3_len=3)
-    assert isinstance(out, pl.DataFrame)
-    assert out.shape[0] == 1
-
-
-def test_to_tsv_pandas_and_polars(tmp_path, sample_df):
-    p1 = tmp_path / "out_pandas.tsv"
-    to_tsv(sample_df, str(p1))
-    assert p1.exists()
-
-    p2 = tmp_path / "out_polars.tsv"
-    to_tsv(pl.from_pandas(sample_df), str(p2))
-    assert p2.exists()
+        get_epitope(vdj, adata, database="bogus")

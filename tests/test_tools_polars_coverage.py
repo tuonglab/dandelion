@@ -67,6 +67,26 @@ def vdj2_with_clones(airr_reannotated2, dummy_adata2):
     return vdj, adata
 
 
+@pytest.fixture
+def vdj2_resampled_with_network(airr_reannotated2, dummy_adata2):
+    """Second VDJ object with clones and network."""
+    vdj = DandelionPolars(airr_reannotated2)
+    vdj, adata = check_contigs(vdj, dummy_adata2)
+    find_clones(vdj)
+    clone_size(vdj)
+    vdj_big, adata_big = vdj_sample(
+        vdj,
+        adata=adata,
+        size=50,
+        random_state=42,
+        p=vdj.metadata.collect()["clone_id_size_prop"].to_list(),
+    )
+    find_clones(vdj_big)
+    generate_network(vdj_big, layout_method="mod_fr", use_existing_graph=False)
+    transfer(adata_big, vdj_big)
+    return vdj_big, adata_big
+
+
 # ---------------------------------------------------------------------------
 # Group 1 – find_clones with store_distances=True
 # ---------------------------------------------------------------------------
@@ -134,14 +154,14 @@ def test_find_clones_key_added(airr_reannotated, dummy_adata):
 # ---------------------------------------------------------------------------
 
 
-def test_transfer_with_overwrite(vdj_with_network, dummy_adata):
+def test_transfer_with_overwrite(vdj_with_network):
     """Lines 1122-1136: overwrite parameter in transfer."""
     vdj, adata = vdj_with_network
     transfer(adata, vdj, overwrite=True)
     assert "clone_id" in adata.obs.columns
 
 
-def test_transfer_with_overwrite_list(vdj_with_network, dummy_adata):
+def test_transfer_with_overwrite_list(vdj_with_network):
     """overwrite as list."""
     vdj, adata = vdj_with_network
     transfer(adata, vdj, overwrite=["clone_id"])
@@ -464,6 +484,49 @@ def test_vdj_sample_with_p(vdj_base):
     p = [1.0 / n] * n
     vdj_sampled = vdj_sample(vdj, size=3, p=p)
     assert vdj_sampled.n_obs == 3
+
+
+def test_vdj_sample_with_adata_and_full_length_p_list(vdj_with_network):
+    """Probability vector from full vdj metadata should align to filtered adata."""
+    vdj, adata = vdj_with_network
+    clone_size(vdj)
+
+    # Force a mismatch between full vdj metadata length and filtered adata length.
+    adata_subset = adata[: max(1, adata.n_obs - 1)].copy()
+    p_full = vdj.metadata.collect()["clone_id_size_prop"].to_list()
+
+    sample_size = min(3, adata_subset.n_obs)
+    vdj_sampled, adata_sampled = vdj_sample(
+        vdj,
+        adata=adata_subset,
+        size=sample_size,
+        random_state=42,
+        p=p_full,
+    )
+
+    assert vdj_sampled.n_obs == sample_size
+    assert adata_sampled.n_obs == sample_size
+
+
+def test_vdj_sample_with_adata_and_full_length_p_numpy(vdj_with_network):
+    """Numpy probability vector from full vdj metadata should also align."""
+    vdj, adata = vdj_with_network
+    clone_size(vdj)
+
+    adata_subset = adata[: max(1, adata.n_obs - 1)].copy()
+    p_full = vdj.metadata.collect()["clone_id_size_prop"].to_numpy()
+
+    sample_size = min(3, adata_subset.n_obs)
+    vdj_sampled, adata_sampled = vdj_sample(
+        vdj,
+        adata=adata_subset,
+        size=sample_size,
+        random_state=42,
+        p=p_full,
+    )
+
+    assert vdj_sampled.n_obs == sample_size
+    assert adata_sampled.n_obs == sample_size
 
 
 # ---------------------------------------------------------------------------
@@ -1536,11 +1599,10 @@ def test_bootstrap_diversity_iteration_gini():
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
-def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
+def test_bootstrap_network_clone_degree(vdj2_resampled_with_network, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_degree."""
-    vdj, _ = vdj2_with_clones
+    vdj, _ = vdj2_resampled_with_network
     # let's make this vdj object bigger so that we have enough clones to bootstrap
-    vdj = vdj_sample(vdj, size=5000, random_state=42)
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -1557,10 +1619,11 @@ def test_bootstrap_network_clone_degree(vdj2_with_clones, backend):
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
-def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
+def test_bootstrap_network_clone_centrality(
+    vdj2_resampled_with_network, backend
+):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_centrality."""
-    vdj, _ = vdj2_with_clones
-    vdj = vdj_sample(vdj, size=5000, random_state=42)
+    vdj, _ = vdj2_resampled_with_network
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
@@ -1577,10 +1640,9 @@ def test_bootstrap_network_clone_centrality(vdj2_with_clones, backend):
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
-def test_bootstrap_network_clone_network(vdj2_with_clones, backend):
+def test_bootstrap_network_clone_network(vdj2_resampled_with_network, backend):
     """_bootstrap_network returns (cluster_gini, vertex_gini) for clone_network."""
-    vdj, _ = vdj2_with_clones
-    vdj = vdj_sample(vdj, size=5000, random_state=42)
+    vdj, _ = vdj2_resampled_with_network
     vdj.to_pandas()
     cluster_gini, vertex_gini = _bootstrap_network(
         vdj,
