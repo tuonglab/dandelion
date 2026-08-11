@@ -1624,7 +1624,9 @@ def group_pairwise_hamming_distance(
         for l in clonotype_sequence_group[g]:
             seq_ = list(clonotype_sequence_group[g][l])
             tdarray = np.array(seq_).reshape(-1, 1)
-            d_mat = squareform(pdist(tdarray, lambda x, y: _RapidHamming.distance(x[0], y[0])))
+            d_mat = squareform(
+                pdist(tdarray, lambda x, y: _RapidHamming.distance(x[0], y[0]))
+            )
             # then calculate what the acceptable threshold is for each length of sequence
             tr = math.floor(int(l) * (1 - identity))
 
