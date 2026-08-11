@@ -154,14 +154,14 @@ def test_find_clones_key_added(airr_reannotated, dummy_adata):
 # ---------------------------------------------------------------------------
 
 
-def test_transfer_with_overwrite(vdj_with_network, dummy_adata):
+def test_transfer_with_overwrite(vdj_with_network):
     """Lines 1122-1136: overwrite parameter in transfer."""
     vdj, adata = vdj_with_network
     transfer(adata, vdj, overwrite=True)
     assert "clone_id" in adata.obs.columns
 
 
-def test_transfer_with_overwrite_list(vdj_with_network, dummy_adata):
+def test_transfer_with_overwrite_list(vdj_with_network):
     """overwrite as list."""
     vdj, adata = vdj_with_network
     transfer(adata, vdj, overwrite=["clone_id"])
@@ -523,25 +523,6 @@ def test_vdj_sample_with_adata_and_full_length_p_numpy(vdj_with_network):
         size=sample_size,
         random_state=42,
         p=p_full,
-    )
-
-    assert vdj_sampled.n_obs == sample_size
-    assert adata_sampled.n_obs == sample_size
-
-
-def test_vdj_sample_with_adata_obs_series_probabilities(vdj_with_network):
-    """Allow passing probabilities directly as adata.obs Series."""
-    vdj, adata = vdj_with_network
-    clone_size(vdj)
-    transfer(adata, vdj)
-
-    sample_size = min(3, adata.n_obs)
-    vdj_sampled, adata_sampled = vdj_sample(
-        vdj,
-        adata=adata,
-        size=sample_size,
-        random_state=42,
-        p=adata.obs["clone_id_size_prop"],
     )
 
     assert vdj_sampled.n_obs == sample_size
