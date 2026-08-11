@@ -11,7 +11,7 @@ import pandas as pd
 from collections import defaultdict
 from joblib import Parallel, delayed
 from pathlib import Path
-from polyleven import levenshtein
+from rapidfuzz.distance import Levenshtein as _RapidLevenshtein
 from scanpy import logging as logg
 
 from scipy.sparse.csgraph import csgraph_from_dense
@@ -137,7 +137,7 @@ def generate_network(
         method to compute distance matrix. 'clone' refers to the original membership-based distance calculation where
         only distances within clones are calculated. Whereas 'full' computes the full pairwise distance matrix.
     dist_func : Callable | str | None, optional
-        distance function to use. If None, `polyleven.levenshtein` is used. If a string is provided, it will use Bio.Align's
+        distance function to use. If None, `rapidfuzz.distance.Levenshtein.distance` is used. If a string is provided, it will use Bio.Align's
         substitution matrices (e.g., 'BLOSUM62', 'PAM250'). See `Bio.Align.substitution_matrices.load` for available options.
     pad_to_max : bool, optional
         whether or not to pad sequences to the maximum length in the dataset before distance calculation. This will
@@ -181,7 +181,7 @@ def generate_network(
         n_cpus = multiprocessing.cpu_count()
     n_cpus = max(1, int(n_cpus))
     clone_key = clone_key if clone_key is not None else "clone_id"
-    dist_func = levenshtein if dist_func is None else dist_func
+    dist_func = _RapidLevenshtein.distance if dist_func is None else dist_func
     metric = resolve_metric(dist_func)
     if not compute_graph:
         compute_layout = False
