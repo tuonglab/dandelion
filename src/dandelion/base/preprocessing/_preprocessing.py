@@ -2866,6 +2866,7 @@ def check_contigs(
     adata: AnnData | None = None,
     productive_only: bool = True,
     library_type: Literal["ig", "tr-ab", "tr-gd"] | None = None,
+    min_umi: int = 1,
     umi_foldchange_cutoff: int = 2,
     consensus_foldchange_cutoff: int = 5,
     ntop_vdj: int = 1,
@@ -2921,6 +2922,8 @@ def check_contigs(
                 TRA, TRB
             `tr-gd`:
                 TRG, TRD
+    min_umi : int, optional
+        Minimum UMI count for a contig to be considered.
     umi_foldchange_cutoff : int, optional
         related to minimum fold change of UMI count, required to rescue contigs/barcode otherwise they will be marked as extra/ambiguous.
     consensus_foldchange_cutoff : int, optional
@@ -2985,6 +2988,9 @@ def check_contigs(
         dat = dat_[dat_["productive"].isin(TRUES)].copy()
     else:
         dat = dat_.copy()
+
+    # filter based on umi
+    dat = dat[dat["umi_count"].astype(int) >= min_umi].copy()
 
     if acceptable is not None:
         dat = dat[dat.locus.isin(acceptable)].copy()
