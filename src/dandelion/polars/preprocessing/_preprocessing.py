@@ -4213,6 +4213,7 @@ def check_contigs(
     adata: AnnData | None = None,
     productive_only: bool = True,
     library_type: Literal["ig", "tr-ab", "tr-gd"] | None = None,
+    min_umi: int = 1,
     umi_foldchange_cutoff: float = 2.0,
     consensus_foldchange_cutoff: float = 5.0,
     ntop_vdj: int = 1,
@@ -4247,6 +4248,8 @@ def check_contigs(
             - `ig`: IGH, IGK, IGL
             - `tr-ab`: TRA, TRB
             - `tr-gd`: TRG, TRD
+    min_umi : int, optional
+        Minimum UMI count for a contig to be considered.
     umi_foldchange_cutoff : float, default=2.0
         Minimum UMI fold-change threshold for dominance test.
     consensus_foldchange_cutoff : float, default=5.0
@@ -4323,8 +4326,6 @@ def check_contigs(
     mark_ambiguous_contigs_vec : Core vectorized function for marking contigs
     check_chimeric_genes_vec : Detects chimeric gene calls
     """
-    from pathlib import Path
-    import os
 
     if verbose:
         print("Filtering contigs...")
@@ -4383,6 +4384,11 @@ def check_contigs(
         )
     else:
         dat = dat_
+
+    # filter by minimum UMI count (lazy)
+    dat = dat.filter(
+        pl.col("umi_count").cast(pl.Int64) >= min_umi
+    )  # if the row has no umi_count, it will be filtered out since it will be null and null >= min_umi is false
 
     # Filter by library type (lazy)
     if acceptable is not None:
