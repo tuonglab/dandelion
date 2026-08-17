@@ -181,7 +181,7 @@ def generate_network(
         n_cpus = multiprocessing.cpu_count()
     n_cpus = max(1, int(n_cpus))
     clone_key = clone_key if clone_key is not None else "clone_id"
-    dist_func = dist_func = levenshtein if dist_func is None else dist_func
+    dist_func = levenshtein if dist_func is None else dist_func
     metric = resolve_metric(dist_func)
     if not compute_graph:
         compute_layout = False
