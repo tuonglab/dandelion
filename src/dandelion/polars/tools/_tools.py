@@ -1517,7 +1517,7 @@ def _graph_to_matrices(
                 )
 
                 if len(present_nodes) == n:
-                    distances = adj.tocsr()
+                    distances = csr_matrix(adj)
                 else:
                     # remap into the full n x n space if G doesn't contain every adata cell
                     idx_map = np.array(
@@ -1532,7 +1532,7 @@ def _graph_to_matrices(
                 if distances.nnz > 0:
                     distances.data += 1.0
     # CASE B: distances provided as a csr_matrix with _index_names
-    elif isinstance(distances, csr_matrix):
+    elif hasattr(distances, "_index_names"):
         old_names = np.array(distances._index_names)
         coo = distances.tocoo()
 

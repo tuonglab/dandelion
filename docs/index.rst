@@ -55,6 +55,7 @@ Polars Backend: Notebooks
    notebooks/polars/5_dandelion_diversity_and_mutation-10x_data_polars.ipynb
    notebooks/polars/7_dandelion_TCR_data_10x_data_polars.ipynb
    notebooks/polars/8-pseudobulk-trajectory_polars.ipynb
+   notenooks/polars/9-epitope_query.ipynb
    notebooks/polars/0_dandelion_polars_primer.ipynb
 
 .. toctree::

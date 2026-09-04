@@ -663,7 +663,7 @@ def _graph_to_matrices(
             )
 
     # CASE B: distances provided as a csr_matrix with _index_names
-    elif isinstance(distances, csr_matrix):
+    elif hasattr(distances, "_index_names"):
         old_names = np.array(distances._index_names)
         coo = distances.tocoo()
 
