@@ -737,9 +737,7 @@ def clone_overlap(
                     y + ({str(clone_): x},)
                     for y in list(
                         product(
-                            [
-                                i
-                                for i in overlap.loc[x][
+                            [*overlap.loc[x][
                                     overlap.loc[x] > 0
                                 ].index
                             ],
@@ -752,7 +750,7 @@ def clone_overlap(
         combis = {
             x: list(
                 product(
-                    [i for i in overlap.loc[x][overlap.loc[x] > 0].index],
+                    [*overlap.loc[x][overlap.loc[x] > 0].index],
                     repeat=2,
                 )
             )
@@ -789,9 +787,7 @@ def clone_overlap(
                     )
                     for y in list(
                         product(
-                            [
-                                i
-                                for i in overlap.loc[x][
+                            [*overlap.loc[x][
                                     overlap.loc[x] > 0
                                 ].index
                             ],
