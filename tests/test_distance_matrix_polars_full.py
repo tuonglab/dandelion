@@ -403,7 +403,7 @@ def test_calculate_distance_matrix_full_multicore(mouse_vdj_membership):
     non_missing = ~pd.isna(pandas_vals)
     assert np.array_equal(pandas_vals[non_missing], polars_vals[non_missing])
 
-    seq_cols = [col for col in df_pandas.columns]
+    seq_cols = [*df_pandas.columns]
     seq_colsp = [
         col for col in df_polars.collect_schema().names() if col != "cell_id"
     ]

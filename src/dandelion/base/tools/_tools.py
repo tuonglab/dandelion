@@ -1534,7 +1534,7 @@ def group_sequences(
         ]
     else:
         try:
-            seq_length = [l for l in input_vdj[junction_key + "_length"]]
+            seq_length = [*input_vdj[junction_key + "_length"]]
         except:
             raise ValueError(
                 "{} not found in {} input table.".format(

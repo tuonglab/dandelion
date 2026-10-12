@@ -167,7 +167,7 @@ def quantify_mutations(
     cols_to_return = pd_df.columns.difference(dat.columns)
     if len(cols_to_return) < 1:
         cols_to_return = list(
-            filter(re.compile("mu_.*").match, [c for c in pd_df.columns])
+            filter(re.compile("mu_.*").match, [*pd_df.columns])
         )
     else:
         cols_to_return = cols_to_return
