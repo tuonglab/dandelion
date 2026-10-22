@@ -23,7 +23,7 @@ from changeo.IO import readGermlines
 from functools import cmp_to_key, reduce
 from pandas.api.types import infer_dtype
 from pathlib import Path
-from polars import ColumnNotFoundError
+from polars.exceptions import ColumnNotFoundError
 from scanpy import logging as logg
 from scipy.sparse import csr_matrix
 from textwrap import dedent
