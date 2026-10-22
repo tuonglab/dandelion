@@ -649,9 +649,9 @@ class DandelionPolars:
         if self._metadata is None:
             return 0
         if isinstance(self._metadata, pl.LazyFrame):
-            return self._metadata.select(pl.count()).collect(
-                engine="streaming"
-            )[0, 0]
+            return self._metadata.select(pl.len()).collect(engine="streaming")[
+                0, 0
+            ]
         if isinstance(self._metadata, pl.DataFrame):
             return self._metadata.height
         if isinstance(self._metadata, pd.DataFrame):
@@ -669,9 +669,7 @@ class DandelionPolars:
         if self._data is None:
             return 0
         if isinstance(self._data, pl.LazyFrame):
-            return self._data.select(pl.count()).collect(engine="streaming")[
-                0, 0
-            ]
+            return self._data.select(pl.len()).collect(engine="streaming")[0, 0]
         if isinstance(self._data, pl.DataFrame):
             return self._data.height
         if isinstance(self._data, pd.DataFrame):
