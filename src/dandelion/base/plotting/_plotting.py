@@ -8,9 +8,6 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import nxviz as nxv
 import pandas as pd
 import seaborn as sns
 
@@ -21,7 +18,6 @@ from itertools import product, cycle
 from matplotlib.axes import Axes
 from matplotlib.collections import PatchCollection
 from matplotlib.figure import Figure
-from nxviz import annotate
 
 from scanpy.plotting import palettes
 from scanpy.plotting._tools.scatterplots import embedding
@@ -647,7 +643,7 @@ def clone_overlap(
     return_heatmap_data: bool = False,
     scale_edge_lambda: Callable | None = None,
     **kwargs,
-) -> nxv.CircosPlot:
+) -> nx.Graph | pd.DataFrame | None:
     """
     A plot function to visualise clonal overlap as a circos-style plot.
 
@@ -691,8 +687,9 @@ def clone_overlap(
 
     Returns
     -------
-    nxv.CircosPlot
-        a `nxviz.CircosPlot` object.
+    nx.Graph | pd.DataFrame | None
+        the graph if `return_graph` is True, or the adjacency matrix if
+        `as_heatmap` and `return_heatmap_data` are True.
 
     Raises
     ------
@@ -871,6 +868,17 @@ def clone_overlap(
     else:
         # remove self loops
         G.remove_edges_from(nx.selfloop_edges(G))
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                import nxviz as nxv
+                from nxviz import annotate
+        except ImportError as e:
+            raise ImportError(
+                "nxviz is required for the circos plot. Install it with "
+                "`pip install nxviz`. "
+                "Note: nxviz needs matplotlib<3.11."
+            ) from e
         ax = nxv.circos(
             G,
             group_by=color_by,
