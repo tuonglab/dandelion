@@ -108,5 +108,4 @@ __all__ += [
     "read_seekgene_vdj",
     "read_vdj",
     "tl",
-    "utl",
 ]
