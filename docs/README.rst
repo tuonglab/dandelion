@@ -75,17 +75,17 @@ Start off by creating a conda environment containing scanpy, following
 `official scanpy instructions <https://scanpy.readthedocs.io/en/stable/installation.html>`__.
 Once done, run the following:
 
+**With Polars backend (recommended for improved performance):**
+
+.. code:: bash
+
+    pip install "sc-dandelion[polars]"
+
 **Base install:**
 
 .. code:: bash
 
     pip install sc-dandelion
-
-**With Polars backend (recommended for improved performance):**
-
-.. code:: bash
-
-    pip install sc-dandelion[polars]
 
 The ``polars`` extra enables a faster backend for data operations. The base install
 uses ``pandas`` as the backend.
@@ -154,8 +154,12 @@ Finally, install dandelion:
 
 .. code:: bash
 
+    # recommended: polars backend for improved performance
+    pip install "sc-dandelion[polars]"
+    # or the base (pandas) install
     pip install sc-dandelion
     # or from GitHub
+    pip install "sc-dandelion[polars] @ git+https://github.com/tuonglab/dandelion.git"
     pip install git+https://github.com/tuonglab/dandelion.git
     # or from a specific branch
     pip install git+https://github.com/tuonglab/dandelion@branch_name
@@ -187,7 +191,7 @@ Base packages (auto-installed with ``pip install sc-dandelion``)
     plotnine>=0.10
     palettable>=3.3
     mizani>=0.8
-    nxviz>=0.7
+    matplotlib>=3.5
     rapidfuzz>3.12.1
     zarr>=2.18.7
     circlify>=0.15.0
