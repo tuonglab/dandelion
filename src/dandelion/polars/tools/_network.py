@@ -4,7 +4,6 @@ import multiprocessing
 import re
 import time
 
-import dask.array as da
 import networkx as nx
 import numpy as np
 import pandas as pd

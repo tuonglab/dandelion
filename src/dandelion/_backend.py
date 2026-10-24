@@ -14,10 +14,33 @@ import os
 _BACKEND = os.environ.get("DANDELION_BACKEND", "auto").lower()
 
 
+def _polars_available() -> bool:
+    """Check if polars is available in the current environment."""
+    try:
+        importlib.import_module("polars")
+    except ImportError:
+        return False
+    return True
+
+
+if _BACKEND in ("pandas", "base"):
+    _BACKEND = "pandas"
+elif _polars_available():
+    _BACKEND = "polars"
+else:
+    # polars is not installed, so fall back to pandas
+    _BACKEND = "pandas"
+
+
 def _set_backend(mode: str) -> None:
     """Set the active backend. Use 'polars' or 'base' ('pandas')."""
     global _BACKEND
     normalized = "pandas" if mode.lower() in ("base", "pandas") else "polars"
+    if normalized == "polars" and not _polars_available():
+        raise ImportError(
+            "The polars backend requires polars. Install it with "
+            '`pip install "sc-dandelion[polars]"`.'
+        )
     _BACKEND = normalized
 
 
@@ -27,7 +50,7 @@ def get_backend() -> str:
 
 
 def _use_polars() -> bool:
-    return _BACKEND != "pandas"
+    return _BACKEND not in ("pandas", "base")
 
 
 def import_backend_class(module: str, class_name: str):

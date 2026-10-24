@@ -159,19 +159,17 @@ scipy>=1.8
 numba>=0.56
 seaborn>=0.12
 networkx>=3.0
-leidenalg>=0.9
 polyleven>=0.4
 h5py>=3.6
-adjustText>=0.7
 distance>=0.1.3
 plotnine>=0.10
-palettable>=3.3
-mizani>=0.8
 matplotlib>=3.5
 rapidfuzz>3.12.1
 zarr>=2.18.7
 circlify>=0.15.0
 airr
+packcircles>=0.14
+igraph>=1.0.0
 ```
 
 ### Optional extras
