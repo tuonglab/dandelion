@@ -1447,7 +1447,7 @@ def test_clone_rarefaction_dandelion(airr_reannotated2, dummy_adata2):
         .with_columns(
             (pl.col("_idx") % 3)
             .cast(pl.Utf8)
-            .str.concat("_sample")
+            .str.join("_sample")
             .alias("sample_id")
         )
         .drop("_idx")

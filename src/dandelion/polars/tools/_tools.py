@@ -2420,7 +2420,7 @@ def vdj_sample(
             # Stay lazy and only get the cell_id column
             keep_cells = (
                 vdj._metadata.select("cell_id")
-                .collect(streaming=True)
+                .collect(engine="streaming")
                 .to_series()
                 .gather(sample_indices)
                 .to_list()
@@ -2444,7 +2444,7 @@ def vdj_sample(
         if isinstance(vdj._metadata, pl.LazyFrame):
             vdj_cell_ids = set(
                 vdj._metadata.select("cell_id")
-                .collect(streaming=True)["cell_id"]
+                .collect(engine="streaming")["cell_id"]
                 .to_list()
             )
         elif isinstance(vdj._metadata, pl.DataFrame):
@@ -2476,7 +2476,7 @@ def vdj_sample(
                 if p_array.shape[0] == original_n_cells:
                     if isinstance(vdj._metadata, pl.LazyFrame):
                         full_meta = vdj._metadata.select("cell_id").collect(
-                            streaming=True
+                            engine="streaming"
                         )
                         full_cell_ids = full_meta["cell_id"].to_list()
                     elif isinstance(vdj._metadata, pl.DataFrame):
@@ -2542,7 +2542,7 @@ def vdj_sample(
 
         # Only collect if we need replacement logic
         if replace:
-            vdj_dat = vdj_dat.collect(streaming=True)
+            vdj_dat = vdj_dat.collect(engine="streaming")
     elif isinstance(vdj_dat, pl.DataFrame):
         if has_ambiguous:
             vdj_dat = vdj_dat.filter(pl.col("ambiguous").is_in(FALSES_STR))

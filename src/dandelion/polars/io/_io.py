@@ -651,7 +651,7 @@ def read_10x_vdj(
                     res = out_df.join(
                         out_json_df,
                         on="sequence_id",
-                        how="outer",
+                        how="full",
                         suffix="_json",
                     )
 
@@ -739,7 +739,7 @@ def read_10x_vdj(
                     res = out_df.join(
                         out_json_df,
                         on="sequence_id",
-                        how="outer",
+                        how="full",
                         suffix="_json",
                     )
 
