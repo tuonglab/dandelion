@@ -30,10 +30,12 @@ jobs:
           - { python-version: "3.11", os: ubuntu-latest }
           - { python-version: "3.12", os: ubuntu-latest }
           - { python-version: "3.13", os: ubuntu-latest }
+          - { python-version: "3.14", os: ubuntu-latest }
           - { python-version: "3.11", os: macos-latest }
           - { python-version: "3.12", os: macos-latest }
           - { python-version: "3.13", os: macos-latest }
-          - { python-version: "3.13", os: ubuntu-latest, backend: pandas }
+          - { python-version: "3.14", os: macos-latest }
+          - { python-version: "3.14", os: ubuntu-latest, backend: pandas }
     runs-on: ${{ matrix.config.os }}
     env:
       R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
