@@ -586,7 +586,7 @@ def read_10x_vdj(
                                 out[d["contig_name"]].update({"c_call": c_gene})
 
         # Convert dict to DataFrame
-        return pl.DataFrame([v for v in out.values()])
+        return pl.DataFrame([*out.values()])
 
     # Handle DataFrame inputs (pandas or polars)
     if isinstance(data, pd.DataFrame):

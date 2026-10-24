@@ -2901,12 +2901,12 @@ def load_data(obj: pd.DataFrame | Path | str | None) -> pd.DataFrame:
 def check_travdv(data: pd.DataFrame) -> pd.DataFrame:
     """Check if locus is TRA/D."""
     data = load_data(data)
-    contig = [x for x in data["sequence_id"]]
-    v = [x for x in data["v_call"]]
-    d = [x for x in data["d_call"]]
-    j = [x for x in data["j_call"]]
-    c = [x for x in data["c_call"]]
-    l = [x for x in data["locus"]]
+    contig = [*data["sequence_id"]]
+    v = [*data["v_call"]]
+    d = [*data["d_call"]]
+    j = [*data["j_call"]]
+    c = [*data["c_call"]]
+    l = [*data["locus"]]
     v_dict = dict(zip(contig, v))
     d_dict = dict(zip(contig, d))
     j_dict = dict(zip(contig, j))

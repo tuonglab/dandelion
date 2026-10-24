@@ -1527,7 +1527,7 @@ def reassign_alleles(
                 [
                     'awk "FNR==1 && NR!=1 { while (/^sequence_id/) getline; } 1 {print}"'
                 ]
-                + [f for f in filepathlist_heavy]
+                + [*filepathlist_heavy]
                 + [">"]
                 + [
                     str(
@@ -1540,7 +1540,7 @@ def reassign_alleles(
                 [
                     'awk "FNR==1 && NR!=1 { while (/^sequence_id/) getline; } 1 {print}"'
                 ]
-                + [f for f in filepathlist_light]
+                + [*filepathlist_light]
                 + [">"]
                 + [
                     str(

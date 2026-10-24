@@ -1400,8 +1400,8 @@ def format_locus(
                 )
             }
         else:
-            loc1 = {e: l for e, l in enumerate([ll for ll in locus1_split])}
-            loc2 = {e: l for e, l in enumerate([ll for ll in locus2_split])}
+            loc1 = {e: l for e, l in enumerate([*locus1_split])}
+            loc2 = {e: l for e, l in enumerate([*locus2_split])}
         loc1x, loc2x = [], []
         if not all([px == "None" for px in loc1.values()]):
             loc1xx = list(loc1.values())
