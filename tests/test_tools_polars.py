@@ -235,7 +235,7 @@ def test_diversity_shannon(create_testfolder, normalize):
     vdj._metadata = (
         vdj._metadata.with_row_index("idx")
         .with_columns(
-            sample_id=(pl.col("idx") % 3).cast(pl.String).str.concat("sample_")
+            sample_id=(pl.col("idx") % 3).cast(pl.String).str.join("sample_")
         )
         .drop("idx")
     )
@@ -264,7 +264,7 @@ def test_diversity_min_size_too_small(create_testfolder, method):
     vdj._metadata = (
         vdj._metadata.with_row_index("idx")
         .with_columns(
-            sample_id=(pl.col("idx") % 3).cast(pl.String).str.concat("sample_")
+            sample_id=(pl.col("idx") % 3).cast(pl.String).str.join("sample_")
         )
         .drop("idx")
     )
@@ -292,7 +292,7 @@ def test_diversity_min_size_ok(create_testfolder, method):
     vdj._metadata = (
         vdj._metadata.with_row_index("idx")
         .with_columns(
-            sample_id=(pl.col("idx") % 3).cast(pl.String).str.concat("sample_")
+            sample_id=(pl.col("idx") % 3).cast(pl.String).str.join("sample_")
         )
         .drop("idx")
     )

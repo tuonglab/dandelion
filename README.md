@@ -174,7 +174,7 @@ igraph>=1.0.0
 
 ### Optional extras
 ```bash
-pip install sc-dandelion[polars]    # polars>=1.34.0, pyarrow>=21.0.0
+pip install sc-dandelion[polars]    # polars>=2.0.0, pyarrow>=21.0.0
 pip install sc-dandelion[scirpy]    # scirpy>=0.21, awkward>=2.1, mudata>=0.2
 pip install sc-dandelion[scrublet]  # scrublet>=0.2, annoy<1.17.0
 pip install sc-dandelion[palantir]  # palantir>=0.2.3, pertpy>=0.1.0, jax>=0.3
