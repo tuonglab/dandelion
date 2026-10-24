@@ -186,7 +186,7 @@ jobs:
       - name: Upload coverage to Codecov
         if:
           matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
-          '3.13' && github.repository == 'tuonglab/dandelion'
+          '3.14' && github.repository == 'tuonglab/dandelion'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -204,7 +204,7 @@ jobs:
       - name: Upload test results to Codecov
         if:
           matrix.config.os == 'ubuntu-latest' && matrix.config.python-version ==
-          '3.13' && github.repository == 'tuonglab/dandelion' && !cancelled()
+          '3.14' && github.repository == 'tuonglab/dandelion' && !cancelled()
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
