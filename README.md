@@ -132,8 +132,12 @@ install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam", "scoper")
 ```
 and then lastly install dandelion:
 ```bash
+# recommended: polars backend for improved performance
+pip install "sc-dandelion[polars]"
+# or the base (pandas) install
 pip install sc-dandelion
-# or
+# or from GitHub
+pip install "sc-dandelion[polars] @ git+https://github.com/tuonglab/dandelion.git"
 pip install git+https://github.com/tuonglab/dandelion.git
 # or  installing from a specific branch
 pip install git+https://github.com/tuonglab/dandelion@branch_name
@@ -163,7 +167,7 @@ distance>=0.1.3
 plotnine>=0.10
 palettable>=3.3
 mizani>=0.8
-nxviz>=0.7
+matplotlib>=3.5
 rapidfuzz>3.12.1
 zarr>=2.18.7
 circlify>=0.15.0
