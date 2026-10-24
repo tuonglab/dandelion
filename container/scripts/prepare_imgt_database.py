@@ -622,4 +622,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if not shutil.which("annotate_j"):
+        print("Please install receptor-utils with `pip install receptor-utils`")
+
     main()

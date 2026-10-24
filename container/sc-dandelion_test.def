@@ -14,6 +14,8 @@ From: ubuntu:latest
     scripts/changeo_clonotypes.py /share/changeo_clonotypes.py
     scripts/prepare_imgt_database.py /share/prepare_imgt_database.py
     scripts/prepare_ogrdb_database.py /share/prepare_ogrdb_database.py
+    scripts/prepare_kiarva_database.py /share/prepare_kiarva_database.py
+    scripts/prepare_gkhlab_database.py /share/prepare_gkhlab_database.py
     scripts/utils.py /share/utils.py
     tests /tests
 
@@ -36,6 +38,8 @@ From: ubuntu:latest
         fi
     fi
     python /share/prepare_ogrdb_database.py --outdir /share/database || true
+    python /share/prepare_kiarva_database.py --outdir /share/database || true
+    python /share/prepare_gkhlab_database.py --outdir /share/database || true
 
 %environment
     . /etc/profile.d/igblast.sh

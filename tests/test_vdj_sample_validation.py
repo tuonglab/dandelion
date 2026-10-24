@@ -1,5 +1,6 @@
 """Test vdj_sample implementation."""
 
+import numpy as np
 import pandas as pd
 import polars as pl
 
@@ -161,3 +162,31 @@ def test_vdj_sample_preserves_structure():
         assert (
             vdj_sampled._data.filter(pl.col("cell_id") == cell_id).shape[0] > 0
         ), f"Cell {cell_id} should have sequences"
+
+
+def test_vdj_sample_accepts_readonly_probability_array():
+    """vdj_sample should handle read-only numpy arrays for p."""
+    mock_data = {
+        "sequence_id": [
+            f"cell_{i}_contig_{j}" for i in range(20) for j in range(2)
+        ],
+        "cell_id": [f"cell_{i}" for i in range(20) for _ in range(2)],
+        "locus": ["IGH", "IGK"] * 20,
+        "productive": ["T"] * 40,
+        "v_call": ["IGHV1-1*01"] * 20 + ["IGKV1-1*01"] * 20,
+        "d_call": [""] * 40,
+        "j_call": ["IGHJ1*01"] * 20 + ["IGKJ1*01"] * 20,
+        "c_call": ["IGHM"] * 20 + ["IGKC"] * 20,
+        "junction": ["CAAAAA" + str(i) for i in range(20) for _ in range(2)],
+        "junction_aa": ["QAAAA" + str(i) for i in range(20) for _ in range(2)],
+    }
+
+    vdj = DandelionPolars(pl.DataFrame(mock_data))
+    probs = np.full(vdj.n_obs, 1.0 / vdj.n_obs, dtype=float)
+    probs.setflags(write=False)
+
+    vdj_sampled = vdj_sample(vdj, size=10, p=probs, random_state=42)
+
+    if isinstance(vdj_sampled._metadata, pl.LazyFrame):
+        vdj_sampled.to_eager()
+    assert vdj_sampled._metadata.shape[0] == 10

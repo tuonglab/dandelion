@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import math
 
+import igraph as ig
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -56,8 +57,9 @@ def find_clones(
     key_added: str | None = None,
     recalculate_length: bool = True,
     store_distances: bool = True,
+    group_by: str | None = None,
     verbose: bool = True,
-) -> DandelionPolars:
+) -> None:
     """
     Find clones based on VDJ chain and VJ chain CDR3 junction hamming distance.
 
@@ -94,13 +96,16 @@ def find_clones(
         wrong). Default is True
     store_distances : bool, optional
         whether or not to store the distance matrix as a sparse matrix in `vdj.distances`. Default is True.
+    group_by : str | None, optional
+        Column name to partition cells by before clonal clustering. When provided, clones are found
+        independently within each group (e.g. per-sample), and cells/contigs in different groups can
+        never be assigned to the same clone, even if their junction sequences are identical. The column
+        must exist in either `vdj.data` or `vdj.metadata`; if it is only present in one, it will be
+        propagated to the other internally (`vdj.update_data()` if only in `.metadata`, or
+        `vdj.update_metadata(retrieve=group_by, unique=True, split=False)` if only in `.data`).
+        `None` disables grouping and clones are found across all cells as before.
     verbose : bool, optional
         whether or not to print progress.
-
-    Returns
-    -------
-    Dandelion
-        Dandelion object with clone_id annotated in `.data` slot and `.metadata` initialized.
 
     Raises
     ------
@@ -108,6 +113,35 @@ def find_clones(
         if `key` not found in Dandelion.data.
     """
     start = logg.info("Finding clonotypes")
+
+    # If grouping, make sure the group_by column is available on both
+    # `.data` and `.metadata` before we do anything else, since the
+    # contig-level clustering below reads from `.data`.
+    if group_by is not None:
+        data_schema = (
+            vdj._data.collect_schema()
+            if isinstance(vdj._data, pl.LazyFrame)
+            else vdj._data.schema
+        )
+        metadata_schema = (
+            vdj._metadata.collect_schema()
+            if isinstance(vdj._metadata, pl.LazyFrame)
+            else vdj._metadata.schema
+        )
+        in_data = group_by in data_schema
+        in_metadata = group_by in metadata_schema
+        if not in_data and not in_metadata:
+            raise ValueError(
+                f"`group_by` column '{group_by}' not found in either "
+                "`.data` or `.metadata`."
+            )
+        if in_metadata and not in_data:
+            # Only in metadata - propagate down into .data
+            vdj.update_data()
+        elif in_data and not in_metadata:
+            # Only in .data - propagate up into .metadata
+            vdj.update_metadata(retrieve=group_by, unique=True, split=False)
+
     df = vdj._data
     # Collect lazy frame if necessary, then convert to pandas
     if isinstance(df, pl.LazyFrame):
@@ -162,7 +196,7 @@ def find_clones(
     df = df.with_row_index("_original_order")
 
     # Store results from each locus
-    locus_results = {}
+    locus_results = defaultdict(list)
 
     # Initialize distance storage based on backend choice
     distance_results = []
@@ -179,433 +213,483 @@ def find_clones(
         }
         n_cells = len(all_cell_ids)
 
-    # Process each locus
-    for locus, (vdj_loci, vj_loci) in locus_dict.items():
-        # Filter to this locus
-        df_locus = df.filter(pl.col("locus").is_in(vdj_loci + vj_loci))
-        if "ambiguous" in df_locus.collect_schema():
-            df_locus = df_locus.filter(~pl.col("ambiguous").is_in(TRUES_STR))
-
-        # early skip if no rows
-        if df_locus.height == 0:
-            continue
-
-        # Get locus-specific parameters
-        locus_identity = identity[locus]
-        locus_key = key[locus]
-        locus_celltype = locus_log[locus]
-
-        # Add celltype to this locus
-        df_locus = df_locus.with_columns(
-            pl.lit(locus_celltype).alias("_celltype")
+    # Determine the groups to iterate over. When `group_by` is None, we
+    # process everything in a single pass (group_val stays None and no
+    # filtering / prefixing happens), preserving the original behaviour.
+    if group_by is not None:
+        group_values = (
+            df.select(pl.col(group_by)).unique().to_series().to_list()
         )
+    else:
+        group_values = [None]
 
-        # Check for VDJ and VJ chains
-        has_vdj, has_vj = _check_chains(df_locus, vdj_loci, vj_loci)
-
-        # Initialize results for this locus
-        df_vdj_result = None
-        df_vj_result = None
-
-        vdj_chain, vj_chain = "VDJ", "VJ"
-
-        # process VDJ chain
-        if has_vdj:
-            df_vdj = df_locus.filter(pl.col("locus").is_in(vdj_loci))
-
-            # Group sequences
-            df_vdj_grp = _group_sequences(
-                df=df_vdj,
-                key=locus_key,
-                same_vj=same_vj,
-                same_length=same_length,
-                recalculate_length=recalculate_length,
-                by_alleles=by_alleles,
-            )
-            # Build aggregation list dynamically
-            # Collect both sequences and their original order for proper tracking
-            agg_cols = [
-                pl.col(locus_key),
-                pl.col("_original_order"),
-                pl.col("cell_id"),
-            ]
-            if same_length:
-                agg_cols.append(pl.col(f"_{locus_key}_length").first())
-            else:
-                agg_cols.append(pl.col(f"_{locus_key}_length").max())
-            grouped = (
-                df_vdj_grp.group_by("_membership")
-                .agg(agg_cols)
-                .sort("_membership")
-            )
-            clones_vdj = defaultdict(dict)
-            # Also track which original rows belong to which clone
-            row_to_clone = {}
-
-            for row in tqdm(
-                grouped.iter_rows(named=True),
-                desc=f"Finding clones based on {locus_celltype} cell {vdj_chain} chains using {locus_key}",
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-                total=df_vdj_grp.select("_membership").n_unique(),
-                disable=not verbose,
-            ):
-                seqs = row[locus_key]
-                orig_orders = row["_original_order"]
-                cell_ids = row["cell_id"]
-                membership = row["_membership"]
-                length = row[f"_{locus_key}_length"]
-                if isinstance(metric, IdentityMetric):
-                    threshold = 0
-                else:
-                    if hard_cutoff is None:
-                        threshold = math.floor(
-                            int(length) * (1 - locus_identity)
-                        )
-                    else:
-                        threshold = None
-
-                # Filter out empty strings for distance calculation only
-                seqs_non_empty = [s for s in seqs if s]
-                seqs_empty = [s for s in seqs if not s]
-                # Also filter cell_ids to match seqs_non_empty
-                cell_ids_non_empty = [
-                    cell_ids[i] for i, s in enumerate(seqs) if s
-                ]
-
-                if seqs_non_empty:
-                    # Deduplicate sequences for faster computation
-                    unique_seqs = list(set(seqs_non_empty))
-                    seq_to_unique_idx = {
-                        seq: i for i, seq in enumerate(unique_seqs)
-                    }
-
-                    # Compute distances only for unique sequences
-                    d_mat_unique = metric.compute_vectorized(unique_seqs)
-
-                    # Filter to only cells that are in metadata (ensure alignment)
-                    if store_distances:
-                        valid_mask = [
-                            cid in cell_id_to_meta_idx
-                            for cid in cell_ids_non_empty
-                        ]
-                        seqs_filtered = [
-                            s
-                            for s, valid in zip(seqs_non_empty, valid_mask)
-                            if valid
-                        ]
-                        meta_indices = np.array(
-                            [
-                                cell_id_to_meta_idx[cid]
-                                for cid, valid in zip(
-                                    cell_ids_non_empty, valid_mask
-                                )
-                                if valid
-                            ]
-                        )
-
-                        if len(meta_indices) > 0 and d_mat_unique.size > 0:
-                            # Use vectorized indexing to expand unique distances to full matrix
-                            unique_indices = np.array(
-                                [
-                                    seq_to_unique_idx[seq]
-                                    for seq in seqs_filtered
-                                ]
-                            )
-                            d_mat = d_mat_unique[
-                                np.ix_(unique_indices, unique_indices)
-                            ]
-                            # Collect COO components for in-memory assembly
-                            n_local = len(meta_indices)
-                            rows, cols = np.meshgrid(
-                                range(n_local),
-                                range(n_local),
-                                indexing="ij",
-                            )
-                            rows_flat = rows.ravel()
-                            cols_flat = cols.ravel()
-                            data_flat = d_mat.ravel()
-                            global_rows = meta_indices[rows_flat]
-                            global_cols = meta_indices[cols_flat]
-                            distance_results.append(
-                                (global_rows, global_cols, data_flat)
-                            )
-
-                    # Cluster on unique sequences only, then map back
-                    if len(unique_seqs) > 1:
-                        seq_tmp_dict = _clustering_scipy(
-                            d_mat_unique,
-                            threshold=threshold,
-                            sequences=unique_seqs,
-                            hard_threshold=hard_cutoff,
-                        )
-                    else:
-                        seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
-                else:
-                    # All sequences in this membership are empty - assign them together
-                    if seqs_empty:
-                        seq_tmp_dict = {seqs_empty[0]: tuple(seqs_empty)}
-                    else:
-                        seq_tmp_dict = {}
-
-                # Sort by size
-                clones_tmp = sorted(
-                    list(set(seq_tmp_dict.values())), key=len, reverse=True
-                )
-                for sub_group, clone_group in enumerate(clones_tmp, 1):
-                    clones_vdj[membership][sub_group] = clone_group
-                    # Map each original row to its clone based on its sequence
-                    for seq_idx, seq_val in enumerate(seqs):
-                        if seq_val and seq_val in clone_group:
-                            row_to_clone[orig_orders[seq_idx]] = (
-                                f"{membership}_{sub_group}"
-                            )
-
-            # Apply clone IDs using row mapping instead of sequence mapping
-            df_vdj_grp = df_vdj_grp.with_columns(
-                pl.col("_original_order")
-                .replace_strict(row_to_clone, default=None)
-                .alias(f"_{key_added}_{vdj_chain}")
-            )
-
-            # Keep only what we need
-            df_vdj_result = df_vdj_grp.select(
-                [
-                    "_original_order",
-                    f"_{key_added}_VDJ",
-                ]
-            )
-            del df_vdj, df_vdj_grp
-
-        # process VJ chains next
-        if has_vj:
-            df_vj = df_locus.filter(pl.col("locus").is_in(vj_loci))
-
-            # Group sequences
-            df_vj_grp = _group_sequences(
-                df=df_vj,
-                key=locus_key,
-                same_vj=same_vj,
-                same_length=same_length,
-                recalculate_length=recalculate_length,
-                by_alleles=by_alleles,
-            )
-            # Build aggregation list dynamically
-            # Collect both sequences and their original order for proper tracking
-            agg_cols = [
-                pl.col(locus_key),
-                pl.col("_original_order"),
-                pl.col("cell_id"),
-            ]
-            if same_length:
-                agg_cols.append(pl.col(f"_{locus_key}_length").first())
-            else:
-                agg_cols.append(pl.col(f"_{locus_key}_length").max())
-
-            grouped = (
-                df_vj_grp.group_by("_membership")
-                .agg(agg_cols)
-                .sort("_membership")
-            )
-
-            clones_vj = defaultdict(dict)
-            # Also track which original rows belong to which clone
-            row_to_clone = {}
-
-            for row in tqdm(
-                grouped.iter_rows(named=True),
-                desc=f"Finding clones based on {locus_celltype} cell {vj_chain} chains using {locus_key}",
-                bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
-                total=grouped.height,
-                disable=not verbose,
-            ):
-                seqs = row[locus_key]
-                orig_orders = row["_original_order"]
-                cell_ids = row["cell_id"]
-                length = row[f"_{locus_key}_length"]
-                membership = row["_membership"]
-                if isinstance(metric, IdentityMetric):
-                    threshold = 0
-                else:
-                    if hard_cutoff is None:
-                        threshold = math.floor(
-                            int(length) * (1 - locus_identity)
-                        )
-                    else:
-                        threshold = None
-
-                # Filter out empty strings for distance calculation only
-                seqs_non_empty = [s for s in seqs if s]
-                seqs_empty = [s for s in seqs if not s]
-                # Also filter cell_ids to match seqs_non_empty
-                cell_ids_non_empty = [
-                    cell_ids[i] for i, s in enumerate(seqs) if s
-                ]
-
-                if seqs_non_empty:
-                    # Deduplicate sequences for faster computation
-                    unique_seqs = list(set(seqs_non_empty))
-                    seq_to_unique_idx = {
-                        seq: i for i, seq in enumerate(unique_seqs)
-                    }
-
-                    # Compute distances only for unique sequences
-                    d_mat_unique = metric.compute_vectorized(unique_seqs)
-
-                    # Filter to only cells that are in metadata (ensure alignment)
-                    if store_distances:
-                        valid_mask = [
-                            cid in cell_id_to_meta_idx
-                            for cid in cell_ids_non_empty
-                        ]
-                        seqs_filtered = [
-                            s
-                            for s, valid in zip(seqs_non_empty, valid_mask)
-                            if valid
-                        ]
-                        meta_indices = np.array(
-                            [
-                                cell_id_to_meta_idx[cid]
-                                for cid, valid in zip(
-                                    cell_ids_non_empty, valid_mask
-                                )
-                                if valid
-                            ]
-                        )
-
-                        if len(meta_indices) > 0 and d_mat_unique.size > 0:
-                            # Use vectorized indexing to expand unique distances to full matrix
-                            unique_indices = np.array(
-                                [
-                                    seq_to_unique_idx[seq]
-                                    for seq in seqs_filtered
-                                ]
-                            )
-                            d_mat = d_mat_unique[
-                                np.ix_(unique_indices, unique_indices)
-                            ]
-
-                            # Collect COO components for in-memory assembly
-                            n_local = len(meta_indices)
-                            rows, cols = np.meshgrid(
-                                range(n_local),
-                                range(n_local),
-                                indexing="ij",
-                            )
-                            rows_flat = rows.ravel()
-                            cols_flat = cols.ravel()
-                            data_flat = d_mat.ravel()
-                            global_rows = meta_indices[rows_flat]
-                            global_cols = meta_indices[cols_flat]
-                            distance_results.append(
-                                (global_rows, global_cols, data_flat)
-                            )
-
-                    # Cluster on unique sequences only, then map back
-                    if len(unique_seqs) > 1:
-                        seq_tmp_dict = _clustering_scipy(
-                            d_mat_unique,
-                            threshold=threshold,
-                            sequences=unique_seqs,
-                            hard_threshold=hard_cutoff,
-                        )
-                    else:
-                        seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
-                else:
-                    # All sequences in this membership are empty - assign them together
-                    if seqs_empty:
-                        seq_tmp_dict = {seqs_empty[0]: tuple(seqs_empty)}
-                    else:
-                        seq_tmp_dict = {}
-
-                # Sort by size
-                clones_tmp = sorted(
-                    list(set(seq_tmp_dict.values())), key=len, reverse=True
-                )
-                for sub_group, clone_group in enumerate(clones_tmp, 1):
-                    clones_vj[membership][sub_group] = clone_group
-                    # Map each original row to its clone based on its sequence
-                    for seq_idx, seq_val in enumerate(seqs):
-                        if seq_val and seq_val in clone_group:
-                            row_to_clone[orig_orders[seq_idx]] = (
-                                f"{membership}_{sub_group}"
-                            )
-
-            # Apply clone IDs using row mapping instead of sequence mapping
-            df_vj_grp = df_vj_grp.with_columns(
-                pl.col("_original_order")
-                .replace_strict(row_to_clone, default=None)
-                .alias(f"_{key_added}_{vj_chain}")
-            )
-            # Keep only what we need
-            df_vj_result = df_vj_grp.select(
-                [
-                    "_original_order",
-                    f"_{key_added}_VJ",
-                ]
-            )
-
-        # Combine VDJ + VJ for this locus
-        if df_vdj_result is not None and df_vj_result is not None:
-            df_locus_chains = df_vdj_result.join(
-                df_vj_result,
-                on="_original_order",
-                how="full",
-                coalesce=True,
-            )
-        elif df_vdj_result is not None:
-            df_locus_chains = df_vdj_result.with_columns(
-                pl.lit(None).alias(f"_{key_added}_VJ")
-            )
-        elif df_vj_result is not None:
-            df_locus_chains = df_vj_result.with_columns(
-                pl.lit(None).alias(f"_{key_added}_VDJ")
-            )
+    for group_val in group_values:
+        if group_by is not None:
+            df_group = df.filter(pl.col(group_by) == group_val)
+            # Prefix clone ids with the group value so that clones found
+            # independently within different groups never collide/merge
+            # when the per-group results are combined back together.
+            group_prefix = f"{group_val}_"
         else:
-            # No chains found for this locus
-            continue
+            df_group = df
+            group_prefix = ""
 
-        # Add celltype back
-        df_locus_chains = df_locus_chains.with_columns(
-            pl.lit(locus_celltype).alias("_celltype")
-        )
-
-        # Join with cell_id from original df
-        df_locus_chains = df_locus_chains.join(
-            df.select(["_original_order", "cell_id"]),
-            on="_original_order",
-            how="left",
-        )
-
-        # Combine VDJ + VJ at the cell level for this locus
-        df_locus_summary = df_locus_chains.group_by("cell_id").agg(
-            [
-                pl.col(f"_{key_added}_VDJ")
-                .drop_nulls()
-                .unique()
-                .alias("_vdj_set"),
-                pl.col(f"_{key_added}_VJ")
-                .drop_nulls()
-                .unique()
-                .alias("_vj_set"),
-            ]
-        )
-
-        # Create locus-specific clone IDs
-        df_locus_summary = df_locus_summary.with_columns(
-            pl.struct(["_vdj_set", "_vj_set"])
-            .map_elements(
-                lambda s: _combine_single_locus(
-                    s["_vdj_set"], s["_vj_set"], locus_celltype
-                ),
-                return_dtype=pl.List(pl.String),
+        # Process each locus
+        for locus, (vdj_loci, vj_loci) in locus_dict.items():
+            # Filter to this locus (and, if group_by is set, to this group)
+            df_locus = df_group.filter(
+                pl.col("locus").is_in(vdj_loci + vj_loci)
             )
-            .alias(f"_{key_added}_{locus_celltype}")
-        )
+            if "ambiguous" in df_locus.collect_schema():
+                df_locus = df_locus.filter(
+                    ~pl.col("ambiguous").is_in(TRUES_STR)
+                )
 
-        # Store result for this locus
-        locus_results[locus_celltype] = df_locus_summary.select(
-            ["cell_id", f"_{key_added}_{locus_celltype}"]
-        )
+            # early skip if no rows
+            if df_locus.height == 0:
+                continue
+
+            # Get locus-specific parameters
+            locus_identity = identity[locus]
+            locus_key = key[locus]
+            locus_celltype = locus_log[locus]
+
+            # Add celltype to this locus
+            df_locus = df_locus.with_columns(
+                pl.lit(locus_celltype).alias("_celltype")
+            )
+
+            # Check for VDJ and VJ chains
+            has_vdj, has_vj = _check_chains(df_locus, vdj_loci, vj_loci)
+
+            # Initialize results for this locus
+            df_vdj_result = None
+            df_vj_result = None
+
+            vdj_chain, vj_chain = "VDJ", "VJ"
+
+            # process VDJ chain
+            if has_vdj:
+                df_vdj = df_locus.filter(pl.col("locus").is_in(vdj_loci))
+
+                # Group sequences
+                df_vdj_grp = _group_sequences(
+                    df=df_vdj,
+                    key=locus_key,
+                    same_vj=same_vj,
+                    same_length=same_length,
+                    recalculate_length=recalculate_length,
+                    by_alleles=by_alleles,
+                )
+                # Build aggregation list dynamically
+                # Collect both sequences and their original order for proper tracking
+                agg_cols = [
+                    pl.col(locus_key),
+                    pl.col("_original_order"),
+                    pl.col("cell_id"),
+                ]
+                if same_length:
+                    agg_cols.append(pl.col(f"_{locus_key}_length").first())
+                else:
+                    agg_cols.append(pl.col(f"_{locus_key}_length").max())
+                grouped = (
+                    df_vdj_grp.group_by("_membership")
+                    .agg(agg_cols)
+                    .sort("_membership")
+                )
+                clones_vdj = defaultdict(dict)
+                # Also track which original rows belong to which clone
+                row_to_clone = {}
+
+                for row in tqdm(
+                    grouped.iter_rows(named=True),
+                    desc=f"Finding clones based on {locus_celltype} cell {vdj_chain} chains using {locus_key}",
+                    bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+                    total=df_vdj_grp.select("_membership").n_unique(),
+                    disable=not verbose,
+                ):
+                    seqs = row[locus_key]
+                    orig_orders = row["_original_order"]
+                    cell_ids = row["cell_id"]
+                    membership = row["_membership"]
+                    length = row[f"_{locus_key}_length"]
+                    if isinstance(metric, IdentityMetric):
+                        threshold = 0
+                    else:
+                        if hard_cutoff is None:
+                            threshold = math.floor(
+                                int(length) * (1 - locus_identity)
+                            )
+                        else:
+                            threshold = None
+
+                    # Filter out empty strings for distance calculation only
+                    seqs_non_empty = [s for s in seqs if s]
+                    seqs_empty = [s for s in seqs if not s]
+                    # Also filter cell_ids to match seqs_non_empty
+                    cell_ids_non_empty = [
+                        cell_ids[i] for i, s in enumerate(seqs) if s
+                    ]
+
+                    if seqs_non_empty:
+                        # Deduplicate sequences for faster computation
+                        unique_seqs = list(set(seqs_non_empty))
+                        seq_to_unique_idx = {
+                            seq: i for i, seq in enumerate(unique_seqs)
+                        }
+
+                        # Compute distances only for unique sequences
+                        d_mat_unique = metric.compute_vectorized(unique_seqs)
+
+                        # Filter to only cells that are in metadata (ensure alignment)
+                        if store_distances:
+                            valid_mask = [
+                                cid in cell_id_to_meta_idx
+                                for cid in cell_ids_non_empty
+                            ]
+                            seqs_filtered = [
+                                s
+                                for s, valid in zip(seqs_non_empty, valid_mask)
+                                if valid
+                            ]
+                            meta_indices = np.array(
+                                [
+                                    cell_id_to_meta_idx[cid]
+                                    for cid, valid in zip(
+                                        cell_ids_non_empty, valid_mask
+                                    )
+                                    if valid
+                                ]
+                            )
+
+                            if len(meta_indices) > 0 and d_mat_unique.size > 0:
+                                # Use vectorized indexing to expand unique distances to full matrix
+                                unique_indices = np.array(
+                                    [
+                                        seq_to_unique_idx[seq]
+                                        for seq in seqs_filtered
+                                    ]
+                                )
+                                d_mat = d_mat_unique[
+                                    np.ix_(unique_indices, unique_indices)
+                                ]
+                                # Collect COO components for in-memory assembly
+                                n_local = len(meta_indices)
+                                rows, cols = np.meshgrid(
+                                    range(n_local),
+                                    range(n_local),
+                                    indexing="ij",
+                                )
+                                rows_flat = rows.ravel()
+                                cols_flat = cols.ravel()
+                                data_flat = d_mat.ravel()
+                                global_rows = meta_indices[rows_flat]
+                                global_cols = meta_indices[cols_flat]
+                                distance_results.append(
+                                    (global_rows, global_cols, data_flat)
+                                )
+
+                        # Cluster on unique sequences only, then map back
+                        if len(unique_seqs) > 1:
+                            seq_tmp_dict = _clustering_scipy(
+                                d_mat_unique,
+                                threshold=threshold,
+                                sequences=unique_seqs,
+                                hard_threshold=hard_cutoff,
+                            )
+                        else:
+                            seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
+                    else:
+                        # All sequences in this membership are empty - assign them together
+                        if seqs_empty:
+                            seq_tmp_dict = {seqs_empty[0]: tuple(seqs_empty)}
+                        else:
+                            seq_tmp_dict = {}
+
+                    # Sort by size
+                    clones_tmp = sorted(
+                        list(set(seq_tmp_dict.values())), key=len, reverse=True
+                    )
+                    for sub_group, clone_group in enumerate(clones_tmp, 1):
+                        clones_vdj[membership][sub_group] = clone_group
+                        # Map each original row to its clone based on its sequence
+                        for seq_idx, seq_val in enumerate(seqs):
+                            if seq_val and seq_val in clone_group:
+                                row_to_clone[orig_orders[seq_idx]] = (
+                                    f"{membership}_{sub_group}"
+                                )
+
+                # Apply clone IDs using row mapping instead of sequence mapping
+                df_vdj_grp = df_vdj_grp.with_columns(
+                    pl.col("_original_order")
+                    .replace_strict(row_to_clone, default=None)
+                    .alias(f"_{key_added}_{vdj_chain}")
+                )
+
+                # Keep only what we need
+                df_vdj_result = df_vdj_grp.select(
+                    [
+                        "_original_order",
+                        f"_{key_added}_VDJ",
+                    ]
+                )
+                del df_vdj, df_vdj_grp
+
+            # process VJ chains next
+            if has_vj:
+                df_vj = df_locus.filter(pl.col("locus").is_in(vj_loci))
+
+                # Group sequences
+                df_vj_grp = _group_sequences(
+                    df=df_vj,
+                    key=locus_key,
+                    same_vj=same_vj,
+                    same_length=same_length,
+                    recalculate_length=recalculate_length,
+                    by_alleles=by_alleles,
+                )
+                # Build aggregation list dynamically
+                # Collect both sequences and their original order for proper tracking
+                agg_cols = [
+                    pl.col(locus_key),
+                    pl.col("_original_order"),
+                    pl.col("cell_id"),
+                ]
+                if same_length:
+                    agg_cols.append(pl.col(f"_{locus_key}_length").first())
+                else:
+                    agg_cols.append(pl.col(f"_{locus_key}_length").max())
+
+                grouped = (
+                    df_vj_grp.group_by("_membership")
+                    .agg(agg_cols)
+                    .sort("_membership")
+                )
+
+                clones_vj = defaultdict(dict)
+                # Also track which original rows belong to which clone
+                row_to_clone = {}
+
+                for row in tqdm(
+                    grouped.iter_rows(named=True),
+                    desc=f"Finding clones based on {locus_celltype} cell {vj_chain} chains using {locus_key}",
+                    bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
+                    total=grouped.height,
+                    disable=not verbose,
+                ):
+                    seqs = row[locus_key]
+                    orig_orders = row["_original_order"]
+                    cell_ids = row["cell_id"]
+                    length = row[f"_{locus_key}_length"]
+                    membership = row["_membership"]
+                    if isinstance(metric, IdentityMetric):
+                        threshold = 0
+                    else:
+                        if hard_cutoff is None:
+                            threshold = math.floor(
+                                int(length) * (1 - locus_identity)
+                            )
+                        else:
+                            threshold = None
+
+                    # Filter out empty strings for distance calculation only
+                    seqs_non_empty = [s for s in seqs if s]
+                    seqs_empty = [s for s in seqs if not s]
+                    # Also filter cell_ids to match seqs_non_empty
+                    cell_ids_non_empty = [
+                        cell_ids[i] for i, s in enumerate(seqs) if s
+                    ]
+
+                    if seqs_non_empty:
+                        # Deduplicate sequences for faster computation
+                        unique_seqs = list(set(seqs_non_empty))
+                        seq_to_unique_idx = {
+                            seq: i for i, seq in enumerate(unique_seqs)
+                        }
+
+                        # Compute distances only for unique sequences
+                        d_mat_unique = metric.compute_vectorized(unique_seqs)
+
+                        # Filter to only cells that are in metadata (ensure alignment)
+                        if store_distances:
+                            valid_mask = [
+                                cid in cell_id_to_meta_idx
+                                for cid in cell_ids_non_empty
+                            ]
+                            seqs_filtered = [
+                                s
+                                for s, valid in zip(seqs_non_empty, valid_mask)
+                                if valid
+                            ]
+                            meta_indices = np.array(
+                                [
+                                    cell_id_to_meta_idx[cid]
+                                    for cid, valid in zip(
+                                        cell_ids_non_empty, valid_mask
+                                    )
+                                    if valid
+                                ]
+                            )
+
+                            if len(meta_indices) > 0 and d_mat_unique.size > 0:
+                                # Use vectorized indexing to expand unique distances to full matrix
+                                unique_indices = np.array(
+                                    [
+                                        seq_to_unique_idx[seq]
+                                        for seq in seqs_filtered
+                                    ]
+                                )
+                                d_mat = d_mat_unique[
+                                    np.ix_(unique_indices, unique_indices)
+                                ]
+
+                                # Collect COO components for in-memory assembly
+                                n_local = len(meta_indices)
+                                rows, cols = np.meshgrid(
+                                    range(n_local),
+                                    range(n_local),
+                                    indexing="ij",
+                                )
+                                rows_flat = rows.ravel()
+                                cols_flat = cols.ravel()
+                                data_flat = d_mat.ravel()
+                                global_rows = meta_indices[rows_flat]
+                                global_cols = meta_indices[cols_flat]
+                                distance_results.append(
+                                    (global_rows, global_cols, data_flat)
+                                )
+
+                        # Cluster on unique sequences only, then map back
+                        if len(unique_seqs) > 1:
+                            seq_tmp_dict = _clustering_scipy(
+                                d_mat_unique,
+                                threshold=threshold,
+                                sequences=unique_seqs,
+                                hard_threshold=hard_cutoff,
+                            )
+                        else:
+                            seq_tmp_dict = {unique_seqs[0]: (unique_seqs[0],)}
+                    else:
+                        # All sequences in this membership are empty - assign them together
+                        if seqs_empty:
+                            seq_tmp_dict = {seqs_empty[0]: tuple(seqs_empty)}
+                        else:
+                            seq_tmp_dict = {}
+
+                    # Sort by size
+                    clones_tmp = sorted(
+                        list(set(seq_tmp_dict.values())), key=len, reverse=True
+                    )
+                    for sub_group, clone_group in enumerate(clones_tmp, 1):
+                        clones_vj[membership][sub_group] = clone_group
+                        # Map each original row to its clone based on its sequence
+                        for seq_idx, seq_val in enumerate(seqs):
+                            if seq_val and seq_val in clone_group:
+                                row_to_clone[orig_orders[seq_idx]] = (
+                                    f"{membership}_{sub_group}"
+                                )
+
+                # Apply clone IDs using row mapping instead of sequence mapping
+                df_vj_grp = df_vj_grp.with_columns(
+                    pl.col("_original_order")
+                    .replace_strict(row_to_clone, default=None)
+                    .alias(f"_{key_added}_{vj_chain}")
+                )
+                # Keep only what we need
+                df_vj_result = df_vj_grp.select(
+                    [
+                        "_original_order",
+                        f"_{key_added}_VJ",
+                    ]
+                )
+
+            # Combine VDJ + VJ for this locus
+            if df_vdj_result is not None and df_vj_result is not None:
+                df_locus_chains = df_vdj_result.join(
+                    df_vj_result,
+                    on="_original_order",
+                    how="full",
+                    coalesce=True,
+                )
+            elif df_vdj_result is not None:
+                df_locus_chains = df_vdj_result.with_columns(
+                    pl.lit(None).alias(f"_{key_added}_VJ")
+                )
+            elif df_vj_result is not None:
+                df_locus_chains = df_vj_result.with_columns(
+                    pl.lit(None).alias(f"_{key_added}_VDJ")
+                )
+            else:
+                # No chains found for this locus
+                continue
+
+            # Add celltype back
+            df_locus_chains = df_locus_chains.with_columns(
+                pl.lit(locus_celltype).alias("_celltype")
+            )
+
+            # Join with cell_id from original df
+            df_locus_chains = df_locus_chains.join(
+                df.select(["_original_order", "cell_id"]),
+                on="_original_order",
+                how="left",
+            )
+
+            # Combine VDJ + VJ at the cell level for this locus
+            df_locus_summary = df_locus_chains.group_by("cell_id").agg(
+                [
+                    pl.col(f"_{key_added}_VDJ")
+                    .drop_nulls()
+                    .unique()
+                    .alias("_vdj_set"),
+                    pl.col(f"_{key_added}_VJ")
+                    .drop_nulls()
+                    .unique()
+                    .alias("_vj_set"),
+                ]
+            )
+
+            # Create locus-specific clone IDs
+            df_locus_summary = df_locus_summary.with_columns(
+                pl.struct(["_vdj_set", "_vj_set"])
+                .map_elements(
+                    lambda s: _combine_single_locus(
+                        s["_vdj_set"], s["_vj_set"], locus_celltype
+                    ),
+                    return_dtype=pl.List(pl.String),
+                )
+                .alias(f"_{key_added}_{locus_celltype}")
+            )
+
+            # If grouping, prefix the clone ids with the group value so
+            # that identically-numbered clones from different groups are
+            # never conflated once results are concatenated below.
+            if group_by is not None:
+                df_locus_summary = df_locus_summary.with_columns(
+                    pl.col(f"_{key_added}_{locus_celltype}").map_elements(
+                        lambda lst, _prefix=group_prefix: (
+                            [f"{_prefix}{x}" for x in lst]
+                            if lst is not None
+                            else lst
+                        ),
+                        return_dtype=pl.List(pl.String),
+                    )
+                )
+
+            # Store result for this locus/group
+            locus_results[locus_celltype].append(
+                df_locus_summary.select(
+                    ["cell_id", f"_{key_added}_{locus_celltype}"]
+                )
+            )
+
+    # Concatenate the per-group results for each locus celltype. Since
+    # `group_by` partitions cells disjointly, each cell_id only appears in
+    # one group's frame per locus, so a simple vertical concat is safe.
+    locus_results = {
+        locus_celltype: pl.concat(dfs, how="vertical")
+        for locus_celltype, dfs in locus_results.items()
+    }
 
     # Merge all locus results back to main df
     # Start with cell_id from original df
@@ -743,8 +827,6 @@ def find_clones(
             else ""
         ),
     )
-
-    return vdj
 
 
 def _check_chains(
@@ -1040,6 +1122,19 @@ def _flatten_and_join_loci(row: dict, locus_columns: list[str]) -> str | None:
     return "|".join(all_clones) if all_clones else None
 
 
+def _sanitize_dataframe_for_h5ad(df: pd.DataFrame) -> None:
+    """Mutate DataFrame to be h5ad-friendly without nullable string extension dtypes."""
+    df.index = pd.Index(
+        np.asarray(df.index, dtype=object),
+        dtype=object,
+        name=df.index.name,
+    )
+    for col in df.columns:
+        series = df[col]
+        if isinstance(series.dtype, pd.StringDtype):
+            df[col] = series.astype(object).where(series.notna(), np.nan)
+
+
 def transfer(
     adata: AnnData | MuData,
     vdj: DandelionPolars,
@@ -1048,7 +1143,7 @@ def transfer(
     vdj_key: str | None = None,
     clone_key: str | None = None,
     collapse_nodes: bool = False,
-    overwrite: bool | list[str] | str | None = None,
+    overwrite: bool | list[str] | str | None = True,
     obs: bool = True,
     obsm: bool = True,
     uns: bool = True,
@@ -1106,6 +1201,8 @@ def transfer(
     # we just associate recipient to adata directly
     else:
         recipient = adata
+    _sanitize_dataframe_for_h5ad(recipient.obs)
+    _sanitize_dataframe_for_h5ad(recipient.var)
     original_backend = vdj._backend
     original_lazy = vdj._lazy
     if original_backend == "polars":
@@ -1137,6 +1234,9 @@ def transfer(
                 )
                 if recipient.obs[ow].dtype == "bool":
                     recipient.obs[ow] = recipient.obs[ow].astype(str)
+
+        _sanitize_dataframe_for_h5ad(recipient.obs)
+        _sanitize_dataframe_for_h5ad(recipient.var)
 
     # also check that all the cells in dandelion are in recipient
     common_cells = recipient.obs_names.intersection(vdj._metadata.index)
@@ -1191,7 +1291,6 @@ def transfer(
                     G = vdj.graph[idx]
                 except Exception:
                     pass
-
             if G is not None:
                 graph_connectivities[idx], graph_distances[idx] = (
                     _graph_to_matrices(G, recipient, None)
@@ -1369,7 +1468,7 @@ tf = transfer  # alias for transfer
 
 
 def _graph_to_matrices(
-    G: nx.Graph | None,
+    graph: nx.Graph | ig.Graph | None,
     adata: AnnData,
     distances: csr_matrix | None = None,
 ) -> tuple[csr_matrix, csr_matrix]:
@@ -1391,44 +1490,49 @@ def _graph_to_matrices(
     n = len(target_names)
     name_to_new = {name: i for i, name in enumerate(target_names)}
 
-    # CASE A: Build distances from a NetworkX graph
-    if distances is None and G is not None:
-        edges = list(G.edges(data=True))
-        if not edges:
-            distances = csr_matrix((n, n), dtype=np.float32)
-        else:
-            # Single-pass filtering and mapping - no intermediate arrays
-            valid_edges = []
-            for u_name, v_name, edge_data in edges:
-                u_idx = name_to_new.get(u_name)
-                v_idx = name_to_new.get(v_name)
-                if u_idx is not None and v_idx is not None:
-                    weight = edge_data.get("weight", 1.0)
-                    valid_edges.append((u_idx, v_idx, weight))
-
-            if not valid_edges:
+    # CASE A: Build distances from graphs
+    if distances is None and graph is not None:
+        if isinstance(graph, ig.Graph):
+            if graph.ecount() == 0:
                 distances = csr_matrix((n, n), dtype=np.float32)
             else:
-                # Unpack and create symmetric matrix directly
-                u_idx, v_idx, weights = zip(*valid_edges)
-                u_idx = np.array(u_idx, dtype=np.int32)
-                v_idx = np.array(v_idx, dtype=np.int32)
-                weights = np.array(weights, dtype=np.float32)
-
-                # Make symmetric - concatenate once
-                rows = np.concatenate([u_idx, v_idx])
-                cols = np.concatenate([v_idx, u_idx])
-                vals = np.concatenate([weights, weights])
-                vals += 1.0
-
-                distances = csr_matrix(
-                    (vals, (rows, cols)), shape=(n, n), dtype=np.float32
+                distances = _igraph_to_scipy_sparse(
+                    graph, target_names, weight_attr="weight"
                 )
-                # Clean up immediately
-                del rows, cols, vals, u_idx, v_idx, weights, valid_edges
+                if distances.nnz > 0:
+                    distances.data += 1.0
+        else:
+            if graph.number_of_edges() == 0:
+                distances = csr_matrix((n, n), dtype=np.float32)
+            else:
+                # nodelist ensures alignment to adata.obs_names in one shot,
+                # and nodes not in target_names are simply dropped
+                present_nodes = [nm for nm in target_names if nm in graph]
+                adj = nx.to_scipy_sparse_array(
+                    graph,
+                    nodelist=present_nodes,
+                    weight="weight",
+                    format="coo",
+                    dtype=np.float32,
+                )
 
+                if len(present_nodes) == n:
+                    distances = csr_matrix(adj)
+                else:
+                    # remap into the full n x n space if G doesn't contain every adata cell
+                    idx_map = np.array(
+                        [name_to_new[nm] for nm in present_nodes]
+                    )
+                    rows = idx_map[adj.row]
+                    cols = idx_map[adj.col]
+                    distances = csr_matrix(
+                        (adj.data, (rows, cols)), shape=(n, n), dtype=np.float32
+                    )
+
+                if distances.nnz > 0:
+                    distances.data += 1.0
     # CASE B: distances provided as a csr_matrix with _index_names
-    elif isinstance(distances, csr_matrix):
+    elif hasattr(distances, "_index_names"):
         old_names = np.array(distances._index_names)
         coo = distances.tocoo()
 
@@ -2286,7 +2390,9 @@ def vdj_sample(
 
         # Normalize probabilities if provided
         if p is not None:
-            p_array = np.asarray(p, dtype=float)
+            # Polars Series.to_numpy() may return a read-only view; use a
+            # writable copy because we sanitize probabilities in-place.
+            p_array = np.array(p, dtype=float, copy=True)
             if p_array.ndim != 1 or p_array.shape[0] != n_cells:
                 raise ValueError(
                     "`p` must be a 1D array-like with one value per cell in metadata."
@@ -2332,6 +2438,7 @@ def vdj_sample(
             adata = adata.mod["gex"].copy()
         else:
             adata = adata.copy()
+        adata_obs_names_full = adata.obs_names.copy()
 
         # Get common cells between vdj and adata - only collect cell_id column
         if isinstance(vdj._metadata, pl.LazyFrame):
@@ -2351,6 +2458,59 @@ def vdj_sample(
         # The __getitem__ will treat it as cell_ids to filter by
         adata = adata[adata.obs_names.isin(common_cells)].copy()
         vdj_filtered = vdj[common_cells]
+
+        if p is not None:
+            if isinstance(p, pd.Series):
+                p_aligned = p.reindex(adata.obs_names).to_numpy(dtype=float)
+            else:
+                p_aligned = None
+
+            p_array = np.array(p, dtype=float, copy=True)
+            if p_array.ndim != 1:
+                raise ValueError("`p` must be a 1D array-like.")
+
+            original_n_cells = vdj.n_obs
+            filtered_n_cells = vdj_filtered.n_obs
+
+            if p_aligned is None:
+                if p_array.shape[0] == original_n_cells:
+                    if isinstance(vdj._metadata, pl.LazyFrame):
+                        full_meta = vdj._metadata.select("cell_id").collect(
+                            streaming=True
+                        )
+                        full_cell_ids = full_meta["cell_id"].to_list()
+                    elif isinstance(vdj._metadata, pl.DataFrame):
+                        full_cell_ids = vdj._metadata["cell_id"].to_list()
+                    else:
+                        full_cell_ids = list(vdj._metadata.index)
+
+                    p_map = dict(zip(full_cell_ids, p_array.tolist()))
+                    p_aligned = np.array(
+                        [p_map.get(c, 0.0) for c in adata.obs_names],
+                        dtype=float,
+                    )
+                elif p_array.shape[0] == adata_obs_names_full.shape[0]:
+                    p_map = dict(zip(adata_obs_names_full, p_array.tolist()))
+                    p_aligned = np.array(
+                        [p_map.get(c, 0.0) for c in adata.obs_names],
+                        dtype=float,
+                    )
+                elif p_array.shape[0] == filtered_n_cells:
+                    p_aligned = p_array
+                else:
+                    raise ValueError(
+                        "`p` length must match one of: original vdj metadata length, original adata length, or filtered adata length."
+                    )
+
+            p_aligned[~np.isfinite(p_aligned)] = 0.0
+            if np.any(p_aligned < 0):
+                raise ValueError("`p` must not contain negative probabilities.")
+            p_sum = p_aligned.sum()
+            if p_sum <= 0:
+                raise ValueError(
+                    "`p` sums to 0 after cleaning missing values; provide at least one positive probability."
+                )
+            p = p_aligned / p_sum
 
         # Determine replacement based on filtered vdj
         n_cells = vdj_filtered.n_obs
@@ -3388,3 +3548,31 @@ def productive_ratio(
             "   'uns', 'productive_ratio'\n"
         ),
     )
+
+
+def _igraph_to_scipy_sparse(
+    Gi: ig.Graph, target_names: list[str], weight_attr="weight"
+):
+    """Helper function to convert an igraph object to a scipy sparse matrix."""
+    name_to_new = {nm: i for i, nm in enumerate(target_names)}
+    edges = Gi.get_edgelist()
+    weights = (
+        Gi.es[weight_attr]
+        if weight_attr in Gi.es.attributes()
+        else [1.0] * len(edges)
+    )
+    names = Gi.vs["name"]
+
+    u_idx = np.array([name_to_new.get(names[u], -1) for u, v in edges])
+    v_idx = np.array([name_to_new.get(names[v], -1) for u, v in edges])
+    w = np.array(weights, dtype=np.float32)
+
+    mask = (u_idx >= 0) & (v_idx >= 0)
+    u_idx, v_idx, w = u_idx[mask], v_idx[mask], w[mask]
+
+    rows = np.concatenate([u_idx, v_idx])
+    cols = np.concatenate([v_idx, u_idx])
+    vals = np.concatenate([w, w]) + 1.0
+
+    n = len(target_names)
+    return csr_matrix((vals, (rows, cols)), shape=(n, n), dtype=np.float32)

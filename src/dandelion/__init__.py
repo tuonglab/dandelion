@@ -81,6 +81,7 @@ except AttributeError:
     pass
 read_10x_airr = import_backend_class("io", "read_10x_airr")
 read_10x_vdj = import_backend_class("io", "read_10x_vdj")
+read_vdj = read_10x_vdj
 read_airr = import_backend_class("io", "read_airr")
 read_bd_airr = import_backend_class("io", "read_bd_airr")
 read_parse_airr = import_backend_class("io", "read_parse_airr")
@@ -105,7 +106,7 @@ __all__ += [
     "read_parse_airr",
     "read_bd_airr",
     "read_seekgene_vdj",
-    "read_ddl",
+    "read_vdj",
     "tl",
     "utl",
 ]

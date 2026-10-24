@@ -1,0 +1,25 @@
+{
+  "version": "1.2",
+  "dbname": "mouse_V",
+  "dbtype": "Protein",
+  "db-version": 5,
+  "description": "mouse_V.fasta",
+  "number-of-letters": 50181,
+  "number-of-sequences": 512,
+  "last-updated": "2022-08-24T15:03:00",
+  "number-of-volumes": 1,
+  "number-of-taxids": 1,
+  "bytes-total": 168570,
+  "bytes-to-cache": 54886,
+  "files": [
+    "mouse_V.pdb",
+    "mouse_V.phr",
+    "mouse_V.pin",
+    "mouse_V.pog",
+    "mouse_V.pos",
+    "mouse_V.pot",
+    "mouse_V.psq",
+    "mouse_V.ptf",
+    "mouse_V.pto"
+  ]
+}

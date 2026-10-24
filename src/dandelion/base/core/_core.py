@@ -1072,12 +1072,23 @@ class Dandelion:
             ],
             ref_col="chain_status",
         )
-        # if metadata already exist, just overwrite the default columns?
+        # If metadata already exists, preserve non-default columns but
+        # reindex rows to current cells and overwrite all initialized columns.
         if self.metadata is not None:
-            if any(~self.metadata_names.isin(self._data.cell_id)):
-                self._metadata = tmp_metadata.copy()  # reindex and replace.
-            for col in tmp_metadata:
-                self._metadata[col] = pd.Series(tmp_metadata[col])
+            self._metadata = self._metadata.reindex(tmp_metadata.index)
+            # Pandas categoricals require identical category sets on assignment.
+            # Normalize overlapping categorical columns to object to avoid
+            # category-mismatch errors during metadata refresh.
+            overlap_cols = [
+                c for c in tmp_metadata.columns if c in self._metadata.columns
+            ]
+            for c in overlap_cols:
+                if isinstance(
+                    self._metadata[c].dtype, pd.CategoricalDtype
+                ) or isinstance(tmp_metadata[c].dtype, pd.CategoricalDtype):
+                    self._metadata[c] = self._metadata[c].astype("object")
+                    tmp_metadata[c] = tmp_metadata[c].astype("object")
+            self._metadata.loc[:, tmp_metadata.columns] = tmp_metadata
         else:
             self._metadata = tmp_metadata.copy()
 
@@ -2621,9 +2632,16 @@ def _normalize_indices(
     return ax0, axtype
 
 
-def return_none_call(call: str) -> str:
-    """Return None if not present."""
-    return call.split("|")[0] if not call in ["None", "", None] else None
+def return_none_call(call: object) -> str | None:
+    """Return primary call token, normalizing null-like values to None."""
+    if call is None or pd.isna(call):
+        return None
+    if isinstance(call, str):
+        token = call.split("|")[0]
+        return None if token in ["None", ""] else token
+    # Be defensive when non-string values leak in from mixed backends.
+    token = str(call).split("|")[0]
+    return None if token in ["None", ""] else token
 
 
 def clean_clone_list(clone_series: pd.Series) -> pd.Series:
@@ -2870,6 +2888,12 @@ def load_data(obj: pd.DataFrame | Path | str | None) -> pd.DataFrame:
                 obj_.rename(
                     columns={"duplicate_count": "umi_count"}, inplace=True
                 )
+
+        # Keep legacy pandas behavior: avoid nullable StringDtype/ArrowString
+        # in core data tables because downstream code and tests expect object.
+        for col in obj_.columns:
+            if isinstance(obj_[col].dtype, pd.StringDtype):
+                obj_[col] = obj_[col].astype(object)
 
         return obj_
 

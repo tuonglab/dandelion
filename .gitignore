@@ -29,8 +29,6 @@ test_mouse/test_mouse_light_igblast_db-pass_germ-pass.tsv
 env
 build
 /docs/notebooks/dandelion_tutorial
-*.nin
-*.njs
 /container/database/blast
 /docs/notebooks/dev_notebooks
 junit.xml

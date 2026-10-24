@@ -11,6 +11,7 @@ is exercised.  CI runs this file once per backend to cover both
 import json
 import os
 import pytest
+import polars as pl
 
 import dandelion as ddl
 
@@ -168,6 +169,47 @@ def _data_columns(vdj) -> list:
     if hasattr(vdj._data, "collect_schema"):
         return vdj._data.collect_schema().names()
     return list(vdj._data.columns)
+
+
+def _metadata_columns(vdj) -> list:
+    """Return metadata column names regardless of backend (pandas/polars eager/lazy)."""
+    if hasattr(vdj._metadata, "collect_schema"):
+        return vdj._metadata.collect_schema().names()
+    return list(vdj._metadata.columns)
+
+
+@pytest.mark.usefixtures("create_testfolder", "annotation_10x")
+def test_read10xvdj_has_productive_metadata_columns(
+    create_testfolder, annotation_10x
+):
+    """read_10x_vdj should initialize productive metadata columns in all backends."""
+    annot_file = create_testfolder / "test_filtered_contig_annotations.csv"
+    annotation_10x.to_csv(annot_file, index=False)
+    vdj = ddl.read_10x_vdj(annot_file)
+    cols = _metadata_columns(vdj)
+    assert "productive_VDJ" in cols
+    assert "productive_VJ" in cols
+
+
+@pytest.mark.usefixtures("create_testfolder", "annotation_10x")
+def test_simplify_preserves_user_metadata_columns(
+    create_testfolder, annotation_10x
+):
+    """simplify should not drop user-added metadata columns."""
+    annot_file = create_testfolder / "test_filtered_contig_annotations.csv"
+    annotation_10x.to_csv(annot_file, index=False)
+    vdj = ddl.read_10x_vdj(annot_file)
+
+    if hasattr(vdj._metadata, "collect_schema"):
+        vdj._metadata = vdj._metadata.with_columns(
+            pl.lit("KEEP_ME").alias("user_added_col")
+        )
+    else:
+        vdj.metadata["user_added_col"] = "KEEP_ME"
+
+    vdj.simplify()
+    cols = _metadata_columns(vdj)
+    assert "user_added_col" in cols
 
 
 @pytest.mark.usefixtures("create_testfolder", "annotation_10x_cr6")

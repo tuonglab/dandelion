@@ -6,7 +6,7 @@
   "description": "database/igblast/fasta/imgt_mouse_tr_j.fasta",
   "number-of-letters": 5590,
   "number-of-sequences": 96,
-  "last-updated": "2025-03-24T15:29:00",
+  "last-updated": "2026-07-01T16:36:00",
   "number-of-volumes": 1,
   "bytes-total": 60210,
   "bytes-to-cache": 2746,

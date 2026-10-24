@@ -8,6 +8,7 @@ Preprocessing: `pp`
 .. autosummary::
    :toctree: .
 
+   annotate_functionality
    assign_isotype
    assign_isotypes
    check_contigs
@@ -119,6 +120,7 @@ Preprocessing: `pp`
 .. autosummary::
    :toctree: .
 
+   annotate_functionality
    assign_isotype
    assign_isotypes
    check_contigs
@@ -144,9 +146,11 @@ Tools: `tl`
    concat
    define_clones
    extract_edge_weights
+   fetch_db
    find_clones
    from_scirpy
    generate_network
+   get_epitope
    productive_ratio
    project_pseudotime_to_cell
    pseudobulk_gex
@@ -190,6 +194,7 @@ Reading: `io`
    read_ddl
    read_h5ddl
    read_zipddl
+   read_vdj
 
 Dandelion Class
 ---------------

@@ -92,11 +92,15 @@ echo 'export PATH=path/to/igblast/bin:$PATH' >> ~/.bash_profile
 echo 'export PATH=path/to/blast+/bin:$PATH' >> ~/.bash_profile
 ```
 
-You will need to download the database folder in this repository and place them somewhere accessible. There are [scripts](https://github.com/tuonglab/dandelion/tree/master/container/scripts) in the `container` folder that will help you download the imgt/ogrdb databases and you can use them like this:
+You will need to download the database folder in this repository and place them somewhere accessible. There are [scripts](https://github.com/tuonglab/dandelion/tree/master/container/scripts) in the `container` folder that will help you download the imgt/ogrdb and other databases and you can use them like this:
 
 ```bash
+# In order to download the databases, you will need to install the receptor-utils package first:
+# pip install receptor-utils
 python prepare_imgt_database.py
 python prepare_ogrdb_database.py
+python prepare_kiarva_database.py
+python prepare_gkhlab_database.py
 ```
 
 Also set the paths to the germline and igblast databases
@@ -128,8 +132,12 @@ install.packages(c("optparse", "alakazam", "tigger", "airr", "shazam", "scoper")
 ```
 and then lastly install dandelion:
 ```bash
+# recommended: polars backend for improved performance
+pip install "sc-dandelion[polars]"
+# or the base (pandas) install
 pip install sc-dandelion
-# or
+# or from GitHub
+pip install "sc-dandelion[polars] @ git+https://github.com/tuonglab/dandelion.git"
 pip install git+https://github.com/tuonglab/dandelion.git
 # or  installing from a specific branch
 pip install git+https://github.com/tuonglab/dandelion@branch_name
@@ -159,7 +167,7 @@ distance>=0.1.3
 plotnine>=0.10
 palettable>=3.3
 mizani>=0.8
-nxviz>=0.7
+matplotlib>=3.5
 rapidfuzz>3.12.1
 zarr>=2.18.7
 circlify>=0.15.0

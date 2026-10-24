@@ -395,9 +395,13 @@ def test_calculate_distance_matrix_full_multicore(mouse_vdj_membership):
 
     metric = LevenshteinMetric()
 
-    assert np.array_equal(
-        df_pandas.values, df_polars.select(pl.exclude("cell_id")).to_numpy()
-    )
+    pandas_vals = df_pandas.values
+    polars_vals = df_polars.select(pl.exclude("cell_id")).to_numpy()
+
+    # Pandas uses NaN while Polars may expose nulls as None in object arrays.
+    assert np.array_equal(pd.isna(pandas_vals), pd.isna(polars_vals))
+    non_missing = ~pd.isna(pandas_vals)
+    assert np.array_equal(pandas_vals[non_missing], polars_vals[non_missing])
 
     seq_cols = [col for col in df_pandas.columns]
     seq_colsp = [

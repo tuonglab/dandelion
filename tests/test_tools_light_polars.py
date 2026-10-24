@@ -17,7 +17,7 @@ def test_concat_polars(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Expect double contigs total
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == airr_reannotated.shape[0] * 2
     )
 
@@ -35,13 +35,10 @@ def test_concat_with_auto_suffixes(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Check that result is combined
-    total_count = vdj1._data.select(pl.count()).collect(engine="streaming")[
-        0, 0
-    ]
+    total_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
     expected = total_count * 3
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
-        == expected
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0] == expected
     )
 
 
@@ -57,11 +54,11 @@ def test_concat_dict_input(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
     combined_count = (
-        vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-        + vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+        + vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
     )
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == combined_count
     )
 
@@ -77,11 +74,11 @@ def test_concat_check_unique_false(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Should still concatenate successfully even without unique check
     combined_count = (
-        vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-        + vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+        + vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
     )
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == combined_count
     )
 
@@ -102,11 +99,9 @@ def test_concat_multiple_objects(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have triple the contigs
-    single_count = vdj._data.select(pl.count()).collect(engine="streaming")[
-        0, 0
-    ]
+    single_count = vdj._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == single_count * 3
     )
 
@@ -127,9 +122,9 @@ def test_concat_dandelion_and_polars_dataframe(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs (doubled)
-    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj1_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == vdj1_count * 2
     )
 
@@ -146,9 +141,9 @@ def test_concat_dandelion_and_polars_lazyframe(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs (doubled)
-    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj1_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == vdj1_count * 2
     )
 
@@ -164,10 +159,10 @@ def test_concat_dandelion_and_pandas_dataframe(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj1_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == vdj1_count + vdj2_count
     )
 
@@ -191,10 +186,10 @@ def test_concat_mixed_polars_types(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj1_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == vdj1_count + vdj2_count
     )
 
@@ -220,12 +215,12 @@ def test_concat_all_input_types(airr_reannotated):
     assert isinstance(res, DandelionPolars)
     # Should have all parts combined
     expected_count = (
-        vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-        + vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
-        + vdj3._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+        + vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
+        + vdj3._data.select(pl.len()).collect(engine="streaming")[0, 0]
     )
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == expected_count
     )
 
@@ -252,10 +247,10 @@ def test_concat_pure_polars_dataframes(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj1_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == vdj1_count + vdj2_count
     )
 
@@ -282,10 +277,10 @@ def test_concat_pure_pandas_dataframes(airr_reannotated):
 
     assert isinstance(res, DandelionPolars)
     # Should have combined contigs
-    vdj1_count = vdj1._data.select(pl.count()).collect(engine="streaming")[0, 0]
-    vdj2_count = vdj2._data.select(pl.count()).collect(engine="streaming")[0, 0]
+    vdj1_count = vdj1._data.select(pl.len()).collect(engine="streaming")[0, 0]
+    vdj2_count = vdj2._data.select(pl.len()).collect(engine="streaming")[0, 0]
     assert (
-        res._data.select(pl.count()).collect(engine="streaming")[0, 0]
+        res._data.select(pl.len()).collect(engine="streaming")[0, 0]
         == vdj1_count + vdj2_count
     )
 
@@ -347,7 +342,7 @@ def test_find_clones_identity_threshold(airr_reannotated):
 def test_find_clones_preserves_data(airr_reannotated):
     """Test that find_clones preserves original data and only adds clone_id."""
     vdj = DandelionPolars(airr_reannotated, verbose=False)
-    original_count = vdj._data.select(pl.count()).collect(engine="streaming")[
+    original_count = vdj._data.select(pl.len()).collect(engine="streaming")[
         0, 0
     ]
 

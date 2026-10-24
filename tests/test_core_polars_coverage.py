@@ -11,6 +11,7 @@ from pathlib import Path
 from dandelion.polars.core._core import (
     DandelionPolars,
     DataFrameAccessor,
+    LazyColumnExpr,
     SeriesAccessor,
     _clean_single_entry,
     _map_clones_with_dict,
@@ -1082,7 +1083,7 @@ def test_dataframe_accessor_lazy_column(airr_polars):
     assert isinstance(da, DataFrameAccessor)
     # Accessing a column name on lazy → returns pl.Expr
     col_expr = da.cell_id
-    assert isinstance(col_expr, pl.Expr)
+    assert isinstance(col_expr, LazyColumnExpr)
 
 
 def test_dataframe_accessor_lazy_attr_not_found(airr_polars):
@@ -1114,7 +1115,7 @@ def test_dataframe_accessor_bracket_str_lazy(airr_polars):
     """Cover bracket string key on LazyFrame (line 3298)."""
     da = airr_polars.data
     result = da["cell_id"]
-    assert isinstance(result, pl.Expr)
+    assert isinstance(result, LazyColumnExpr)
 
 
 def test_dataframe_accessor_bracket_str_eager(airr_polars):
