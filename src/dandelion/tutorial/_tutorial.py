@@ -248,7 +248,8 @@ def setup_colab_singularity() -> None:  # pragma: no cover
 
     Installs ``apptainer-suid`` from the official PPA, wraps it with
     ``unshare -r`` so that it operates correctly inside Colab's unprivileged
-    container, and registers the Sylabs remote. Safe to re-run; existing
+    container. Images are pulled from Docker Hub via ``oras://``, so no
+    extra remote needs registering. Safe to re-run; existing
     files are backed up rather than overwritten.
 
     Raises
@@ -280,10 +281,6 @@ sudo chmod +x /usr/bin/singularity_test
 
 sudo mv /usr/bin/singularity /usr/bin/singularity_backup 2>/dev/null || true
 sudo mv /usr/bin/singularity_test /usr/bin/singularity
-
-echo "Adding Sylabs remote..."
-apptainer remote add --no-login SylabsCloud cloud.sylabs.io || true
-apptainer remote use SylabsCloud
 
 echo "Done."
 """
