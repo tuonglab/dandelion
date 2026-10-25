@@ -4,12 +4,27 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Tag name to create"
+        description: "Tag name to create (e.g. v0.5.0)"
         required: true
+      push_latest:
+        description: "Also tag this image as 'latest'"
+        type: boolean
+        default: true
+
+env:
+  # Docker Hub repository the .sif is pushed to as an OCI (ORAS) artifact.
+  # Override with a repository variable DOCKERHUB_REPO if it changes.
+  DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO || 'zktuong/sc-dandelion' }}
+  # Mirror on GitHub Container Registry (no extra secrets needed, and no
+  # anonymous pull rate limits, which helps users on shared HPC login nodes).
+  GHCR_REPO: ghcr.io/${{ github.repository_owner }}/sc-dandelion
 
 jobs:
   container:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     defaults:
       run:
         working-directory: container
@@ -60,12 +75,46 @@ jobs:
           singularity sign --keyidx 0 sc-dandelion.sif
           singularity verify sc-dandelion.sif
 
-      - name: Push to Sylabs Library
+      - name: Push to Docker Hub
         if: success()
         env:
-          SINGULARITY_TOKEN: ${{ secrets.SINGULARITY_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag_name }}
+          PUSH_LATEST: ${{ github.event.inputs.push_latest }}
         run: |
-          echo "$SINGULARITY_TOKEN" > /tmp/sylabs_token
-          singularity remote login --tokenfile /tmp/sylabs_token
-          rm /tmp/sylabs_token
-          singularity push sc-dandelion.sif library://kt16/default/sc-dandelion:${{ github.event.inputs.tag_name }}
+          printf '%s' "$DOCKERHUB_TOKEN" | singularity registry login \
+            --username "$DOCKERHUB_USERNAME" --password-stdin oras://docker.io
+          singularity push sc-dandelion.sif "oras://docker.io/${DOCKERHUB_REPO}:${TAG}"
+          if [ "$PUSH_LATEST" = "true" ]; then
+            singularity push sc-dandelion.sif "oras://docker.io/${DOCKERHUB_REPO}:latest"
+          fi
+
+      - name: Push to GitHub Container Registry
+        if: success()
+        env:
+          GH_USER: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag_name }}
+          PUSH_LATEST: ${{ github.event.inputs.push_latest }}
+        run: |
+          repo=$(echo "$GHCR_REPO" | tr '[:upper:]' '[:lower:]')
+          printf '%s' "$GH_TOKEN" | singularity registry login \
+            --username "$GH_USER" --password-stdin oras://ghcr.io
+          singularity push sc-dandelion.sif "oras://${repo}:${TAG}"
+          if [ "$PUSH_LATEST" = "true" ]; then
+            singularity push sc-dandelion.sif "oras://${repo}:latest"
+          fi
+
+      - name: Summary
+        if: success()
+        env:
+          TAG: ${{ github.event.inputs.tag_name }}
+        run: |
+          {
+            echo "### sc-dandelion ${TAG} published"
+            echo '```bash'
+            echo "singularity pull oras://docker.io/${DOCKERHUB_REPO}:${TAG}"
+            echo "singularity pull oras://$(echo "$GHCR_REPO" | tr '[:upper:]' '[:lower:]'):${TAG}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
