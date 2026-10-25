@@ -40,25 +40,25 @@ The raw files used in the example notebooks can be downloaded from 10X's Single 
 
 ## Installation
 
-### Container (Apptainer/Singularity or Docker)
+### Container (Apptainer or Docker)
 
-`dandelion` comes ready in the form of a container image with all the required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and reference databases installed. It is published on [Docker Hub](https://hub.docker.com/r/zktuong/sc-dandelion) and works with Apptainer/Singularity (typical on HPC) as well as Docker/Podman.
+`dandelion` comes ready in the form of a container image with all the required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and reference databases installed. It is published on [Docker Hub](https://hub.docker.com/r/zktuong/sc-dandelion) and works with Apptainer (typical on HPC; SingularityCE also works) as well as Docker/Podman.
 
-**Apptainer/Singularity:**
+**Apptainer:**
 ```bash
-singularity pull docker://zktuong/sc-dandelion:latest    # or: apptainer pull docker://zktuong/sc-dandelion:latest
-singularity shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
+apptainer pull docker://zktuong/sc-dandelion:latest
+apptainer shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 ```
-This creates `sc-dandelion_latest.sif` and loads up a container that has all the required dependencies installed. To use a specific release instead of the latest image, replace `latest` with the release tag (for example, `v0.5.0`).
+This creates `sc-dandelion_latest.sif` and loads up a container that has all the required dependencies installed. To use a specific release instead of the latest image, replace `latest` with the release tag (for example, `v0.5.0`). Using SingularityCE rather than Apptainer? The commands are identical: just replace `apptainer` with `singularity`.
 
 This can be used for the preprocessing steps by navigating to the data folder and use:
 ```bash
-singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
+apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
 ```
 
 If you have multiple samples to process, it is reccomended to specify the `--meta` option with a `.csv` file detailing the samples:
 ```bash
-singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta.csv
+apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta.csv
 ```
 
 **Docker/Podman:**
@@ -70,7 +70,7 @@ docker run --rm -v "$PWD":/data -w /data --user "$(id -u):$(id -g)" \
 > [!NOTE]
 > The image used to be hosted on the Sylabs Cloud Library (`library://kt16/default/sc-dandelion`), which has been decommissioned. Please update any scripts that use the old `library://` address.
 >
-> If you hit Docker Hub's anonymous pull rate limit (common on shared HPC login nodes), pull the identical mirror from the GitHub Container Registry instead: `singularity pull docker://ghcr.io/tuonglab/sc-dandelion:latest`. Converting the image to a `.sif` needs a few GB of temporary space; if your home directory is small, point `APPTAINER_CACHEDIR`/`APPTAINER_TMPDIR` (or `SINGULARITY_CACHEDIR`/`SINGULARITY_TMPDIR`) at scratch space first.
+> If you hit Docker Hub's anonymous pull rate limit (common on shared HPC login nodes), pull the identical mirror from the GitHub Container Registry instead: `apptainer pull docker://ghcr.io/tuonglab/sc-dandelion:latest`. Converting the image to a `.sif` needs a few GB of temporary space; if your home directory is small, point `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` at scratch space first.
 
 ### Python package
 
@@ -88,12 +88,12 @@ pip install sc-dandelion[polars]
 
 The `polars` extra enables a faster backend for data operations. The base install uses `pandas` as the backend.
 
-Between this and the pipelines within the singularity container, you should be covered for most of your needs.
+Between this and the pipelines within the container, you should be covered for most of your needs.
 
 
 ### Manual Full Installation
 
-I understand that the singularity container may not be for everyone, so here is a more detailed installation guide for those who want to install the package manually. The instructions may vary depending on your system, so please adjust accordingly. The easiest way is to still to just use the singularity container for the preprocessing steps.
+I understand that the container may not be for everyone, so here is a more detailed installation guide for those who want to install the package manually. The instructions may vary depending on your system, so please adjust accordingly. The easiest way is to still to just use the container for the preprocessing steps.
 
 ```bash
 # install igblast and blast

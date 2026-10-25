@@ -46,33 +46,35 @@ Single Cell Immune Profiling datasets
 Installation
 ------------
 
-Container (Apptainer/Singularity or Docker)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Container (Apptainer or Docker)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``dandelion`` comes ready in the form of a container image with all the
 required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and
 reference databases installed. It is published on
 `Docker Hub <https://hub.docker.com/r/zktuong/sc-dandelion>`__ and works
-with Apptainer/Singularity (typical on HPC) as well as Docker/Podman.
+with Apptainer (typical on HPC; SingularityCE also works) as well as
+Docker/Podman.
 
-**Apptainer/Singularity:**
+**Apptainer:**
 
 .. code:: bash
 
-    singularity pull docker://zktuong/sc-dandelion:latest    # or: apptainer pull docker://zktuong/sc-dandelion:latest
-    singularity shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
+    apptainer pull docker://zktuong/sc-dandelion:latest
+    apptainer shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 
 This creates ``sc-dandelion_latest.sif`` and loads up a container that has
 all the required dependencies installed. To use a specific release instead
 of the latest image, replace ``latest`` with the release tag (for example,
-``v0.5.0``).
+``v0.5.0``). Using SingularityCE rather than Apptainer? The commands are
+identical: just replace ``apptainer`` with ``singularity``.
 
 This can be used for the preprocessing steps by navigating to the data
 folder and use:
 
 .. code:: bash
 
-    singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
+    apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
 
 **Docker/Podman:**
 
@@ -90,10 +92,10 @@ folder and use:
     If you hit Docker Hub's anonymous pull rate limit (common on shared HPC
     login nodes), pull the identical mirror from the GitHub Container
     Registry instead:
-    ``singularity pull docker://ghcr.io/tuonglab/sc-dandelion:latest``.
+    ``apptainer pull docker://ghcr.io/tuonglab/sc-dandelion:latest``.
     Converting the image to a ``.sif`` needs a few GB of temporary space; if
-    your home directory is small, point ``APPTAINER_CACHEDIR``/``APPTAINER_TMPDIR``
-    (or ``SINGULARITY_CACHEDIR``/``SINGULARITY_TMPDIR``) at scratch space first.
+    your home directory is small, point ``APPTAINER_CACHEDIR`` and
+    ``APPTAINER_TMPDIR`` at scratch space first.
 
 Python package
 ~~~~~~~~~~~~~~
@@ -117,13 +119,13 @@ Once done, run the following:
 The ``polars`` extra enables a faster backend for data operations. The base install
 uses ``pandas`` as the backend.
 
-Between this and the pipelines within the singularity container, you
+Between this and the pipelines within the container, you
 should be covered for most of your needs.
 
 Manual full installation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-For those who cannot use the singularity container, here is a detailed
+For those who cannot use the container, here is a detailed
 installation guide. Instructions may vary depending on your system.
 
 First, install igblast and blast:
