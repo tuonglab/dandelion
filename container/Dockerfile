@@ -9,7 +9,7 @@
 # Use with Docker:
 #   docker run --rm -v "$PWD":/data -w /data --user "$(id -u):$(id -g)" \
 #       sc-dandelion dandelion-preprocess --help
-# Use with Apptainer/Singularity (HPC):
+# Use with Apptainer (HPC):
 #   apptainer pull docker://zktuong/sc-dandelion:latest
 #   apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --help
 #

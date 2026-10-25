@@ -4,7 +4,7 @@
 [![master](https://github.com/tuonglab/dandelion/actions/workflows/tests.yml/badge.svg?branch=master)]((https://github.com/tuonglab/dandelion/actions/workflows/tests.yml))
 [![codecov](https://codecov.io/gh/tuonglab/dandelion/graph/badge.svg?token=i2BhIz2a4r)](https://codecov.io/gh/tuonglab/dandelion)
 [![](https://img.shields.io/static/v1?label=AIRR-C%20sw-tools%20v1&message=compliant&color=008AFF&labelColor=000000&style=plastic)](https://docs.airr-community.org/en/stable/swtools/airr_swtools_standard.html)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_colab.ipynb)
 
 ![](docs/notebooks/img/dandelion_logo_illustration.png)
 

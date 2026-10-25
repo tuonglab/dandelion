@@ -393,7 +393,7 @@ References
 .. |CodeCov| image:: https://codecov.io/gh/tuonglab/dandelion/graph/badge.svg?token=i2BhIz2a4r
    :target: https://codecov.io/gh/tuonglab/dandelion
 .. |Colab| image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb
+   :target: https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_colab.ipynb
 .. |logo| image:: notebooks/img/dandelion_logo_illustration.png
 .. |overview| image:: notebooks/img/dandelion_overview.png
 .. |class| image:: notebooks/img/dandelion_class2.png
