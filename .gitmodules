@@ -1,3 +1,4 @@
 [submodule "dandelion_manuscript"]
 	path = dandelion_manuscript
 	url = https://github.com/zktuong/dandelion-demo-files.git
+	update = none

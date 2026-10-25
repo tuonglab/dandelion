@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from dandelion.polars.tools._tools import (
     clone_overlap,
     clone_size,
@@ -42,12 +41,10 @@ __all__ = [
     "clone_size",
     "clone_view",
     "concat",
-    "concat_polars",
     "define_clones",
     "extract_edge_weights",
     "fetch_db",
     "find_clones",
-    "find_clones_polars",
     "from_scirpy",
     "generate_network",
     "get_epitope",

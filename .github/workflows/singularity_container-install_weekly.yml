@@ -10,8 +10,22 @@ jobs:
     steps:
       - name: Check out code for the container build
         uses: actions/checkout@v4
+      - name: Get latest SingularityCE release
+        id: singularity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/sylabs/singularity/releases/latest --jq '.tag_name')
+          echo "Latest SingularityCE: $tag"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Install extra build deps for newer SingularityCE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsubid-dev
       - name: Setup Singularity
         uses: singularityhub/install-singularity@main
+        with:
+          singularity-version: ${{ steps.singularity.outputs.version }}
       - name: Extract repository location
         shell: bash
         run: |
@@ -21,7 +35,10 @@ jobs:
         run: |
           cd container
           echo '${{ steps.extract_location.outputs.location }}' >> environment_test.yml
-          sudo -E singularity build --notest sc-dandelion.sif sc-dandelion_test.def
+          mkdir -p "$RUNNER_TEMP/singularity-tmp"
+          sudo singularity build --notest \
+            --tmpdir "$RUNNER_TEMP/singularity-tmp" \
+            sc-dandelion.sif sc-dandelion.def
       - name: Test Container
         run: |
           cd container
