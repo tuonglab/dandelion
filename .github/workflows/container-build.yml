@@ -1,0 +1,168 @@
+name: Container build (reusable)
+
+# Builds container/Dockerfile, tests it with Docker and Apptainer, and
+# optionally pushes it to Docker Hub and GHCR. Called by container-pr.yml,
+# container-weekly.yml and container-release.yml.
+
+on:
+  workflow_call:
+    inputs:
+      allow_db_failure:
+        description: "Keep going if reference database downloads fail"
+        type: boolean
+        default: false
+      include_ogrdb:
+        description: "Also build the OGRDB database (best effort)"
+        type: boolean
+        default: false
+      push:
+        description: "Push the image to Docker Hub and GHCR"
+        type: boolean
+        default: false
+      tag_name:
+        description: "Image tag to push (required when push is true)"
+        type: string
+        default: ""
+      push_latest:
+        description: "Also push the 'latest' tag"
+        type: boolean
+        default: false
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+
+env:
+  IMAGE: sc-dandelion:ci
+  # Docker Hub repository. Override with a repository variable DOCKERHUB_REPO.
+  DOCKERHUB_REPO: ${{ vars.DOCKERHUB_REPO || 'zktuong/sc-dandelion' }}
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    # Permissions come from the caller: the release workflow grants
+    # packages: write for the GHCR push; PR/weekly builds stay read-only.
+    steps:
+      - name: Free disk space
+        # The image (conda env + reference databases) is several GB, and the
+        # Apptainer conversion needs room for a second copy.
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # setuptools_scm needs tags/history for the version
+
+      - name: Work out dandelion version
+        id: version
+        run: |
+          pip install --quiet "setuptools_scm[toml]>=6.0"
+          version=$(python -m setuptools_scm 2>/dev/null || echo "0.0.0+docker")
+          echo "dandelion version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            --pull \
+            --progress plain \
+            --platform linux/amd64 \
+            --file container/Dockerfile \
+            --build-arg DANDELION_VERSION="${{ steps.version.outputs.version }}" \
+            --build-arg VCS_REF="${{ github.sha }}" \
+            --build-arg ALLOW_DB_FAILURE="${{ inputs.allow_db_failure && '1' || '0' }}" \
+            --build-arg INCLUDE_OGRDB="${{ inputs.include_ogrdb && '1' || '0' }}" \
+            --tag "$IMAGE" \
+            .
+          docker image ls "$IMAGE"
+
+      - name: Test image (Docker)
+        run: |
+          docker run --rm "$IMAGE" bash -euc '
+            if [ -f /share/DATABASE_FAILED ]; then
+              echo "::warning::Database preparation failed during build - skipping container tests."
+              exit 0
+            fi
+            ls -ltR /share/database | head -100
+            which blastn igblastn
+            cat /share/IGBLAST_VERSION
+            conda list -p "$CONDA_PREFIX"
+            dandelion-preprocess --help
+            changeo-clonotypes --help
+            pytest -p no:cacheprovider /tests \
+              -W ignore::DeprecationWarning \
+              -W ignore::PendingDeprecationWarning \
+              -W ignore::FutureWarning
+          '
+
+      - name: Install Apptainer
+        run: |
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+          apptainer --version
+
+      - name: Test image (Apptainer, as HPC users run it)
+        run: |
+          mkdir -p "$RUNNER_TEMP/apptainer-tmp" "$RUNNER_TEMP/apptainer-cache"
+          export APPTAINER_TMPDIR="$RUNNER_TEMP/apptainer-tmp"
+          export APPTAINER_CACHEDIR="$RUNNER_TEMP/apptainer-cache"
+          sif="$RUNNER_TEMP/sc-dandelion.sif"
+          apptainer build "$sif" "docker-daemon://$IMAGE"
+          ls -lh "$sif"
+          apptainer run "$sif" dandelion-preprocess --help
+          apptainer exec "$sif" changeo-clonotypes --help
+          if apptainer exec "$sif" test -f /share/DATABASE_FAILED; then
+            echo "::warning::Database preparation failed during build - skipping Apptainer preprocessing run."
+            exit 0
+          fi
+          # Run the documented command on the bundled test sample, as a normal
+          # user against a read-only image.
+          work="$RUNNER_TEMP/apptainer-run"
+          mkdir -p "$work"
+          cp -r container/tests/sample_test_10x container/tests/test.csv "$work/"
+          cd "$work"
+          apptainer run -B "$PWD" "$sif" dandelion-preprocess \
+            --meta test.csv --file_prefix filtered --skip_tigger
+          test -s sample_test_10x/dandelion/filtered_contig_dandelion.tsv
+          echo "Apptainer preprocessing run OK"
+
+      - name: Push image
+        if: inputs.push
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag_name }}
+          PUSH_LATEST: ${{ inputs.push_latest }}
+        run: |
+          if [ -z "$TAG" ]; then echo "tag_name is required to push"; exit 1; fi
+          ghcr_repo="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/sc-dandelion"
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login docker.io --username "$DOCKERHUB_USERNAME" --password-stdin
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          tags="$TAG"
+          if [ "$PUSH_LATEST" = "true" ]; then tags="$tags latest"; fi
+          for repo in "docker.io/$DOCKERHUB_REPO" "$ghcr_repo"; do
+            for t in $tags; do
+              docker tag "$IMAGE" "$repo:$t"
+              docker push "$repo:$t"
+            done
+          done
+          {
+            echo "### sc-dandelion $TAG published"
+            echo '```bash'
+            echo "singularity pull docker://$DOCKERHUB_REPO:$TAG    # or: apptainer pull ..."
+            echo "singularity pull docker://$ghcr_repo:$TAG          # GHCR mirror"
+            echo "docker pull $DOCKERHUB_REPO:$TAG"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

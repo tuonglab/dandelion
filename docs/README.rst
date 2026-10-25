@@ -46,24 +46,26 @@ Single Cell Immune Profiling datasets
 Installation
 ------------
 
-Singularity container
-~~~~~~~~~~~~~~~~~~~~~
+Container (Apptainer/Singularity or Docker)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``dandelion`` now comes ready in the form of a singularity container
-which has all the required dependencies installed:
+``dandelion`` comes ready in the form of a container image with all the
+required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and
+reference databases installed. It is published on
+`Docker Hub <https://hub.docker.com/r/zktuong/sc-dandelion>`__ and works
+with Apptainer/Singularity (typical on HPC) as well as Docker/Podman.
+
+**Apptainer/Singularity:**
 
 .. code:: bash
 
-    singularity pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest
-    # Alternatively, pull the GitHub Container Registry mirror:
-    # singularity pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest
+    singularity pull docker://zktuong/sc-dandelion:latest    # or: apptainer pull docker://zktuong/sc-dandelion:latest
     singularity shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 
-To use a specific release instead of the latest image, replace ``latest``
-with the release tag (for example, ``v0.5.0``) in the image URI.
-
-This will load up a conda-environment that has all the required
-dependencies installed.
+This creates ``sc-dandelion_latest.sif`` and loads up a container that has
+all the required dependencies installed. To use a specific release instead
+of the latest image, replace ``latest`` with the release tag (for example,
+``v0.5.0``).
 
 This can be used for the preprocessing steps by navigating to the data
 folder and use:
@@ -71,6 +73,27 @@ folder and use:
 .. code:: bash
 
     singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
+
+**Docker/Podman:**
+
+.. code:: bash
+
+    docker run --rm -v "$PWD":/data -w /data --user "$(id -u):$(id -g)" \
+        zktuong/sc-dandelion:latest dandelion-preprocess
+
+.. note::
+
+    The image used to be hosted on the Sylabs Cloud Library
+    (``library://kt16/default/sc-dandelion``), which has been decommissioned.
+    Please update any scripts that use the old ``library://`` address.
+
+    If you hit Docker Hub's anonymous pull rate limit (common on shared HPC
+    login nodes), pull the identical mirror from the GitHub Container
+    Registry instead:
+    ``singularity pull docker://ghcr.io/tuonglab/sc-dandelion:latest``.
+    Converting the image to a ``.sif`` needs a few GB of temporary space; if
+    your home directory is small, point ``APPTAINER_CACHEDIR``/``APPTAINER_TMPDIR``
+    (or ``SINGULARITY_CACHEDIR``/``SINGULARITY_TMPDIR``) at scratch space first.
 
 Python package
 ~~~~~~~~~~~~~~

@@ -248,7 +248,8 @@ def setup_colab_singularity() -> None:  # pragma: no cover
 
     Installs ``apptainer-suid`` from the official PPA, wraps it with
     ``unshare -r`` so that it operates correctly inside Colab's unprivileged
-    container. Images are pulled from Docker Hub via ``oras://``, so no
+    container. The dandelion image is then pulled straight from Docker Hub
+    with ``singularity pull docker://zktuong/sc-dandelion:latest``, so no
     extra remote needs registering. Safe to re-run; existing
     files are backed up rather than overwritten.
 
