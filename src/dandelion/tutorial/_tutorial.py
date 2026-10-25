@@ -243,12 +243,12 @@ def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
             _download_file(url, outfile)
 
 
-def setup_colab_singularity() -> None:  # pragma: no cover
-    """Install and configure Apptainer/Singularity in a Google Colab environment.
+def setup_colab_container() -> None:  # pragma: no cover
+    """Install and configure Apptainer in a Google Colab environment.
 
     Installs ``apptainer-suid`` from the official PPA and wraps both the
-    ``apptainer`` and ``singularity`` commands with ``unshare -r`` so that they
-    operate correctly inside Colab's unprivileged container. The dandelion
+    ``apptainer`` command (and a ``singularity`` alias, for older notebooks)
+    with ``unshare -r`` so that they operate correctly inside Colab's unprivileged container. The dandelion
     image is then pulled straight from Docker Hub with
     ``apptainer pull docker://zktuong/sc-dandelion:latest``, so no extra
     remote needs registering. Safe to re-run; existing files are backed up
@@ -281,7 +281,7 @@ echo "Creating apptainer wrapper..."
 printf '#!/bin/sh\nexec unshare -r /usr/bin/apptainer "$@"\n' | sudo tee /usr/local/bin/apptainer > /dev/null
 sudo chmod +x /usr/local/bin/apptainer
 
-echo "Creating singularity wrapper..."
+echo "Creating singularity wrapper (alias for older notebooks)..."
 printf '#!/bin/sh\nexec unshare -r /usr/bin/apptainer "$@"\n' | sudo tee /usr/bin/singularity_test > /dev/null
 sudo chmod +x /usr/bin/singularity_test
 
@@ -293,3 +293,7 @@ echo "Done."
 
     subprocess.run(["bash", "-c", bash_script], check=True)
     print("\n✅ Apptainer ready!")
+
+
+# Backwards-compatible alias: older notebooks call setup_colab_singularity().
+setup_colab_singularity = setup_colab_container
