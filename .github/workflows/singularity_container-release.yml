@@ -73,7 +73,7 @@ jobs:
         run: |
           printf '%s' "$SINGULARITY_KEY" | singularity key import /dev/stdin
           singularity sign --keyidx 0 sc-dandelion.sif
-          singularity verify sc-dandelion.sif
+          singularity verify --local sc-dandelion.sif
 
       - name: Push to Docker Hub
         if: success()
