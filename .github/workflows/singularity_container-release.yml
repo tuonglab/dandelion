@@ -17,8 +17,22 @@ jobs:
       - name: Check out code for the container build
         uses: actions/checkout@v4
 
+      - name: Get latest SingularityCE release
+        id: singularity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/sylabs/singularity/releases/latest --jq '.tag_name')
+          echo "Latest SingularityCE: $tag"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Install extra build deps for newer SingularityCE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsubid-dev
       - name: Setup Singularity
         uses: singularityhub/install-singularity@main
+        with:
+          singularity-version: ${{ steps.singularity.outputs.version }}
 
       - name: Build Container
         run: |
