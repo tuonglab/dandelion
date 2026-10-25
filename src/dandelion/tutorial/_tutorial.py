@@ -246,13 +246,11 @@ def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
 def setup_colab_container() -> None:  # pragma: no cover
     """Install and configure Apptainer in a Google Colab environment.
 
-    Installs ``apptainer-suid`` from the official PPA and wraps both the
-    ``apptainer`` command (and a ``singularity`` alias, for older notebooks)
-    with ``unshare -r`` so that they operate correctly inside Colab's unprivileged container. The dandelion
-    image is then pulled straight from Docker Hub with
-    ``apptainer pull docker://zktuong/sc-dandelion:latest``, so no extra
-    remote needs registering. Safe to re-run; existing files are backed up
-    rather than overwritten.
+    Installs ``apptainer-suid`` from the official PPA and wraps the
+    ``apptainer`` command with ``unshare -r`` so that it operates correctly
+    inside Colab's unprivileged container. The dandelion image can then be
+    pulled straight from Docker Hub with
+    ``apptainer pull docker://zktuong/sc-dandelion:latest``. Safe to re-run.
 
     Raises
     ------
@@ -281,13 +279,6 @@ echo "Creating apptainer wrapper..."
 printf '#!/bin/sh\nexec unshare -r /usr/bin/apptainer "$@"\n' | sudo tee /usr/local/bin/apptainer > /dev/null
 sudo chmod +x /usr/local/bin/apptainer
 
-echo "Creating singularity wrapper (alias for older notebooks)..."
-printf '#!/bin/sh\nexec unshare -r /usr/bin/apptainer "$@"\n' | sudo tee /usr/bin/singularity_test > /dev/null
-sudo chmod +x /usr/bin/singularity_test
-
-sudo mv /usr/bin/singularity /usr/bin/singularity_backup 2>/dev/null || true
-sudo mv /usr/bin/singularity_test /usr/bin/singularity
-
 echo "Done."
 """
 
@@ -295,5 +286,5 @@ echo "Done."
     print("\n✅ Apptainer ready!")
 
 
-# Backwards-compatible alias: older notebooks call setup_colab_singularity().
+# Backwards-compatible alias for code that calls the old function name.
 setup_colab_singularity = setup_colab_container
