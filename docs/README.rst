@@ -54,9 +54,13 @@ which has all the required dependencies installed:
 
 .. code:: bash
 
-    singularity pull library://kt16/default/sc-dandelion:latest
+    singularity pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest
+    # Alternatively, pull the GitHub Container Registry mirror:
+    # singularity pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest
     singularity shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 
+To use a specific release instead of the latest image, replace ``latest``
+with the release tag (for example, ``v0.5.0``) in the image URI.
 
 This will load up a conda-environment that has all the required
 dependencies installed.
