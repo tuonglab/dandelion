@@ -44,12 +44,16 @@ The raw files used in the example notebooks can be downloaded from 10X's Single 
 
 `dandelion` comes ready in the form of a container image with all the required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and reference databases installed. It is published on [Docker Hub](https://hub.docker.com/r/zktuong/sc-dandelion) and works with Apptainer (typical on HPC; SingularityCE also works) as well as Docker/Podman.
 
-**Apptainer:**
+**Apptainer:** download the ready-made `.sif` image (fastest):
 ```bash
-apptainer pull docker://zktuong/sc-dandelion:latest
+apptainer pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest-sif
 apptainer shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 ```
-This creates `sc-dandelion_latest.sif` and loads up a container that has all the required dependencies installed. To use a specific release instead of the latest image, replace `latest` with the release tag (for example, `v0.5.0`). Using SingularityCE rather than Apptainer? The commands are identical: just replace `apptainer` with `singularity`.
+or build the `.sif` locally from the Docker image (takes a few minutes and a few GB of temporary space):
+```bash
+apptainer pull docker://zktuong/sc-dandelion:latest
+```
+Either way you get `sc-dandelion_latest.sif`, a container that has all the required dependencies installed. To use a specific release instead of the latest image, replace `latest` with the release tag (for example, `v0.5.0-sif` for the ready-made image or `v0.5.0` for the Docker image). Using SingularityCE rather than Apptainer? The commands are identical: just replace `apptainer` with `singularity`.
 
 This can be used for the preprocessing steps by navigating to the data folder and use:
 ```bash
@@ -70,7 +74,7 @@ docker run --rm -v "$PWD":/data -w /data --user "$(id -u):$(id -g)" \
 > [!NOTE]
 > The image used to be hosted on the Sylabs Cloud Library (`library://kt16/default/sc-dandelion`), which has been decommissioned. Please update any scripts that use the old `library://` address.
 >
-> If you hit Docker Hub's anonymous pull rate limit (common on shared HPC login nodes), pull the identical mirror from the GitHub Container Registry instead: `apptainer pull docker://ghcr.io/tuonglab/sc-dandelion:latest`. Converting the image to a `.sif` needs a few GB of temporary space; if your home directory is small, point `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` at scratch space first.
+> If you hit Docker Hub's anonymous pull rate limit (common on shared HPC login nodes), pull the identical mirror from the GitHub Container Registry instead by replacing `docker.io/zktuong` with `ghcr.io/tuonglab`, e.g. `apptainer pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest-sif`. If you build from the Docker image and your home directory is small, point `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` at scratch space first.
 
 ### Python package
 

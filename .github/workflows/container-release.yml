@@ -1,8 +1,11 @@
 name: Release Container Image
 
-# Builds and tests the container, then pushes it to:
+# Builds and tests the container, then pushes to:
 #   docker.io/zktuong/sc-dandelion        (override with repo variable DOCKERHUB_REPO)
 #   ghcr.io/<repository owner>/sc-dandelion
+# For each tag it pushes two things to each repository:
+#   <tag>      the Docker image (docker pull / apptainer pull docker://...)
+#   <tag>-sif  the prebuilt Apptainer .sif (apptainer pull oras://...)
 # Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN.
 #
 # TODO: optionally sign pushed images with cosign (keyless, via GitHub OIDC).

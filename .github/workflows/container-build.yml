@@ -172,7 +172,28 @@ jobs:
           test -s sample_test_10x/dandelion/filtered_contig_dandelion.tsv
           echo "::notice title=Apptainer::Converted image and ran dandelion-preprocess on the test sample as a normal user"
 
-      - name: Push image
+      - name: Test .sif push/pull through a registry (local, nothing published)
+        # Exercises the same `apptainer push/pull oras://...:<tag>-sif` route
+        # that releases and users take, against a throwaway local registry.
+        if: success()
+        run: |
+          set -euo pipefail
+          sif="$RUNNER_TEMP/sc-dandelion.sif"
+          if [ ! -s "$sif" ]; then
+            echo "::warning::No .sif was built (database preparation failed?) - skipping."
+            exit 0
+          fi
+          docker run -d --rm --name oras-test-registry -p 5000:5000 registry:2
+          trap 'docker stop oras-test-registry >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 30); do curl -sf http://localhost:5000/v2/ >/dev/null && break; sleep 1; done
+          apptainer push --no-https "$sif" oras://localhost:5000/sc-dandelion:ci-sif
+          pulled="$RUNNER_TEMP/pulled.sif"
+          apptainer pull --no-https "$pulled" oras://localhost:5000/sc-dandelion:ci-sif
+          apptainer run "$pulled" dandelion-preprocess --help >/dev/null
+          echo "::notice title=Prebuilt .sif::$(du -h "$sif" | cut -f1) .sif pushed and pulled back via oras:// and runs"
+          rm -f "$pulled"
+
+      - name: Push Docker image and prebuilt .sif
         if: inputs.push
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -181,23 +202,49 @@ jobs:
           TAG: ${{ inputs.tag_name }}
           PUSH_LATEST: ${{ inputs.push_latest }}
         run: |
+          set -euo pipefail
           if [ -z "$TAG" ]; then echo "tag_name is required to push"; exit 1; fi
+          sif="$RUNNER_TEMP/sc-dandelion.sif"
+          if [ ! -s "$sif" ]; then echo "Prebuilt .sif not found at $sif"; exit 1; fi
+          # Free the Apptainer build cache before pushing.
+          rm -rf "$RUNNER_TEMP/apptainer-tmp" "$RUNNER_TEMP/apptainer-cache"
           ghcr_repo="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/sc-dandelion"
+          dockerhub_repo="docker.io/$DOCKERHUB_REPO"
+
+          # Docker logins (for the Docker image)
           printf '%s' "$DOCKERHUB_TOKEN" | docker login docker.io --username "$DOCKERHUB_USERNAME" --password-stdin
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          # ORAS logins (for the .sif, stored as an OCI artifact)
+          printf '%s' "$DOCKERHUB_TOKEN" | apptainer registry login --username "$DOCKERHUB_USERNAME" --password-stdin oras://docker.io
+          printf '%s' "$GHCR_TOKEN" | apptainer registry login --username "${{ github.actor }}" --password-stdin oras://ghcr.io
+
           tags="$TAG"
           if [ "$PUSH_LATEST" = "true" ]; then tags="$tags latest"; fi
-          for repo in "docker.io/$DOCKERHUB_REPO" "$ghcr_repo"; do
+          for repo in "$dockerhub_repo" "$ghcr_repo"; do
             for t in $tags; do
+              # Docker image  -> <repo>:<tag>
               docker tag "$IMAGE" "$repo:$t"
               docker push "$repo:$t"
+              # Prebuilt .sif -> <repo>:<tag>-sif
+              apptainer push "$sif" "oras://$repo:$t-sif"
             done
           done
+
           {
             echo "### sc-dandelion $TAG published"
+            echo ""
+            echo "**Apptainer/SingularityCE, prebuilt .sif (fastest, no conversion):**"
+            echo '```bash'
+            echo "apptainer pull sc-dandelion_$TAG.sif oras://$dockerhub_repo:$TAG-sif"
+            echo "apptainer pull sc-dandelion_$TAG.sif oras://$ghcr_repo:$TAG-sif    # GHCR mirror"
+            echo '```'
+            echo "**Apptainer/SingularityCE, from the Docker image (converted locally):**"
             echo '```bash'
             echo "apptainer pull docker://$DOCKERHUB_REPO:$TAG"
             echo "apptainer pull docker://$ghcr_repo:$TAG    # GHCR mirror"
+            echo '```'
+            echo "**Docker/Podman:**"
+            echo '```bash'
             echo "docker pull $DOCKERHUB_REPO:$TAG"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

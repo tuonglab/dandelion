@@ -248,9 +248,9 @@ def setup_colab_container() -> None:  # pragma: no cover
 
     Installs ``apptainer-suid`` from the official PPA and wraps the
     ``apptainer`` command with ``unshare -r`` so that it operates correctly
-    inside Colab's unprivileged container. The dandelion image can then be
-    pulled straight from Docker Hub with
-    ``apptainer pull docker://zktuong/sc-dandelion:latest``. Safe to re-run.
+    inside Colab's unprivileged container. The ready-made dandelion image can
+    then be downloaded with ``apptainer pull sc-dandelion_latest.sif
+    oras://docker.io/zktuong/sc-dandelion:latest-sif``. Safe to re-run.
 
     Raises
     ------
