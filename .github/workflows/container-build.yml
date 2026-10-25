@@ -196,8 +196,8 @@ jobs:
           {
             echo "### sc-dandelion $TAG published"
             echo '```bash'
-            echo "singularity pull docker://$DOCKERHUB_REPO:$TAG    # or: apptainer pull ..."
-            echo "singularity pull docker://$ghcr_repo:$TAG          # GHCR mirror"
+            echo "apptainer pull docker://$DOCKERHUB_REPO:$TAG"
+            echo "apptainer pull docker://$ghcr_repo:$TAG    # GHCR mirror"
             echo "docker pull $DOCKERHUB_REPO:$TAG"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
