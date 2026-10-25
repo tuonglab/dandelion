@@ -71,7 +71,11 @@ jobs:
         run: |
           cd container
           echo '${{ steps.extract_location.outputs.location }}' >> environment_test.yml
-          ALLOW_DB_FAILURE=1 sudo -E singularity build --notest sc-dandelion.sif sc-dandelion_test.def
+          mkdir -p "$RUNNER_TEMP/singularity-tmp"
+          sudo env ALLOW_DB_FAILURE=1 \
+            singularity build --notest \
+            --tmpdir "$RUNNER_TEMP/singularity-tmp" \
+            sc-dandelion.sif sc-dandelion_test.def
       - name: Test Container
         run: |
           cd container

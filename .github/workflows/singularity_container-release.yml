@@ -36,7 +36,10 @@ jobs:
 
       - name: Build Container
         run: |
-          sudo -E singularity build --notest sc-dandelion.sif sc-dandelion.def
+          mkdir -p "$RUNNER_TEMP/singularity-tmp"
+          sudo singularity build --notest \
+            --tmpdir "$RUNNER_TEMP/singularity-tmp" \
+            sc-dandelion.sif sc-dandelion.def
 
       - name: Test Container
         id: test_container

@@ -35,7 +35,10 @@ jobs:
         run: |
           cd container
           echo '${{ steps.extract_location.outputs.location }}' >> environment_test.yml
-          sudo -E singularity build --notest sc-dandelion.sif sc-dandelion_test.def
+          mkdir -p "$RUNNER_TEMP/singularity-tmp"
+          sudo singularity build --notest \
+            --tmpdir "$RUNNER_TEMP/singularity-tmp" \
+            sc-dandelion.sif sc-dandelion.def
       - name: Test Container
         run: |
           cd container
