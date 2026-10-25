@@ -87,7 +87,21 @@ jobs:
           docker image ls "$IMAGE"
 
       - name: Test image (Docker)
+        shell: bash
         run: |
+          # Surface the end of the output as an annotation on failure, so it is
+          # visible on the PR without opening the full log.
+          log="$RUNNER_TEMP/docker-test.log"
+          exec > >(tee -a "$log") 2>&1
+          on_exit() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              sleep 1
+              msg=$(tail -n 40 "$log" | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+              echo "::error title=Docker test failed (exit $rc)::$msg"
+            fi
+          }
+          trap on_exit EXIT
           docker run --rm "$IMAGE" bash -euc '
             if [ -f /share/DATABASE_FAILED ]; then
               echo "::warning::Database preparation failed during build - skipping container tests."
@@ -99,10 +113,14 @@ jobs:
             conda list -p "$CONDA_PREFIX"
             dandelion-preprocess --help
             changeo-clonotypes --help
+            set +e
             pytest -p no:cacheprovider /tests \
               -W ignore::DeprecationWarning \
               -W ignore::PendingDeprecationWarning \
-              -W ignore::FutureWarning
+              -W ignore::FutureWarning 2>&1 | tee /tmp/pytest.log
+            rc=${PIPESTATUS[0]}
+            echo "::notice title=Container pytest::$(tail -n 1 /tmp/pytest.log)"
+            exit $rc
           '
 
       - name: Install Apptainer
@@ -111,9 +129,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apptainer
           apptainer --version
+          # Ubuntu 24.04+ runners block unprivileged user namespaces via
+          # AppArmor, which Apptainer needs when run without setuid.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - name: Test image (Apptainer, as HPC users run it)
+        shell: bash
         run: |
+          # Surface the end of the output as an annotation on failure, so it is
+          # visible on the PR without opening the full log.
+          log="$RUNNER_TEMP/apptainer-test.log"
+          exec > >(tee -a "$log") 2>&1
+          on_exit() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              sleep 1
+              msg=$(tail -n 40 "$log" | sed -e ':a' -e 'N' -e '$!ba' -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+              echo "::error title=Apptainer test failed (exit $rc)::$msg"
+            fi
+          }
+          trap on_exit EXIT
           mkdir -p "$RUNNER_TEMP/apptainer-tmp" "$RUNNER_TEMP/apptainer-cache"
           export APPTAINER_TMPDIR="$RUNNER_TEMP/apptainer-tmp"
           export APPTAINER_CACHEDIR="$RUNNER_TEMP/apptainer-cache"
@@ -135,7 +170,7 @@ jobs:
           apptainer run -B "$PWD" "$sif" dandelion-preprocess \
             --meta test.csv --file_prefix filtered --skip_tigger
           test -s sample_test_10x/dandelion/filtered_contig_dandelion.tsv
-          echo "Apptainer preprocessing run OK"
+          echo "::notice title=Apptainer::Converted image and ran dandelion-preprocess on the test sample as a normal user"
 
       - name: Push image
         if: inputs.push
