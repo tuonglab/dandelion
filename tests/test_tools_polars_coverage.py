@@ -1736,6 +1736,11 @@ def test_estimate_diversity_random_state():
         assert len(set(np.round(a[g], 12))) > 1
     assert any(not np.array_equal(a[g], c[g]) for g in a)
 
+    # a group's result doesn't depend on which other groups are analysed with it
+    adata = adata[adata.obs["sample_id"] == "s1"].copy()
+    only_s1 = run(7)
+    np.testing.assert_array_equal(only_s1["s1"], a["s1"])
+
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
 def test_bootstrap_network_clone_centrality(

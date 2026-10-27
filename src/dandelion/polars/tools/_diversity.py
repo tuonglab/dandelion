@@ -1,3 +1,4 @@
+import zlib
 import numpy as np
 import networkx as nx
 import pandas as pd
@@ -548,8 +549,6 @@ def gini_indices(
     if "random_state" in kwargs:
         kw_seed = kwargs.pop("random_state")
         random_state = kw_seed if random_state is None else random_state
-    # one generator for the whole run; each bootstrap iteration gets its own seed
-    rng = np.random.default_rng(random_state)
     for g in groups:
         # clone size distribution
         group_cells = metadata_df.index[metadata_df[group_by] == g].tolist()
@@ -562,7 +561,7 @@ def gini_indices(
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
             disable=not verbose,
         )
-        seeds = rng.integers(0, 2**32 - 1, size=n_boot)
+        seeds = _bootstrap_seeds(random_state, g, n_boot)
         results = Parallel(n_jobs=n_cpus)(
             delayed(_bootstrap_network)(
                 ddl_dat,
@@ -666,8 +665,6 @@ def estimate_diversity(
 
     # --- Compute diversity estimates via bootstrapping
     res, res_raw = {}, {}
-    # one generator for the whole run; each bootstrap iteration gets its own seed
-    rng = np.random.default_rng(random_state)
     for g in groups:
         _dat = _metadata[_metadata[group_by] == g]
 
@@ -677,7 +674,7 @@ def estimate_diversity(
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
             disable=not verbose,
         )
-        seeds = rng.integers(0, 2**32 - 1, size=n_boot)
+        seeds = _bootstrap_seeds(random_state, g, n_boot)
         values = Parallel(n_jobs=n_cpus)(
             delayed(_bootstrap_diversity_iteration)(
                 _dat,
@@ -703,6 +700,24 @@ def estimate_diversity(
         if original_backend == "polars":
             data.to_polars(lazy=original_lazy)
     return res_df, res_raw
+
+
+def _bootstrap_seeds(
+    random_state: int | np.random.Generator | None, group, n_boot: int
+) -> np.ndarray:
+    """
+    One seed per bootstrap iteration for `group`.
+
+    With an integer `random_state` the seeds depend only on that seed and the
+    group's name, so a group gives the same result whichever other groups are
+    analysed alongside it. Every iteration still gets a different seed.
+    """
+    if random_state is None or isinstance(random_state, np.random.Generator):
+        rng = np.random.default_rng(random_state)
+    else:
+        group_key = zlib.crc32(str(group).encode("utf-8"))
+        rng = np.random.default_rng([int(random_state), group_key])
+    return rng.integers(0, 2**32 - 1, size=n_boot)
 
 
 def _prepare_diversity_groups(
