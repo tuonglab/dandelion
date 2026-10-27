@@ -1,0 +1,14 @@
+# The container is built from the repository root (see container/Dockerfile).
+# Only send what the Dockerfile actually copies.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!MANIFEST.in
+!src/
+!container/environment.yml
+!container/scripts/
+!container/tests/
+**/__pycache__
+**/*.pyc
+src/dandelion/logging/version.py

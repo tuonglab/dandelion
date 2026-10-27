@@ -243,13 +243,14 @@ def setup_dandelion_tutorial_parse(path: Path | str | None = None) -> None:
             _download_file(url, outfile)
 
 
-def setup_colab_singularity() -> None:  # pragma: no cover
-    """Install and configure Apptainer/Singularity in a Google Colab environment.
+def setup_colab_container() -> None:  # pragma: no cover
+    """Install and configure Apptainer in a Google Colab environment.
 
-    Installs ``apptainer-suid`` from the official PPA, wraps it with
-    ``unshare -r`` so that it operates correctly inside Colab's unprivileged
-    container, and registers the Sylabs remote. Safe to re-run; existing
-    files are backed up rather than overwritten.
+    Installs ``apptainer-suid`` from the official PPA and wraps the
+    ``apptainer`` command with ``unshare -r`` so that it operates correctly
+    inside Colab's unprivileged container. The ready-made dandelion image can
+    then be downloaded with ``apptainer pull sc-dandelion_latest.sif
+    oras://docker.io/zktuong/sc-dandelion:latest-sif``. Safe to re-run.
 
     Raises
     ------
@@ -272,21 +273,18 @@ fi
 sudo apt install -y -qq apptainer-suid
 
 echo "Configuring fakeroot..."
-sudo apptainer config fakeroot --add root || true
+sudo /usr/bin/apptainer config fakeroot --add root || true
 
-echo "Creating singularity wrapper..."
-echo 'unshare -r apptainer "$@"' | sudo tee /usr/bin/singularity_test > /dev/null
-sudo chmod +x /usr/bin/singularity_test
-
-sudo mv /usr/bin/singularity /usr/bin/singularity_backup 2>/dev/null || true
-sudo mv /usr/bin/singularity_test /usr/bin/singularity
-
-echo "Adding Sylabs remote..."
-apptainer remote add --no-login SylabsCloud cloud.sylabs.io || true
-apptainer remote use SylabsCloud
+echo "Creating apptainer wrapper..."
+printf '#!/bin/sh\nexec unshare -r /usr/bin/apptainer "$@"\n' | sudo tee /usr/local/bin/apptainer > /dev/null
+sudo chmod +x /usr/local/bin/apptainer
 
 echo "Done."
 """
 
     subprocess.run(["bash", "-c", bash_script], check=True)
-    print("\n✅ Singularity / Apptainer ready!")
+    print("\n✅ Apptainer ready!")
+
+
+# Backwards-compatible alias for code that calls the old function name.
+setup_colab_singularity = setup_colab_container

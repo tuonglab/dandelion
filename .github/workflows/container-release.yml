@@ -1,0 +1,38 @@
+name: Release Container Image
+
+# Builds and tests the container, then pushes to:
+#   docker.io/zktuong/sc-dandelion        (override with repo variable DOCKERHUB_REPO)
+#   ghcr.io/<repository owner>/sc-dandelion
+# For each tag it pushes two things to each repository:
+#   <tag>      the Docker image (docker pull / apptainer pull docker://...)
+#   <tag>-sif  the prebuilt Apptainer .sif (apptainer pull oras://...)
+# Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN.
+#
+# TODO: optionally sign pushed images with cosign (keyless, via GitHub OIDC).
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Image tag to create (e.g. v0.5.0)"
+        required: true
+      push_latest:
+        description: "Also tag this image as 'latest'"
+        type: boolean
+        default: true
+
+jobs:
+  container:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/container-build.yml
+    with:
+      allow_db_failure: false
+      include_ogrdb: false
+      push: true
+      tag_name: ${{ inputs.tag_name }}
+      push_latest: ${{ inputs.push_latest }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

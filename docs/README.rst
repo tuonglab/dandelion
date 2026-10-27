@@ -46,31 +46,65 @@ Single Cell Immune Profiling datasets
 Installation
 ------------
 
-Singularity container
-~~~~~~~~~~~~~~~~~~~~~
+Container (Apptainer or Docker)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``dandelion`` now comes ready in the form of a singularity container
-which has all the required dependencies installed:
+``dandelion`` comes ready in the form of a container image with all the
+required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and
+reference databases installed. It is published on
+`Docker Hub <https://hub.docker.com/r/zktuong/sc-dandelion>`__ and works
+with Apptainer (typical on HPC; SingularityCE also works) as well as
+Docker/Podman.
+
+**Apptainer:** download the ready-made ``.sif`` image (fastest):
 
 .. code:: bash
 
-    singularity pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest
-    # Alternatively, pull the GitHub Container Registry mirror:
-    # singularity pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest
-    singularity shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
+    apptainer pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest-sif
+    apptainer shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 
-To use a specific release instead of the latest image, replace ``latest``
-with the release tag (for example, ``v0.5.0``) in the image URI.
+or build the ``.sif`` locally from the Docker image (takes a few minutes and
+a few GB of temporary space):
 
-This will load up a conda-environment that has all the required
-dependencies installed.
+.. code:: bash
+
+    apptainer pull docker://zktuong/sc-dandelion:latest
+
+Either way you get ``sc-dandelion_latest.sif``, a container that has all the
+required dependencies installed. To use a specific release instead of the
+latest image, replace ``latest`` with the release tag (for example,
+``v0.5.0-sif`` for the ready-made image or ``v0.5.0`` for the Docker image).
+Using SingularityCE rather than Apptainer? The commands are identical: just
+replace ``apptainer`` with ``singularity``.
 
 This can be used for the preprocessing steps by navigating to the data
 folder and use:
 
 .. code:: bash
 
-    singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
+    apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
+
+**Docker/Podman:**
+
+.. code:: bash
+
+    docker run --rm -v "$PWD":/data -w /data --user "$(id -u):$(id -g)" \
+        zktuong/sc-dandelion:latest dandelion-preprocess
+
+.. note::
+
+    The image used to be hosted on the Sylabs Cloud Library
+    (``library://kt16/default/sc-dandelion``), which has been decommissioned.
+    Please update any scripts that use the old ``library://`` address.
+
+    If you hit Docker Hub's anonymous pull rate limit (common on shared HPC
+    login nodes), pull the identical mirror from the GitHub Container
+    Registry instead by replacing ``docker.io/zktuong`` with
+    ``ghcr.io/tuonglab``, e.g.
+    ``apptainer pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest-sif``.
+    If you build from the Docker image and your home directory is small,
+    point ``APPTAINER_CACHEDIR`` and ``APPTAINER_TMPDIR`` at scratch space
+    first.
 
 Python package
 ~~~~~~~~~~~~~~
@@ -94,13 +128,13 @@ Once done, run the following:
 The ``polars`` extra enables a faster backend for data operations. The base install
 uses ``pandas`` as the backend.
 
-Between this and the pipelines within the singularity container, you
+Between this and the pipelines within the container, you
 should be covered for most of your needs.
 
 Manual full installation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-For those who cannot use the singularity container, here is a detailed
+For those who cannot use the container, here is a detailed
 installation guide. Instructions may vary depending on your system.
 
 First, install igblast and blast:
@@ -368,7 +402,7 @@ References
 .. |CodeCov| image:: https://codecov.io/gh/tuonglab/dandelion/graph/badge.svg?token=i2BhIz2a4r
    :target: https://codecov.io/gh/tuonglab/dandelion
 .. |Colab| image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb
+   :target: https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_colab.ipynb
 .. |logo| image:: notebooks/img/dandelion_logo_illustration.png
 .. |overview| image:: notebooks/img/dandelion_overview.png
 .. |class| image:: notebooks/img/dandelion_class2.png

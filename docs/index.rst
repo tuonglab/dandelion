@@ -14,10 +14,10 @@ Tutorial
    :maxdepth: 1
    :caption: Tutorial:
 
-   notebooks/Q1-singularity-preprocessing.ipynb
+   notebooks/Q1-container-preprocessing.ipynb
    notebooks/Q2-object-prep.ipynb
    notebooks/Q3-analysis.ipynb
-   notebooks/Q4-singularity-changeo.ipynb
+   notebooks/Q4-container-changeo.ipynb
    notebooks/Q5-pseudobulk.ipynb
 
 

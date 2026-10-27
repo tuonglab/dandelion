@@ -4,7 +4,7 @@
 [![master](https://github.com/tuonglab/dandelion/actions/workflows/tests.yml/badge.svg?branch=master)]((https://github.com/tuonglab/dandelion/actions/workflows/tests.yml))
 [![codecov](https://codecov.io/gh/tuonglab/dandelion/graph/badge.svg?token=i2BhIz2a4r)](https://codecov.io/gh/tuonglab/dandelion)
 [![](https://img.shields.io/static/v1?label=AIRR-C%20sw-tools%20v1&message=compliant&color=008AFF&labelColor=000000&style=plastic)](https://docs.airr-community.org/en/stable/swtools/airr_swtools_standard.html)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_singularity.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tuonglab/dandelion/blob/master/container/dandelion_colab.ipynb)
 
 ![](docs/notebooks/img/dandelion_logo_illustration.png)
 
@@ -40,28 +40,41 @@ The raw files used in the example notebooks can be downloaded from 10X's Single 
 
 ## Installation
 
-### Singularity container
+### Container (Apptainer or Docker)
 
-`dandelion` now comes ready in the form of a singularity container:
+`dandelion` comes ready in the form of a container image with all the required dependencies, tools (IgBLAST, BLAST, Change-O, TIgGER) and reference databases installed. It is published on [Docker Hub](https://hub.docker.com/r/zktuong/sc-dandelion) and works with Apptainer (typical on HPC; SingularityCE also works) as well as Docker/Podman.
+
+**Apptainer:** download the ready-made `.sif` image (fastest):
 ```bash
-singularity pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest
-# Alternatively, pull the GitHub Container Registry mirror:
-# singularity pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest
-singularity shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
+apptainer pull sc-dandelion_latest.sif oras://docker.io/zktuong/sc-dandelion:latest-sif
+apptainer shell --writable-tmpfs -B $PWD sc-dandelion_latest.sif
 ```
-To use a specific release instead of the latest image, replace `latest` with
-the release tag (for example, `v0.5.0`) in the image URI.
-This will load up a container that has all the required dependencies installed.
+or build the `.sif` locally from the Docker image (takes a few minutes and a few GB of temporary space):
+```bash
+apptainer pull docker://zktuong/sc-dandelion:latest
+```
+Either way you get `sc-dandelion_latest.sif`, a container that has all the required dependencies installed. To use a specific release instead of the latest image, replace `latest` with the release tag (for example, `v0.5.0-sif` for the ready-made image or `v0.5.0` for the Docker image). Using SingularityCE rather than Apptainer? The commands are identical: just replace `apptainer` with `singularity`.
 
 This can be used for the preprocessing steps by navigating to the data folder and use:
 ```bash
-singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
+apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess
 ```
 
 If you have multiple samples to process, it is reccomended to specify the `--meta` option with a `.csv` file detailing the samples:
 ```bash
-singularity run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta.csv
+apptainer run -B $PWD sc-dandelion_latest.sif dandelion-preprocess --meta meta.csv
 ```
+
+**Docker/Podman:**
+```bash
+docker run --rm -v "$PWD":/data -w /data --user "$(id -u):$(id -g)" \
+    zktuong/sc-dandelion:latest dandelion-preprocess --meta meta.csv
+```
+
+> [!NOTE]
+> The image used to be hosted on the Sylabs Cloud Library (`library://kt16/default/sc-dandelion`), which has been decommissioned. Please update any scripts that use the old `library://` address.
+>
+> If you hit Docker Hub's anonymous pull rate limit (common on shared HPC login nodes), pull the identical mirror from the GitHub Container Registry instead by replacing `docker.io/zktuong` with `ghcr.io/tuonglab`, e.g. `apptainer pull sc-dandelion_latest.sif oras://ghcr.io/tuonglab/sc-dandelion:latest-sif`. If you build from the Docker image and your home directory is small, point `APPTAINER_CACHEDIR` and `APPTAINER_TMPDIR` at scratch space first.
 
 ### Python package
 
@@ -79,12 +92,12 @@ pip install sc-dandelion[polars]
 
 The `polars` extra enables a faster backend for data operations. The base install uses `pandas` as the backend.
 
-Between this and the pipelines within the singularity container, you should be covered for most of your needs.
+Between this and the pipelines within the container, you should be covered for most of your needs.
 
 
 ### Manual Full Installation
 
-I understand that the singularity container may not be for everyone, so here is a more detailed installation guide for those who want to install the package manually. The instructions may vary depending on your system, so please adjust accordingly. The easiest way is to still to just use the singularity container for the preprocessing steps.
+I understand that the container may not be for everyone, so here is a more detailed installation guide for those who want to install the package manually. The instructions may vary depending on your system, so please adjust accordingly. The easiest way is to still to just use the container for the preprocessing steps.
 
 ```bash
 # install igblast and blast

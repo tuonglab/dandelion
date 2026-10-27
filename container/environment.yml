@@ -28,6 +28,5 @@ dependencies:
   - blast
   - pip:
       - scanpy>=1.7.0
-      - git+https://www.github.com/tuonglab/dandelion.git
       - biopython
       - receptor-utils
