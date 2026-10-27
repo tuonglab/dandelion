@@ -1640,6 +1640,104 @@ def test_clone_degree_igraph_without_edges(vdj2_resampled_with_network):
 
 
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_clone_degree_counts_zero_distance_edges(
+    vdj2_resampled_with_network, backend
+):
+    """An edge between identical cells (distance 0) still counts as degree 1."""
+    import igraph as ig
+    import networkx as nx
+
+    def _collect(df):
+        return df.collect() if isinstance(df, pl.LazyFrame) else df
+
+    vdj, _ = vdj2_resampled_with_network
+    vdj = vdj.copy()
+    cells = _collect(vdj._metadata)["cell_id"].to_list()
+    if backend == "igraph":
+        g = ig.Graph(n=len(cells), edges=[(0, 1)])
+        g.vs["name"] = cells
+        g.es["weight"] = [0.0]
+    else:
+        g = nx.Graph()
+        g.add_nodes_from(cells)
+        g.add_edge(cells[0], cells[1], weight=0.0)
+    vdj.graph = (g, g.copy())
+    clone_degree(vdj)
+    degrees = _collect(vdj._metadata)["clone_degree"].to_list()
+    assert degrees == [1, 1] + [0] * (len(cells) - 2)
+
+
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
+def test_gini_bootstrap_random_state(vdj2_resampled_with_network, backend):
+    """random_state makes bootstraps reproducible without repeating one sample."""
+    vdj, _ = vdj2_resampled_with_network
+
+    def _collect(df):
+        return df.collect() if isinstance(df, pl.LazyFrame) else df
+
+    def run(seed):
+        v = vdj.copy()
+        v._metadata = _collect(v._metadata).with_columns(
+            pl.lit("s1").alias("sample_id")
+        )
+        _, raw = clone_diversity(
+            v,
+            group_by="sample_id",
+            method="gini",
+            use_network=True,
+            network_metric="clone_degree",
+            min_size=4,
+            n_boot=10,
+            n_cpus=1,
+            backend=backend,
+            random_state=seed,
+        )
+        return raw
+
+    a, b, c = run(1), run(1), run(2)
+    for key in a:
+        for group in a[key]:
+            np.testing.assert_array_equal(a[key][group], b[key][group])
+    # the iterations are not all the same draw
+    assert len(set(np.round(a["cluster_size_gini"]["s1"], 12))) > 1
+    # a different seed gives different draws
+    assert any(not np.array_equal(a[k]["s1"], c[k]["s1"]) for k in a)
+
+
+def test_estimate_diversity_random_state():
+    """Seeded non-network bootstraps are reproducible and vary across iterations."""
+    import anndata as ad
+
+    rng = np.random.default_rng(0)
+    md = pd.DataFrame(
+        {
+            "clone_id": rng.choice([f"c{i}" for i in range(15)], size=200),
+            "sample_id": ["s1"] * 100 + ["s2"] * 100,
+        },
+        index=[f"cell{i}" for i in range(200)],
+    )
+    adata = ad.AnnData(obs=md)
+
+    def run(seed):
+        _, raw = clone_diversity(
+            adata,
+            group_by="sample_id",
+            method="shannon",
+            min_size=50,
+            n_boot=20,
+            n_cpus=1,
+            random_state=seed,
+        )
+        return raw["shannon"]
+
+    a, b, c = run(7), run(7), run(8)
+    for g in a:
+        np.testing.assert_array_equal(a[g], b[g])
+        assert len(set(np.round(a[g], 12))) > 1
+    assert any(not np.array_equal(a[g], c[g]) for g in a)
+
+
+@pytest.mark.parametrize("backend", ["networkx", "igraph"])
 def test_bootstrap_network_clone_centrality(
     vdj2_resampled_with_network, backend
 ):
