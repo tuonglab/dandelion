@@ -906,8 +906,11 @@ def clone_degree(
             if isinstance(G, nx.Graph):
                 degree_dict = dict(G.degree(weight=weight))
             else:
+                # igraph only has a "weight" edge attribute when the graph has
+                # edges (e.g. a small bootstrap resample may have none).
+                weights = "weight" if "weight" in G.es.attributes() else None
                 degree_dict = dict(
-                    zip(G.vs["name"], G.strength(weights="weight"))
+                    zip(G.vs["name"], G.strength(weights=weights))
                 )
             df = pl.DataFrame(
                 {

@@ -1618,6 +1618,27 @@ def test_bootstrap_network_clone_degree(vdj2_resampled_with_network, backend):
     assert isinstance(vertex_gini, float)
 
 
+def test_clone_degree_igraph_without_edges(vdj2_resampled_with_network):
+    """clone_degree works on an igraph graph with no edges (no weight attribute).
+
+    A small bootstrap resample in _bootstrap_network can produce such a graph.
+    """
+    import igraph as ig
+
+    def _collect(df):
+        return df.collect() if isinstance(df, pl.LazyFrame) else df
+
+    vdj, _ = vdj2_resampled_with_network
+    vdj = vdj.copy()
+    cells = _collect(vdj._metadata)["cell_id"].to_list()
+    g = ig.Graph(n=len(cells))
+    g.vs["name"] = cells
+    vdj.graph = (g, g.copy())
+    clone_degree(vdj)
+    degrees = _collect(vdj._metadata)["clone_degree"].to_list()
+    assert degrees == [0] * len(cells)
+
+
 @pytest.mark.parametrize("backend", ["networkx", "igraph"])
 def test_bootstrap_network_clone_centrality(
     vdj2_resampled_with_network, backend
