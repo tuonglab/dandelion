@@ -906,9 +906,15 @@ def clone_degree(
             if isinstance(G, nx.Graph):
                 degree_dict = dict(G.degree(weight=weight))
             else:
-                degree_dict = dict(
-                    zip(G.vs["name"], G.strength(weights="weight"))
-                )
+                # Same as networkx: count edges unless a weight attribute is
+                # requested, so zero-distance (identical) neighbours still count.
+                # An edgeless graph (e.g. a small bootstrap resample) has no
+                # edge attributes at all, so every cell simply has degree 0.
+                if weight is None or G.ecount() == 0:
+                    degrees = G.degree()
+                else:
+                    degrees = G.strength(weights=weight)
+                degree_dict = dict(zip(G.vs["name"], degrees))
             df = pl.DataFrame(
                 {
                     "cell_id": list(degree_dict.keys()),

@@ -1,3 +1,4 @@
+import zlib
 import numpy as np
 import networkx as nx
 import pandas as pd
@@ -274,6 +275,7 @@ def clone_diversity(
     use_contracted: bool = False,
     backend: Literal["networkx", "igraph"] = "networkx",
     verbose: bool = False,
+    random_state: int | np.random.Generator | None = None,
     **kwargs,
 ) -> tuple[pd.DataFrame, dict[list[float]]]:
     """
@@ -314,6 +316,10 @@ def clone_diversity(
         Backend to use for network calculations. Default is "networkx".
     verbose : bool, optional
         whether to print progress.
+    random_state : int | np.random.Generator | None, optional
+        Seed for the bootstrap resampling, for reproducible results. Each bootstrap
+        iteration gets its own seed derived from this one, so iterations still draw
+        different samples. Default is None (results differ between runs).
     **kwargs
         Additional keyword arguments passed to ddl.tl.generate_network if using network-based gini.
 
@@ -337,6 +343,7 @@ def clone_diversity(
             use_contracted=use_contracted,
             backend=backend,
             verbose=verbose,
+            random_state=random_state,
             **kwargs,
         )
     else:
@@ -350,6 +357,7 @@ def clone_diversity(
             n_boot=n_boot,
             n_cpus=n_cpus,
             verbose=verbose,
+            random_state=random_state,
         )
 
 
@@ -365,6 +373,7 @@ def diversity_gini(
     use_contracted: bool = False,
     backend: Literal["networkx", "igraph"] = "networkx",
     verbose: bool = False,
+    random_state: int | np.random.Generator | None = None,
     **kwargs,
 ) -> tuple[dict[pd.DataFrame], dict[np.ndarray]]:
     """
@@ -399,6 +408,10 @@ def diversity_gini(
         Backend to use for network calculations. Default is "networkx".
     verbose : bool, optional
         whether to print progress.
+    random_state : int | np.random.Generator | None, optional
+        Seed for the bootstrap resampling, for reproducible results. Each bootstrap
+        iteration gets its own seed derived from this one, so iterations still draw
+        different samples. Default is None (results differ between runs).
     **kwargs
         Additional keyword arguments passed to ddl.tl.generate_network
 
@@ -420,6 +433,7 @@ def diversity_gini(
         expanded_only=expanded_only,
         contracted=use_contracted,
         verbose=verbose,
+        random_state=random_state,
         backend=backend,
         **kwargs,
     )
@@ -443,6 +457,7 @@ def diversity_estimates(
     n_boot: int = 200,
     n_cpus: int = -1,
     verbose: bool = False,
+    random_state: int | np.random.Generator | None = None,
 ) -> tuple[dict[pd.DataFrame], dict[np.ndarray]]:
     """
     Compute clones Chao1 estimates.
@@ -468,6 +483,10 @@ def diversity_estimates(
         Number of CPUs to use for parallel processing. Default is -1 (use all available CPUs).
     verbose : bool, optional
         whether to print progress.
+    random_state : int | np.random.Generator | None, optional
+        Seed for the bootstrap resampling, for reproducible results. Each bootstrap
+        iteration gets its own seed derived from this one, so iterations still draw
+        different samples. Default is None (results differ between runs).
 
     Returns
     -------
@@ -484,6 +503,7 @@ def diversity_estimates(
         n_boot=n_boot,
         n_cpus=n_cpus,
         verbose=verbose,
+        random_state=random_state,
     )
 
     return {f"{method}": res}, {f"{method}": res_raw}
@@ -501,6 +521,7 @@ def gini_indices(
     contracted: bool = False,
     verbose: bool = False,
     backend: Literal["networkx", "igraph"] = "networkx",
+    random_state: int | np.random.Generator | None = None,
     **kwargs,
 ) -> tuple[pd.DataFrame, dict[list[float]], dict[list[float]]]:
     """Gini indices."""
@@ -525,6 +546,9 @@ def gini_indices(
         data = data[valid_cells]
 
     res1, res2, cluster_raw, vertex_raw = {}, {}, {}, {}
+    if "random_state" in kwargs:
+        kw_seed = kwargs.pop("random_state")
+        random_state = kw_seed if random_state is None else random_state
     for g in groups:
         # clone size distribution
         group_cells = metadata_df.index[metadata_df[group_by] == g].tolist()
@@ -537,6 +561,7 @@ def gini_indices(
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
             disable=not verbose,
         )
+        seeds = _bootstrap_seeds(random_state, g, n_boot)
         results = Parallel(n_jobs=n_cpus)(
             delayed(_bootstrap_network)(
                 ddl_dat,
@@ -546,9 +571,10 @@ def gini_indices(
                 expanded_only,
                 contracted,
                 backend,
+                random_state=int(seeds[i]),
                 **kwargs,
             )
-            for _ in iterator
+            for i in iterator
         )
         # unpack
         sizelist = np.array([c for c, _ in results], dtype=float)
@@ -582,6 +608,7 @@ def estimate_diversity(
     n_boot: int = 200,
     n_cpus: int = -1,
     verbose: bool = False,
+    random_state: int | np.random.Generator | None = None,
 ) -> tuple[pd.DataFrame, dict[list[float]]]:
     """
     Estimate immune repertoire diversity metrics (Chao1 or Shannon).
@@ -606,6 +633,10 @@ def estimate_diversity(
         Number of CPUs to use for parallel processing. Default is -1 (use all available CPUs).
     verbose : bool, default=False
         If True, show progress bars.
+    random_state : int | np.random.Generator | None, optional
+        Seed for the bootstrap resampling, for reproducible results. Each bootstrap
+        iteration gets its own seed derived from this one, so iterations still draw
+        different samples. Default is None (results differ between runs).
 
     Returns
     -------
@@ -643,6 +674,7 @@ def estimate_diversity(
             bar_format="{l_bar}{bar:10}{r_bar}{bar:-10b}",
             disable=not verbose,
         )
+        seeds = _bootstrap_seeds(random_state, g, n_boot)
         values = Parallel(n_jobs=n_cpus)(
             delayed(_bootstrap_diversity_iteration)(
                 _dat,
@@ -650,8 +682,9 @@ def estimate_diversity(
                 metric,
                 normalize,
                 min_size,
+                random_state=int(seeds[i]),
             )
-            for _ in iterator
+            for i in iterator
         )
 
         values = np.array(values, dtype=float)
@@ -667,6 +700,24 @@ def estimate_diversity(
         if original_backend == "polars":
             data.to_polars(lazy=original_lazy)
     return res_df, res_raw
+
+
+def _bootstrap_seeds(
+    random_state: int | np.random.Generator | None, group, n_boot: int
+) -> np.ndarray:
+    """
+    One seed per bootstrap iteration for `group`.
+
+    With an integer `random_state` the seeds depend only on that seed and the
+    group's name, so a group gives the same result whichever other groups are
+    analysed alongside it. Every iteration still gets a different seed.
+    """
+    if random_state is None or isinstance(random_state, np.random.Generator):
+        rng = np.random.default_rng(random_state)
+    else:
+        group_key = zlib.crc32(str(group).encode("utf-8"))
+        rng = np.random.default_rng([int(random_state), group_key])
+    return rng.integers(0, 2**32 - 1, size=n_boot)
 
 
 def _prepare_diversity_groups(
@@ -714,6 +765,7 @@ def _bootstrap_network(
     expanded_only: bool,
     contracted: bool,
     backend: Literal["networkx", "igraph"],
+    random_state: int | None = None,
     **kwargs,
 ):
     """
@@ -727,6 +779,7 @@ def _bootstrap_network(
         force_replace=True,
         verbose=False,
         compute_layout=False,
+        random_state=random_state,
         backend=backend,
         **kwargs,
     )
@@ -823,13 +876,14 @@ def _bootstrap_diversity_iteration(
     metric: str,
     normalize: bool,
     min_size: int,
+    random_state: int | None = None,
 ) -> float:
     """
     One bootstrap iteration for diversity:
     Returns a single diversity value.
     """
 
-    _sample = dat.sample(min_size, replace=True)
+    _sample = dat.sample(min_size, replace=True, random_state=random_state)
     _tab = _sample[clonekey].value_counts()
     drop_nan_values(_tab)
 
