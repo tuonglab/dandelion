@@ -168,6 +168,16 @@ jobs:
           pip install filelock
           # also ensure rpy2 is installed
           pip install rpy2
+
+      - name: Install nxviz compatibility dependencies (Python 3.11)
+        if: matrix.config.python-version == '3.11'
+        run: |
+          # The PyPI nxviz release needs matplotlib below 3.11.
+          pip install "matplotlib<3.11"
+
+      - name: Install nxviz from GitHub (Python 3.12+)
+        if: matrix.config.python-version != '3.11'
+        run: |
           # Use the upstream matplotlib compatibility fix until it is released on PyPI.
           pip install --force-reinstall --no-deps git+https://github.com/ericmjl/nxviz.git
 
