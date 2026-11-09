@@ -168,6 +168,8 @@ jobs:
           pip install filelock
           # also ensure rpy2 is installed
           pip install rpy2
+          # Use the upstream matplotlib compatibility fix until it is released on PyPI.
+          pip install --force-reinstall --no-deps git+https://github.com/ericmjl/nxviz.git
 
       - name: Test with pytest
         env:
