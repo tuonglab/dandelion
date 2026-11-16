@@ -24,6 +24,14 @@ from dandelion.polars.tools import (
 )
 
 
+@pytest.fixture
+def single_scanpy_job():
+    previous_n_jobs = sc.settings.n_jobs
+    sc.settings.n_jobs = 1
+    yield
+    sc.settings.n_jobs = previous_n_jobs
+
+
 # @pytest.mark.skipif(
 #     sys.platform == "darwin",
 #     reason="macos CI stalls.",
@@ -56,7 +64,7 @@ def test_setup_polars(airr_reannotated, dummy_adata):
     reason="pertpy requires python >=3.12",
 )
 @patch("matplotlib.pyplot.show")
-def test_trajectory(mock_show, create_testfolder, monkeypatch):
+def test_trajectory(mock_show, create_testfolder, single_scanpy_job):
     """test_workflow"""
     import pertpy as pt  # see issue https://github.com/emdann/milopy/issues/54
     import palantir
@@ -66,7 +74,6 @@ def test_trajectory(mock_show, create_testfolder, monkeypatch):
         f"{create_testfolder}/panfetal_trajectory/demo-pseudobulk.h5ad"
     )
     adata = setup_vdj_pseudobulk(adata)
-    monkeypatch.setattr(sc.settings, "n_jobs", 1)
     sc.pp.neighbors(adata, use_rep="X_scvi", n_neighbors=50)
     milo = pt.tl.Milo()
     milo.make_nhoods(adata)
@@ -150,7 +157,7 @@ def test_trajectory_setup(create_testfolder):
     reason="pertpy requires python >=3.12",
 )
 @patch("matplotlib.pyplot.show")
-def test_trajectory_polars(mock_show, create_testfolder, monkeypatch):
+def test_trajectory_polars(mock_show, create_testfolder, single_scanpy_job):
     """test_workflow"""
     import pertpy as pt  # see issue https://github.com/emdann/milopy/issues/54
     import palantir
@@ -162,7 +169,6 @@ def test_trajectory_polars(mock_show, create_testfolder, monkeypatch):
         f"{create_testfolder}/panfetal_trajectory/demo-vdj-traj.tsv.gz"
     )
     adata = setup_vdj_pseudobulk_polars(adata, vdj)
-    monkeypatch.setattr(sc.settings, "n_jobs", 1)
     sc.pp.neighbors(adata, use_rep="X_scvi", n_neighbors=50)
     milo = pt.tl.Milo()
     milo.make_nhoods(adata)
