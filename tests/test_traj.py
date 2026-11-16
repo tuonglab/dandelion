@@ -56,7 +56,7 @@ def test_setup_polars(airr_reannotated, dummy_adata):
     reason="pertpy requires python >=3.12",
 )
 @patch("matplotlib.pyplot.show")
-def test_trajectory(mock_show, create_testfolder):
+def test_trajectory(mock_show, create_testfolder, monkeypatch):
     """test_workflow"""
     import pertpy as pt  # see issue https://github.com/emdann/milopy/issues/54
     import palantir
@@ -66,6 +66,7 @@ def test_trajectory(mock_show, create_testfolder):
         f"{create_testfolder}/panfetal_trajectory/demo-pseudobulk.h5ad"
     )
     adata = setup_vdj_pseudobulk(adata)
+    monkeypatch.setattr(sc.settings, "n_jobs", 1)
     sc.pp.neighbors(adata, use_rep="X_scvi", n_neighbors=50)
     milo = pt.tl.Milo()
     milo.make_nhoods(adata)
@@ -149,7 +150,7 @@ def test_trajectory_setup(create_testfolder):
     reason="pertpy requires python >=3.12",
 )
 @patch("matplotlib.pyplot.show")
-def test_trajectory_polars(mock_show, create_testfolder):
+def test_trajectory_polars(mock_show, create_testfolder, monkeypatch):
     """test_workflow"""
     import pertpy as pt  # see issue https://github.com/emdann/milopy/issues/54
     import palantir
@@ -161,6 +162,7 @@ def test_trajectory_polars(mock_show, create_testfolder):
         f"{create_testfolder}/panfetal_trajectory/demo-vdj-traj.tsv.gz"
     )
     adata = setup_vdj_pseudobulk_polars(adata, vdj)
+    monkeypatch.setattr(sc.settings, "n_jobs", 1)
     sc.pp.neighbors(adata, use_rep="X_scvi", n_neighbors=50)
     milo = pt.tl.Milo()
     milo.make_nhoods(adata)
