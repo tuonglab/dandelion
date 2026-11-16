@@ -25,8 +25,6 @@ def pca_all_vars(adata: AnnData, n_comps: int, **kwargs) -> None:
     if "mask" in parameters:
         sc.pp.pca(adata, n_comps=n_comps, mask=None, **kwargs)
     elif "use_highly_variable" in parameters:
-        sc.pp.pca(
-            adata, n_comps=n_comps, use_highly_variable=False, **kwargs
-        )
+        sc.pp.pca(adata, n_comps=n_comps, use_highly_variable=False, **kwargs)
     else:
         raise TypeError("Unsupported Scanpy PCA API: no variable mask argument")

@@ -162,9 +162,7 @@ def test_pca_all_vars_uses_all_variables():
 
     from dandelion.utilities._compat import pca_all_vars
 
-    adata = AnnData(
-        np.array([[1.0, 0, 1], [0, 1, 2], [1, 1, 0], [2, 0, 0]])
-    )
+    adata = AnnData(np.array([[1.0, 0, 1], [0, 1, 2], [1, 1, 0], [2, 0, 0]]))
     adata.var["highly_variable"] = [True, False, False]
     pca_all_vars(adata, n_comps=2)
     assert adata.obsm["X_pca"].shape == (4, 2)
