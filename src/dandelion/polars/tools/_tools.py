@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from awkward import Array
 
 from dandelion.polars.core._core import DandelionPolars, SCHEMA_OVERRIDES
+from dandelion.utilities._compat import pca_all_vars
 from dandelion.utilities._utilities import (
     VCALL,
     TRUES_STR,
@@ -2210,7 +2211,8 @@ def vj_usage_pca(
     verbose : bool, optional
         Whether to display progress
     **kwargs
-        Additional keyword arguments passed to `scanpy.pp.pca`.
+        Additional keyword arguments passed to `scanpy.pp.pca`. Variable mask
+        arguments are not accepted; PCA always uses all V/J genes.
 
     Returns
     -------
@@ -2325,7 +2327,7 @@ def vj_usage_pca(
         var=pd.DataFrame(index=vdj_df.columns),
     )
 
-    sc.pp.pca(vdj_adata, n_comps=n_comps, use_highly_variable=False, **kwargs)
+    pca_all_vars(vdj_adata, n_comps=n_comps, **kwargs)
 
     # Transfer old obs columns to new AnnData
     if transfer_mapping is not None:

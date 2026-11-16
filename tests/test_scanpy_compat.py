@@ -1,4 +1,4 @@
-"""Tests for Scanpy plotting import compatibility."""
+"""Tests for Scanpy compatibility."""
 
 import builtins
 import importlib
@@ -89,3 +89,83 @@ def test_plotting_backends_use_compatible_scanpy_imports(backend):
         plotting.clone_network(adata, edges=False, show=False)
     finally:
         plt.close()
+
+
+@pytest.mark.parametrize("modern", [True, False])
+def test_pca_all_vars_supports_both_api_signatures(monkeypatch, modern):
+    """Select the all-variable argument and forward PCA options."""
+    from anndata import AnnData
+
+    from dandelion.utilities import _compat
+
+    calls = []
+
+    def modern_pca(data, n_comps, *, mask="default", zero_center=True):
+        """Simulate the Scanpy 1.13 PCA API."""
+        calls.append((data, n_comps, mask, zero_center))
+
+    def old_pca(data, n_comps, *, use_highly_variable=None, zero_center=True):
+        """Simulate older Scanpy PCA APIs."""
+        calls.append((data, n_comps, use_highly_variable, zero_center))
+
+    monkeypatch.setattr(_compat.sc.pp, "pca", modern_pca if modern else old_pca)
+    data = AnnData()
+    _compat.pca_all_vars(data, n_comps=2, zero_center=False)
+    assert calls == [(data, 2, None if modern else False, False)]
+
+
+@pytest.mark.parametrize("arg", ["mask", "mask_var", "use_highly_variable"])
+def test_pca_all_vars_rejects_variable_selection(arg):
+    """Do not allow PCA options to override the all-variable invariant."""
+    from anndata import AnnData
+
+    from dandelion.utilities._compat import pca_all_vars
+
+    with pytest.raises(TypeError, match=arg):
+        pca_all_vars(AnnData(), n_comps=2, **{arg: True})
+
+
+def test_pca_all_vars_propagates_pca_errors(monkeypatch):
+    """Do not retry or hide errors raised by Scanpy PCA."""
+    from anndata import AnnData
+
+    from dandelion.utilities import _compat
+
+    def failing_pca(data, n_comps, *, mask=None):
+        """Simulate a PCA implementation that fails."""
+        raise ValueError("PCA failed")
+
+    monkeypatch.setattr(_compat.sc.pp, "pca", failing_pca)
+    with pytest.raises(ValueError, match="PCA failed"):
+        _compat.pca_all_vars(AnnData(), n_comps=2)
+
+
+def test_pca_all_vars_rejects_unknown_api(monkeypatch):
+    """Fail explicitly when Scanpy has no supported variable-mask argument."""
+    from anndata import AnnData
+
+    from dandelion.utilities import _compat
+
+    def unsupported_pca(data, n_comps):
+        """Simulate an unsupported PCA implementation."""
+        pytest.fail("Unsupported PCA must not be called")
+
+    monkeypatch.setattr(_compat.sc.pp, "pca", unsupported_pca)
+    with pytest.raises(TypeError, match="Unsupported Scanpy PCA API"):
+        _compat.pca_all_vars(AnnData(), n_comps=2)
+
+
+def test_pca_all_vars_uses_all_variables():
+    """Ignore the highly-variable annotation when running actual PCA."""
+    import numpy as np
+    from anndata import AnnData
+
+    from dandelion.utilities._compat import pca_all_vars
+
+    adata = AnnData(
+        np.array([[1.0, 0, 1], [0, 1, 2], [1, 1, 0], [2, 0, 0]])
+    )
+    adata.var["highly_variable"] = [True, False, False]
+    pca_all_vars(adata, n_comps=2)
+    assert adata.obsm["X_pca"].shape == (4, 2)
+    assert adata.varm["PCs"].shape == (3, 2)
