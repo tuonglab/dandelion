@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 COMPAT_PATH = (
     Path(__file__).resolve().parents[1] / "src/dandelion/utilities/_compat.py"
 )
